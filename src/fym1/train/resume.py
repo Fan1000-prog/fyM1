@@ -11,6 +11,8 @@ def latest_checkpoint(repo_id: str, files: list[str] | None = None) -> str | Non
     """Return the top-level `checkpoint-<step>` folder with the highest step, or None.
 
     `files` are repo-relative paths; when omitted they are listed from `repo_id` on the Hub.
+    Only the folder name is returned: the caller must `snapshot_download` that folder before passing
+    its local path to `trainer.train(resume_from_checkpoint=...)`.
     """
     if files is None:
         files = list_repo_files(repo_id)
