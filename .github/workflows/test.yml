@@ -9,5 +9,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
+      # GlotLID (~1.7 GB) for fym1.eval.lang; key matches GLOTLID_REVISION
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub/models--cis-lmu--glotlid
+          key: glotlid-85cd6716494360367b75f642b5bc78667605d0b4
       - run: uv sync
       - run: uv run pytest -q
