@@ -25,7 +25,7 @@ MALAGASY_LABELS = frozenset({"plt_Latn", "xmv_Latn", "tdx_Latn", "skg_Latn"})
 # "tonga", "tia", "ko", "vita", "mila", "koa", "zany"), so a French or English
 # sentence never passes on a look-alike word. Known limits: English that contains a
 # Malagasy name or a quoted Malagasy word can still pass ("Hi Vola, how are you?";
-# also the names Toa and Aza); so can "I ve" typed without the apostrophe, "ny" for
+# also the names Toa, Aza and Aby); so can "I ve" typed without the apostrophe, "ny" for
 # New York in lower case, and ".io" web addresses.
 MALAGASY_WORDS = frozenset(
     """

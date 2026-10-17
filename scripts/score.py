@@ -105,9 +105,10 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
 def is_inside(path: Path, directory: Path) -> bool:
     """True if `path` is in `directory` or below it, comparing folders on disk.
 
-    samefile also catches another spelling of the same folder on a case-insensitive disk.
+    resolve() settles ".." and links first; samefile also catches another spelling of the
+    same folder on a case-insensitive disk.
     """
-    return any(parent.exists() and parent.samefile(directory) for parent in path.absolute().parents)
+    return any(parent.exists() and parent.samefile(directory) for parent in path.resolve().parents)
 
 
 def cmd_blind(args: argparse.Namespace) -> None:
