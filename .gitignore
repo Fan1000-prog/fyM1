@@ -29,6 +29,9 @@ paper/*.aux
 paper/*.log
 paper/*.out
 
+# Browser automation output (snapshots, screenshots, console logs)
+.playwright-mcp/
+
 .DS_Store
 
 # Arena answer key (which model is A): lives only in the private votes dataset

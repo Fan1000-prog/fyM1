@@ -1,0 +1,53 @@
+{
+  "chosen": null,
+  "chosen_size": null,
+  "license": null,
+  "hf_license": null,
+  "candidates": [
+    {
+      "model": "McGill-NLP/AfriqueQwen-8B",
+      "license": "CC-BY-4.0",
+      "belebele_acc": null,
+      "belebele_protocol": "completion 0-shot (pending)",
+      "belebele_chat_acc": null,
+      "chrf_plt_eng": null,
+      "chrf_eng_plt": null,
+      "flores": "pending",
+      "tokens_per_word": 2.952,
+      "sniff_natural": null,
+      "peak_vram_gb": 7.79,
+      "sec_per_step": 74.3,
+      "qlora_fits": true,
+      "loss_trend": {
+        "first": 1.1323297023773193,
+        "last": 0.7007304430007935
+      },
+      "instruct_version": {
+        "exists": false,
+        "nearest": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
+        "nearest_license": "cc-by-4.0",
+        "nearest_note": "different size and architecture (Qwen3.5, 9B); its base lists mg; not measured"
+      }
+    },
+    {
+      "model": "google/gemma-4-12B-it",
+      "license": "Apache-2.0",
+      "belebele_acc": null,
+      "belebele_protocol": "completion 0-shot (pending)",
+      "belebele_chat_acc": 0.75,
+      "chrf_plt_eng": null,
+      "chrf_eng_plt": null,
+      "flores": "pending",
+      "tokens_per_word": 2.792,
+      "sniff_natural": null,
+      "peak_vram_gb": null,
+      "sec_per_step": null,
+      "qlora_fits": null,
+      "loss_trend": null,
+      "instruct_version": {
+        "exists": true,
+        "note": "is the instruct model"
+      }
+    }
+  ]
+}

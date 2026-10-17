@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 SCORE = Path(__file__).resolve().parents[2] / "scripts" / "score.py"
 LEAKED = "a b c d e f g h"
 
@@ -133,6 +135,30 @@ def test_blind_refuses_a_key_in_a_subdir_of_the_judge_batch_dir(tmp_path):
     result = blind(tmp_path, out, out.parent / "keys" / "judge_key.json")
     assert result.returncode != 0
     assert not out.exists()
+
+
+def test_blind_refuses_a_key_in_the_batch_dir_spelled_with_other_case(tmp_path):
+    out = tmp_path / "judge_batch" / "judge_input.jsonl"
+    out.parent.mkdir()
+    if not (tmp_path / "JUDGE_BATCH").exists():
+        pytest.skip("file system is case-sensitive; JUDGE_BATCH is a different folder here")
+    result = blind(tmp_path, out, tmp_path / "JUDGE_BATCH" / "judge_key.json")
+    assert result.returncode != 0
+    assert not out.exists()
+
+
+def test_blind_refuses_a_key_reaching_the_batch_dir_through_dotdot(tmp_path):
+    out = tmp_path / "judge_batch" / "judge_input.jsonl"
+    result = blind(tmp_path, out, tmp_path / "nosuch" / ".." / "judge_batch" / "judge_key.json")
+    assert result.returncode != 0
+    assert not out.exists()
+
+
+def test_blind_allows_a_key_next_to_the_batch_dir(tmp_path):
+    out = tmp_path / "judge_batch" / "judge_input.jsonl"
+    result = blind(tmp_path, out, tmp_path / "judge_batch" / ".." / "judge_key.json")
+    assert result.returncode == 0
+    assert (tmp_path / "judge_key.json").exists()
 
 
 def test_blind_refuses_a_key_inside_the_judge_batch_dir(tmp_path):

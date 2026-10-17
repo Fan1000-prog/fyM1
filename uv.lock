@@ -475,6 +475,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "jinja2" },
     { name = "nbformat" },
     { name = "pytest" },
 ]
@@ -500,6 +501,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "jinja2", specifier = ">=3.1" },
     { name = "nbformat", specifier = ">=5.10" },
     { name = "pytest", specifier = ">=8" },
 ]
