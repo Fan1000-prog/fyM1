@@ -66,6 +66,30 @@ def test_judge_means_per_model():
     }
 
 
+def test_judge_means_rejects_partial_judge_output():
+    _, key = blind_batch(ANSWERS, seed=0)
+    judged = list(key)[:3]
+    judgements = [{"id": blind_id, "naturalness": 3, "correctness": 3} for blind_id in judged]
+    with pytest.raises(ValueError, match="1 of 4"):
+        judge_means(judgements, key)
+
+
+def test_blind_batch_strips_surrounding_whitespace():
+    answers = {
+        "base": [{"id": "p0", "prompt": " De aona? ", "response": "Tsara\n\n"}],
+        "fym1": [{"id": "p0", "prompt": " De aona? ", "response": "  Tsara be"}],
+    }
+    items, _ = blind_batch(answers, seed=0)
+    assert sorted(item["response"] for item in items) == ["Tsara", "Tsara be"]
+    assert {item["prompt"] for item in items} == {"De aona?"}
+
+
+def test_blind_batch_requires_same_prompts_for_every_model():
+    answers = {"base": rows("Salama!"), "fym1": rows("Salama!", "De aona?")}
+    with pytest.raises(ValueError, match="same prompt ids"):
+        blind_batch(answers, seed=0)
+
+
 def test_judge_means_rejects_unknown_id():
     _, key = blind_batch(ANSWERS, seed=0)
     with pytest.raises(ValueError, match="unknown"):

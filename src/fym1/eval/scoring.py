@@ -35,18 +35,32 @@ def model_name(answers_path: Path) -> str:
     return stem.removeprefix(ANSWERS_PREFIX)
 
 
+def _check_same_prompts(answers: dict[str, list[dict]]) -> int:
+    """Every model must answer the same prompts, so scores compare like with like."""
+    if not answers:
+        raise ValueError("no answers to score")
+    prompt_ids = {tuple(sorted(row["id"] for row in rows)) for rows in answers.values()}
+    if len(prompt_ids) != 1:
+        raise ValueError("every model must answer the same prompt ids")
+    return len(next(iter(prompt_ids)))
+
+
 def blind_batch(answers: dict[str, list[dict]], seed: int) -> tuple[list[dict], dict[str, dict]]:
     """Mix every model's answers in a seeded random order with neutral ids.
 
     Returns the items the judge sees (`id`, `prompt`, `response` only) and the key
-    that maps each neutral id back to `{"model", "prompt_id"}`.
+    that maps each neutral id back to `{"model", "prompt_id"}`. Surrounding whitespace
+    is stripped so a model's habit (e.g. a trailing newline) cannot give it away.
     """
+    _check_same_prompts(answers)
     pooled = [(model, row) for model, model_rows in answers.items() for row in model_rows]
     random.Random(seed).shuffle(pooled)
     items, key = [], {}
     for i, (model, row) in enumerate(pooled, 1):
         blind_id = f"j{i:04d}"
-        items.append({"id": blind_id, "prompt": row["prompt"], "response": row["response"]})
+        items.append(
+            {"id": blind_id, "prompt": row["prompt"].strip(), "response": row["response"].strip()}
+        )
         key[blind_id] = {"model": model, "prompt_id": row["id"]}
     return items, key
 
@@ -74,6 +88,9 @@ def judge_means(judgements: list[dict], key: dict[str, dict]) -> dict[str, dict]
         model = key[blind_id]["model"]
         for criterion in JUDGE_CRITERIA:
             scores[model][criterion].append(_check_score(judgement, criterion))
+    missing = len(key) - len(seen)
+    if missing:
+        raise ValueError(f"judge output is partial: {missing} of {len(key)} blind ids not judged")
     return {
         model: {c: float(mean(by_criterion[c])) for c in JUDGE_CRITERIA}
         | {"n": len(by_criterion[JUDGE_CRITERIA[0]])}
@@ -106,16 +123,12 @@ def assemble_scores(answers: dict[str, list[dict]], metrics: dict[str, dict]) ->
 
     Every model must have answered the same prompts, so the numbers are comparable.
     """
-    if not answers:
-        raise ValueError("no answers to score")
     if N_PROMPTS in answers:
         raise ValueError(f"model name {N_PROMPTS!r} is reserved")
-    prompt_ids = {model: sorted(row["id"] for row in rows) for model, rows in answers.items()}
-    if len({tuple(ids) for ids in prompt_ids.values()}) != 1:
-        raise ValueError("every model must answer the same prompt ids")
+    n_prompts = _check_same_prompts(answers)
     _check_metrics(metrics, set(answers))
 
-    scores = {N_PROMPTS: len(next(iter(prompt_ids.values())))}
+    scores = {N_PROMPTS: n_prompts}
     for model, rows in sorted(answers.items()):
         scores[model] = {"drift_rate": drift_rate([row["response"] for row in rows])}
         scores[model] |= metrics.get(model, {})
