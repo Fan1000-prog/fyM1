@@ -49,6 +49,10 @@ def test_leak_rate_rejects_training_texts_without_ngrams(train_texts):
         leak_rate(["a b c d e f g h"], train_texts)
 
 
+def test_leak_rate_accepts_a_generator_of_training_texts():
+    assert leak_rate(["a b c d e f g h"], (t for t in ["a b c d e f g h"])) == 1.0
+
+
 def test_leak_rate_rejects_bad_n():
     with pytest.raises(ValueError):
         leak_rate(["a"], ["a"], n=0)
