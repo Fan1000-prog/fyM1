@@ -19,8 +19,8 @@ tags:
 fyM1 chats in everyday Malagasy: short, friendly, mixing in French, with texting spelling and emoji.
 It is a QLoRA fine-tune of <!-- n:base-model -->pending<!-- /n -->, made by Fan's lab.
 
-**Status: v0.1.** *pending* means not measured yet. *pending (v0.2)* means it comes after this release
-(the blind human ratings).
+**Status: v0.1.** *pending* means not measured yet. Coming in v0.2: the full panel's blind human
+ratings and each model's answer to each test prompt.
 
 - Demo: [fyM1-chat](https://huggingface.co/spaces/Fan1000-Prog/fyM1-chat)
 - Code, notebooks and paper: [github.com/Fan1000-prog/fyM1](https://github.com/Fan1000-prog/fyM1)
@@ -92,7 +92,7 @@ All numbers are written by scripts in the GitHub repo.
 | Belebele Malagasy reading (accuracy) | pending | pending |
 | FLORES chrF++ Malagasy to English | pending | pending |
 | FLORES chrF++ English to Malagasy | pending | pending |
-| Blind human votes: fyM1 win rate | - | pending (v0.2) |
+| Blind human votes so far (early votes): fyM1 win rate | - | pending |
 <!-- numbers:end -->
 
 Leak gate: the model does not ship if it repeats sentences from the training chats
@@ -105,7 +105,8 @@ TODO(final): taken only from the public test prompts in `eval/prompts.jsonl`, ne
 ## Limits
 
 - The style comes mostly from one person's chats: everyday Antananarivo-style speech, not every dialect.
-- The blind human comparison comes after release (v0.2).
+- The blind human comparison has only early votes (<!-- n:arena-votes -->pending<!-- /n --> votes from
+  <!-- n:arena-raters -->pending<!-- /n --> raters). The full panel's numbers come in v0.2.
 - It can be wrong, and it can invent things.
 - It has only a basic safety check. It is not a safety-tested product.
 

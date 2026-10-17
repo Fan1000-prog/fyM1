@@ -6,8 +6,8 @@ An open AI model that chats in everyday Malagasy. The way people really text —
 
 **[Try it](#try-it)** · [Paper](paper/fym1.pdf) · [Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fyM1-arena)
 
-> **Status: v0.1.** *pending* means not measured yet. *pending (v0.2)* means it comes after this
-> release: the blind human ratings, and the layer-pruning experiment.
+> **Status: v0.1.** *pending* means not measured yet. Coming in v0.2: the full panel's blind human
+> ratings, each model's answer to each test prompt, and the layer-pruning experiment.
 
 ## Goals
 
@@ -64,12 +64,12 @@ Every choice, and why we made it:
 | Cleaned data lives only in a **private** dataset. It is never released. | It is still people's private conversations. The owner confirmed everyone in the chats agreed to this use. |
 | A **small** slice of formal Malagasy (Wikipedia) is mixed in. | Keeps facts and spelling. Kept small so the style does not turn formal again. |
 | Synthetic chats only if real chats are too few, made by an open model we run ourselves. | No paid APIs, no closed-model outputs, no private data sent to anyone. Budget: $0. |
-| A few "who are you?" answers and polite refusals, written by the owner. | Teaches it to say it was made by Fan's lab and to turn down harmful requests politely. This is a basic check, not a safety guarantee. |
+| A few "who are you?" answers and polite refusals, written by the owner. | Meant to make it say it was made by Fan's lab and politely refuse harmful requests. Not tested as a safety feature. |
 | **QLoRA**: the model stays frozen in 4-bit, we train small add-on weights (LoRA) on all linear layers. | It lets a 7-12B model train on one free 16 GB T4 GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). |
 | Learn from the assistant's replies only. | We want it to learn how to answer, not to copy the user. |
 | Save a checkpoint to a private repo often, and resume from the latest one. | Free Colab sessions disconnect. No work is lost. |
 | Stop early if the held-out loss gets worse. | Reduces overfitting. The leak check below is what tests memorising. |
-| Test prompts are written fresh, not taken from the chats. | So the test set can be public and anyone can rerun it. |
+| Test prompts are written fresh, not taken from the chats. | So the test prompts can be public and anyone can run them. The models' answers to them come out in v0.2. |
 | **Leak check** before release: does the model repeat training sentences? If yes, it does not ship. | Privacy again. |
 | **Vocabulary trimming**: drop tokens Malagasy, French and English never use. Ships only if it passes its checks. | A smaller download. The checks: held-out Malagasy text comes back unchanged, at least 95% of test answers stay identical (greedy decoding), and Belebele stays within 1 point. |
 | No layer pruning yet. | Cutting real layers needs a lot of retraining to heal. Free GPU time cannot pay for that. Planned for v0.2 as an experiment. |
@@ -91,15 +91,19 @@ typed by hand.
 | Belebele Malagasy reading (accuracy) | pending | pending |
 | FLORES chrF++ Malagasy to English | pending | pending |
 | FLORES chrF++ English to Malagasy | pending | pending |
-| Blind human votes: fyM1 win rate | - | pending (v0.2) |
+| Blind human votes so far (early votes): fyM1 win rate | - | pending |
 <!-- numbers:end -->
 
 Where each number comes from:
 
 - Automatic scores: [`results/eval/scores.json`](results/eval/) and [`results/eval/judge.json`](results/eval/)
-- Blind human votes: [`results/eval/arena.json`](results/eval/) — *pending (v0.2)*: raters vote after release
+- Blind human votes: [`results/eval/arena.json`](results/eval/) — early votes only: <!-- n:arena-votes -->pending<!-- /n -->
+  votes from <!-- n:arena-raters -->pending<!-- /n --> raters at release. The full panel's numbers come in v0.2.
 - Model size before and after trimming: [`results/shrink.json`](results/shrink.json)
 - Data counts (counts only, never text): [`results/data_stats.json`](results/data_stats.json)
+
+The answers behind these scores are released in v0.2, after the blind human vote closes, so raters can't
+see which model wrote what.
 
 The LLM judge is a cheap extra signal. Native speakers are the real judges.
 
@@ -107,7 +111,7 @@ The LLM judge is a cheap extra signal. Native speakers are the real judges.
 
 - The style comes mostly from one person's chats. It sounds like everyday Antananarivo speech, not
   every region or dialect.
-- The human comparison is not in yet. Until then, the main evidence is automatic.
+- The human comparison has only early votes so far. Until the full panel is in, the main evidence is automatic.
 - It can get facts wrong and make things up. Do not use it for medical, legal or money advice.
 - The free demo is slow. It runs on a free CPU.
 - Text only. No voice, no images.

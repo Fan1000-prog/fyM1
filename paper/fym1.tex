@@ -14,7 +14,7 @@
 \input{numbers}
 
 \title{fyM1: Teaching an Open Model to Chat in Everyday Malagasy\\[0.3em]
-  \large Version 0.1 --- human ratings pending (v0.2)}
+  \large Version 0.1 --- full human ratings in v0.2}
 \author{Fan's lab}
 \date{October 2026}
 
@@ -30,7 +30,8 @@ friendly, mixing in French, and using everyday spelling. We describe how we chos
 built and anonymised the training data, how we trained and trimmed the model, and what we measured. On
 \fyEvalPrompts{} fresh everyday prompts, we report the share of replies that drift into full French or
 English (base: \fyDriftBase{}; fyM1: \fyDriftFymOne{}), LLM-judge scores, and regression checks on
-reading and translation. A blind human comparison is still collecting votes and is reported in v0.2.
+reading and translation. A blind human comparison reports early votes here; the full panel's result
+comes in v0.2.
 \end{abstract}
 
 \section{Motivation: the formal-versus-everyday gap}
@@ -160,10 +161,11 @@ shuffled, on a published 1--5 rubric for naturalness and correctness
 \paragraph{Leak check.} We test whether fyM1 repeats training text: \fyLeakFymOne{} of its answers share
 an 8-word sequence with the training chats. The release gate was at most 1\%.
 
-\paragraph{Blind human comparison (pending, v0.2).} Native speakers rate pairs of answers in a public
-``arena'': same prompt, two unlabelled answers in random order, pick the more natural one. So far:
-\fyArenaVotes{} votes from \fyArenaRaters{} raters; fyM1 win rate \fyArenaWinRate{} (95\% Wilson
-interval \fyArenaCiLow{}--\fyArenaCiHigh{}; \citealp{wilson1927}).
+\paragraph{Blind human comparison (early votes).} Native speakers rate pairs of answers in a public
+``arena'': same prompt, two unlabelled answers in random order, pick the more natural one. These are the
+early votes in at release: \fyArenaVotes{} votes from \fyArenaRaters{} raters; fyM1 win rate
+\fyArenaWinRate{} (95\% Wilson interval \fyArenaCiLow{}--\fyArenaCiHigh{}; \citealp{wilson1927}).
+With so few raters this is a first signal, not a result. The full panel's numbers come in v0.2.
 
 \paragraph{Reproducibility.} The test prompts, rubric, code and notebooks are public. Version 0.1 releases
 only aggregate scores; the per-prompt answers of both models are released in v0.2, after the human
@@ -175,7 +177,8 @@ private, so training can be rerun only on other data.
 \begin{itemize}
   \item The style comes mostly from one person's chats and their contacts. It reflects
         Antananarivo-style everyday speech, not other regions or dialects.
-  \item The human comparison is still running. Until it is in, the main evidence is automatic.
+  \item The human comparison has only early votes from \fyArenaRaters{} raters. Until the full panel is
+        in, the main evidence is automatic.
   \item The drift metric can be a little low. A reply counts as Malagasy if GlotLID says so, or if at
         least 10\% of its words are common Malagasy words. English that contains a Malagasy name or a
         quoted Malagasy word (e.g.\ ``Hi Vola, how are you?'') can therefore pass. Fully French or
@@ -194,7 +197,8 @@ but it is not a safety-tested product. No closed-API model outputs are in the tr
 
 \section{What comes next (v0.2)}
 \begin{itemize}
-  \item Blind human comparison results from the arena, with confidence intervals.
+  \item The full panel's blind human comparison, with confidence intervals.
+  \item Each model's answer to each test prompt.
   \item The layer-pruning experiment.
   \item Longer training and more everyday data.
 \end{itemize}
