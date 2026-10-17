@@ -146,22 +146,23 @@ Decisions made while building. They override earlier sections where they conflic
 
 ### 8.1 Timeline and compute
 - v0.1 ships when the Messenger export is in. The owner chose this over a same-day model trained only on Wikipedia + identity lines, which would still talk formally (an anti-goal, §2).
-- Colab's free GPU quota runs out after a few hours of tests a day. No paid compute. Kaggle's free GPUs are the owner-suggested fallback; the lead decides.
+- Colab's free GPU quota runs out after a few hours of tests a day. No paid compute. Training moves to Kaggle's free GPUs (~30 h/week, 12 h sessions), driven from the terminal with Kaggle's CLI; the owner adds the HF token to Kaggle Secrets themselves.
 
 ### 8.2 Privacy and release
 - Anonymiser backstops, kept even after the leak fixes: owner's 100-sample review; a "leftover names" list (surviving capitalised words not in the common-word list, counts only) the owner ticks into a blocklist; a count-only post-run check for phone-like digit runs; the strict leak gate (§7.6).
-- `@mentions` are replaced as a whole by one fake name (privacy over an occasional lost word), and that fake never equals or sits inside the mentioned name.
+- `@mentions` are replaced as a whole by one fake name (privacy over an occasional lost word), and that fake never equals or sits inside the mentioned name (PR #16).
 - Raw per-prompt answers and the arena A/B key stay private until the arena closes (v0.2); v0.1 publishes aggregates only. The owner's own arena votes count as "early votes".
 - At release the GitHub repo is deleted and recreated from one clean snapshot (owner pre-approved): no old history, screenshots or browser files. Then it goes public.
 
 ### 8.3 Model selection (§5.1)
 - The owner delegated the pick to the lead, who reports the table and the reason before training.
-- Candidates measured: Gemma 4 12B, AfriqueQwen-8B (base model, no chat-tuned version), Gemma 3 12B. A chat-tuned AfriqueQwen 3.5 9B may be added as a fourth.
+- Candidates: Gemma 4 12B and AfriqueQwen-8B (base model, no chat-tuned version), measured; Gemma 3 12B and AfriqueQwen3.5-9B-50Langs-Instruct-v1 (chat-tuned, same family), pending. On a T4, Unsloth trains all but AfriqueQwen-8B in float32, which is slower.
 - Belebele uses one protocol for every candidate: plain-text 0-shot, no chat template. A chat-template score is kept as a second column, empty for base models.
 - FLORES+ is the gated `openlanguagedata/flores_plus` dataset (terms accepted by the owner).
 
 ### 8.4 Training (§5.3)
-- Colab is driven by agents through Playwright; one agent only. The HF token reaches Colab through a token-safe flow (`docs/colab_operator.md`) and never enters a transcript.
+- Colab is driven by agents through Playwright; only one agent drives it at a time. The HF token reaches Colab through a token-safe flow (`docs/colab_operator.md`) and never enters a transcript.
+- The next three points are in PR #13.
 - Training code reaches Colab only by syncing clean `origin/main` to the private checkpoint repo. Baseline runs may use branch code if each result records its code version.
 - Chat templates run with thinking turned off, and every assistant turn in training carries the same empty thinking block the model sees when answering.
 - Early stopping uses the repo's own tested rule, which survives a Colab restart.

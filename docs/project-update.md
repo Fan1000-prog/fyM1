@@ -10,7 +10,7 @@ The tooling is built and merged. No model is picked or trained yet. Two things b
 
 1. **The Messenger export is not on the laptop.** `~/malagasy-data/raw/` does not exist, so there are no real
    chats yet. Without them the model can't learn everyday style.
-2. **Colab's free GPU limit was hit** at 23:12 UTC after ~2.7 h of baseline tests. Retries every ~45 min.
+2. **Colab's free GPU limit was hit** at 23:12 UTC after a few hours of baseline tests. Retries every ~45 min.
 
 Ship date moved from 2026-10-17 to **when the export is in** (owner: tomorrow is fine). The owner chose this
 over shipping a model trained only on Wikipedia + identity lines, which would still talk formally.
@@ -24,9 +24,9 @@ over shipping a model trained only on Wikipedia + identity lines, which would st
 | 1 Repos + scaffold | Private GitHub repo, package layout, `.gitignore` tests, private HF repos `fyM1-chats`, `fyM1-ckpt`, `fyM1-votes` | #1 |
 | 2 Data | Messenger parser, anonymiser, segmenter, review sheet, `build_chats.py`, `build_formal.py` | #3 (+ #16 open) |
 | 2 Data | Uploaded to private `fyM1-chats`: 1,500 Wikipedia chats (`formal.jsonl`), 16 identity/refusal chats written by the owner, system prompt. Private both before and after upload | — |
-| 2 Data | Dry run of cleaner + post-run checks on a made-up export: all planted phones counted, planted names listed | — |
+| 2 Data | Dry run of cleaner + post-run checks on a made-up export (reported by `data`): all planted phones counted, planted names listed | — |
 | 3 Eval | `is_malagasy`, `drift_rate`, `leak_rate`, 150 owner-approved test prompts, judge rubric; greeting words "akory", "aby" | #4, #15 |
-| 4 Train infra | `latest_checkpoint` resume, Colab smoke notebook, token-safe Colab operator flow, one-shot local token server | #2 |
+| 4 Train infra | `latest_checkpoint` resume, Colab smoke notebook, token-safe Colab operator flow, one-shot local token server (one extra fix round, owner-approved) | #2 |
 | 5 Scoring | `score.py`: blind judge batch, judge means, `scores.json`, leak matches, owner leak review, strict leak gate | #6, #10, #11, #15 |
 | 6 Spaces | Chat + arena apps, `make_vote`, vote tally, owner-approved Malagasy text, `fy-m-1` Space names | #7, #9, #12 |
 | 7 Shrink | Vocabulary trim that keeps BPE merges valid (notebook not run yet) | #8 |
@@ -53,19 +53,23 @@ Recorded in the spec (§8) and plan ("Changes from the plan") as well.
   history, screenshots or browser files, then made public.
 
 **Model selection**
-- Lead picks the base model (owner delegated). Candidates: Gemma 4 12B, AfriqueQwen-8B, Gemma 3 12B.
+- Lead picks the base model (owner delegated). Candidates: Gemma 4 12B, AfriqueQwen-8B, Gemma 3 12B, and
+  AfriqueQwen3.5-9B-50Langs-Instruct-v1 (added because AfriqueQwen-8B has no chat version).
 - One Belebele protocol for all: plain-text 0-shot, no chat template. The chat-template score is a second
-  column, empty for base models. (AfriqueQwen is a base model; its chat-format score of 0.236 was a test error.)
+  column, empty for base models. (AfriqueQwen-8B's chat-format score, 0.236, is not valid for a base model.)
 - Smoke training tests cut to 15 steps for the remaining models to save GPU time.
 - Baseline runs may use the trainer's branch code (each result records its code sha). Real training runs only on
   code synced from clean `origin/main` (`scripts/sync_code_to_hub.py` refuses otherwise).
-- No paid compute. Owner suggested Kaggle (~30 free GPU h/week) as a fallback; lead decides.
+- No paid compute. **Training moves to Kaggle** (owner suggested, lead decided): ~30 free GPU h/week and 12 h
+  sessions fit slow float32 training; driven from the terminal with Kaggle's own CLI, no browser clicking. The owner
+  types the HF token into Kaggle Secrets themselves.
 
-**Training details**
+**Training details** (in PR #13, not merged yet)
 - `CHAT_TEMPLATE_KWARGS = {"enable_thinking": False}` shared by train, eval and trim.
 - Every assistant turn gets the same empty thinking block the model sees at answer time, so training matches use.
 - Own tested early-stop rule (the Hugging Face callback breaks after a Colab restart).
-- Gemma 4 on a T4 trains in float32 (Unsloth fallback): if picked, lr 1e-4 or a longer warmup.
+- On a T4, Unsloth trains Gemma 3, Gemma 4 and the 9B instruct model in float32 (slower); only AfriqueQwen-8B
+  uses fp16. If Gemma 4 is picked: lr 1e-4 or a longer warmup.
 - Saving 4-bit weights during the baseline is off (filled Colab RAM and hung).
 
 **Process**
@@ -75,20 +79,23 @@ Recorded in the spec (§8) and plan ("Changes from the plan") as well.
 
 ## 4. Baseline numbers so far
 
-| | Gemma 4 12B | AfriqueQwen-8B | Gemma 3 12B |
-|---|---|---|---|
-| Belebele, chat format, 0-shot | 0.750 | not valid (base model) | pending |
-| Belebele, plain text, 0-shot | pending | pending | pending |
-| FLORES+ chrF++ | pending | pending | pending |
-| Tokens per Malagasy word | 2.79 | 2.95 | pending |
-| Seconds per training step (8×2048 tokens) | 126 (float32) | 74 | pending |
-| Peak GPU memory | 9.18 GB | 7.79 GB | pending |
-| Smoke loss | best at step 9, then rising | smooth, 1.13 → 0.70 | pending |
-| 20 greetings | fluent, formal "AI assistant" | unusable (no chat tuning) | pending |
+| | Gemma 4 12B | AfriqueQwen-8B | Gemma 3 12B | AfriqueQwen3.5-9B-Instruct |
+|---|---|---|---|---|
+| Belebele, chat format, 0-shot | 0.750 | not valid (base model) | pending | pending |
+| Belebele, plain text, 0-shot | pending | pending | pending | pending |
+| FLORES+ chrF++ | pending | pending | pending | pending |
+| Tokens per Malagasy word | 2.79 | 2.95 | pending | pending |
+| Seconds per training step (8×2048 tokens)* | 126 (float32) | 74 | pending | pending |
+| Peak GPU memory* | 9.18 GB | 7.79 GB | pending | pending |
+| Smoke loss | best at step 9, then rising | smooth, 1.13 → 0.70 | pending | pending |
+| 20 greetings | fluent, formal "AI assistant" | unusable (no chat tuning) | pending | pending |
 
-AfriqueQwen-8B has no chat-tuned version. The nearest is
-`McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1` (cc-by-4.0, different size and architecture, Unsloth support
-unconfirmed). Lead decides whether to test it as a fourth candidate.
+\* The Gemma 4 speed and memory figures were not yet written by a script in the repo (PR #13 review); they are
+re-measured when Gemma 4 runs again.
+
+The 9B instruct model (`McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1`, cc-by-4.0) passed the no-GPU checks:
+Unsloth support, text-only load, ~6.5 GB in 4-bit. Run order once a GPU is free: Gemma 3 → 9B instruct → Gemma 4
+(FLORES+, plain-text Belebele) → AfriqueQwen-8B (same).
 
 Source: `results/baseline/*.json` and `results/model_selection.json` on the `baseline` branch (PR #13).
 
@@ -96,18 +103,19 @@ Source: `results/baseline/*.json` and `results/model_selection.json` on the `bas
 
 | Item | Owner | State |
 |---|---|---|
-| PR #16 anonymiser leak fix | main | 2 fix rounds done; final review running |
-| PR #13 baseline + 01_train notebook | trainer | draft until the baseline finishes |
+| PR #16 anonymiser leak fix | main | blocked after 2 fix rounds (glued rule eats words ending in "o" before a price; bracketed non-Malagasy area codes; doubled-letter split handles); owner decides on one more round |
+| PR #13 baseline + 01_train notebook | trainer | open; fix round 1 of 2 (number sources, safe lr-change resume, training time across disconnects, code version label) |
 | Messenger export | owner | not on the laptop |
 | 20-greeting ratings per model | owner | after all three models have answers |
-| Kaggle fallback | lead | owner suggested; lead's call |
+| Kaggle setup | owner | phone-verified account, API token in `~/.kaggle/kaggle.json`, then HF_TOKEN in Kaggle Secrets |
+| Release check `git log -p | grep \+261` matches synthetic test/doc examples | lead | reworded in the plan to skip `tests/` and `docs/` |
 | Old `data-pipeline` branch + `~/fyM1-data` | main | delete after #16 merges (owner OK) |
 
 ## 6. Steps to finish
 
 1. **Merge PR #16**, then delete `data-pipeline` (remote, local, `~/fyM1-data`) and `leak-fix`. `data` re-runs
    its dry run on the new `main`.
-2. **Finish the baseline** when a GPU is free (Colab, or Kaggle if lead switches): Gemma 3 in full; plain-text
+2. **Set up Kaggle** (owner, ~10 min once), then **finish the baseline** on Kaggle: Gemma 3 in full; plain-text
    Belebele and FLORES+ for all three. Owner rates the 20 greetings per model.
 3. **Lead picks the base model** and sends the owner the table and the reason. Merge PR #13.
 4. **Messenger export lands** in `~/malagasy-data/raw/`. `data` runs `build_chats.py` locally, then the post-run
