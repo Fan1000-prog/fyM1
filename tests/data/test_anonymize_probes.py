@@ -395,3 +395,64 @@ def test_glued_phones_with_gaps(text, expected):
 @pytest.mark.parametrize("text", ["Taona 2020-03-12 io", "ny 2023 12 345 olona"])
 def test_glued_phone_rule_skips_years(text):
     assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+# --- fresh review (PR #3 round 5) --------------------------------------------------------
+
+from fym1.data.anonymize import FIRST_NAMES, SURNAMES  # noqa: E402
+
+NOBODY = Anonymizer({})
+
+
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_mention_fake_never_repeats_the_mentioned_first_name(first):
+    out = NOBODY(f"@{first} tonga ve?")
+
+    assert compare_key(out.split()[0]) != compare_key(first)
+    assert out.endswith(" tonga ve?")
+
+
+@pytest.mark.parametrize("first, last", [(f, s) for f in FIRST_NAMES for s in SURNAMES])
+def test_hashed_mention_fake_never_repeats_mentioned_words(first, last):
+    out = NOBODY(f"@{first} {last}")
+
+    assert not {compare_key(first), compare_key(last)} & {compare_key(w) for w in out.split()}
+
+
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_handle_fake_never_repeats_the_handle(first):
+    out = NOBODY(f"@{first.lower()}.rk salama")
+
+    assert compare_key(out.split()[0]) != compare_key(first)
+
+
+def test_exact_mention_of_participant_first_name_with_unknown_surname():
+    out = Anonymizer(FINAL_NAMES)("@Nirina Rabearisoa")
+
+    assert out == fake_first("Nirina Rakotomalala")
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("WhatsApp+261341234567", "WhatsApp<TEL>"),
+        ("wa+261341234567", "wa<TEL>"),
+        ("laharana+261341234567", "laharana<TEL>"),
+        ("laharana261341234567", "laharana<TEL>"),
+        ("laharana261 34 12 345 67", "laharana<TEL>"),
+    ],
+)
+def test_glued_international_phones(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+@pytest.mark.parametrize("text", ["20:30", "Amin'ny 20:30 isika", "1 000 000 Ar"])
+def test_times_and_amounts_stay(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+def test_mention_across_a_non_breaking_space():
+    out = NOBODY("@Fara Rabe salama")
+
+    assert not {"fara", "rabe"} & {compare_key(w) for w in out.replace(" ", " ").split()}
+    assert out.endswith(" salama")
