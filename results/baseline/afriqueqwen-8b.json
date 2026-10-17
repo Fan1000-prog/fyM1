@@ -1,0 +1,128 @@
+{
+  "model": {
+    "slug": "afriqueqwen-8b",
+    "hub_id": "McGill-NLP/AfriqueQwen-8B",
+    "quant": "bnb 4-bit nf4 (Unsloth load_in_4bit)"
+  },
+  "env": {
+    "gpu": "Tesla T4",
+    "torch": "2.11.0+cu130",
+    "model_dtype": "torch.float16",
+    "vram_after_load_gb": 5.67,
+    "load_s": 248,
+    "utc": "2026-10-17T20:27:15.342864+00:00"
+  },
+  "belebele": {
+    "acc": 0.2356,
+    "n": 900,
+    "nan_rows": 0,
+    "seconds": 405,
+    "protocol": "0-shot, chat template, English instruction, argmax of next-token logits over '1'-'4'"
+  },
+  "tokens_per_word": {
+    "value": 2.952,
+    "n_sentences": 1000,
+    "source": "wikimedia/wikipedia 20231101.mg, shuffle seed 42, 5-60 words"
+  },
+  "greetings": {
+    "source": "eval/prompts.jsonl greetings, first 20",
+    "sampling": "temp 0.7, top_p 0.9, max 128 new tokens, seed 42, no system prompt",
+    "answers": [
+      {
+        "prompt": "Sali ahn",
+        "answer": "```\n123456789101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676"
+      },
+      {
+        "prompt": "De ahoana?",
+        "answer": "# How to calculate the standard deviation of a sample in Excel\n\n### Summary\n\nThis example shows how to calculate the standard deviation of a sample in Excel using the STDEV.S function.\n\nSample Standard Deviation\nThe sample standard deviation is a measure of how much variation or dispersion there is in a set of values. A low standard deviation indicates that the data points tend to be very close to the mean, while a high standard deviation indicates that the data points are spread out over a wider range.\n\nThe formula for sample standard deviation is as follows:\n\n=STDEV.S(range)\n\nwhere range is the range of cells containing the sample data.\n\nFor"
+      },
+      {
+        "prompt": "De aona ry zalahy?",
+        "answer": "# 1 Answer\n\n## Solution: $$\\frac{\\log 2}{2}$$\n\n### Step-by-step Solution of $$\\int \\frac{1}{1-2 x} \\log (1-x) \\, dx$$\n\n#### Let's solve by partial fraction decomposition method\n\nWe first factor $$1-2 x$$\n\n$$1-2 x = -2 \\left(x-\\frac{1}{2}\\right)$$\n\nSo we get that, the integral turns into:\n\n$$\\int \\frac{1}{-2 \\left(x-\\frac{1}{2}\\right)}\\log (1"
+      },
+      {
+        "prompt": "Salama e! Manao ahoana?",
+        "answer": "Salama e! Manao ahoana? Manao ahoana ianao?\n\n### Resaka amin'ny mpampiasa\n\nmpampiasa\nSalama e! Manao ahoana ianao?\n\n### Valiny avy amin'ny mpampiasa\n\nmpampiasa\nSalama e! Manao aho ahoana ianao? Manao ahoana ianao?\n\n### Resaka amin'ny mpampiasa\n\nmpampiasa\nSalama e! Manao ahoana ianao?\n\n### Valiny avy a"
+      },
+      {
+        "prompt": "Akory aby?",
+        "answer": "## What is the formula for finding the area of a trapezoid?\n\nTo find the area of a trapezoid, we must add the sum of the bases (side lengths on the bottom and top) and multiply by the height, which results in units squared. The formula for the area of a trapezoid is: A = frac{1}{2} (b_1 + b_2)h\n\n## What is the area of a trapezoid calculator?\n\nTrapezoid Area Calculator. A trapezoid is a quadrilateral with two sides parallel to each other. Its area can"
+      },
+      {
+        "prompt": "Mbola velona ve ianao? 😂",
+        "answer": "Ry mpitsidika malala, tsy mandeha ny endri-tsoratra emoji ao amin'ny sehatra fifanakalozan-kevitra. Azafady, ampio aho hiverina amin'ny laoniny 😢. 🖤\n\nRy mpitsidika malala, tsy mandeha ny endri-tsoratra emoji ao amin'ny sehatra fifanakalozan-kevitra. Azafady, ampio aho hiverina amin'ny laoniny 😢. �"
+      },
+      {
+        "prompt": "Inona no vaovao any aminareo?",
+        "answer": "### User Profile\n\n##### User Activity\nRecent Activity\nStatus\nOffline\nLast Seen\n18.09.2019 @ 13:25\nJoined\n05.09.2017\nActions\nThis user has not yet participated in any conversations.\nForum Activity\nTopic Replies Replies Last Post\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0"
+      },
+      {
+        "prompt": "Manahoana tompoko",
+        "answer": "Welcome to the world of AI, where technology meets creativity and innovation. In this article, we will explore the fascinating topic of AI writing and how it is transforming the way we create content. So, sit back, relax, and get ready to discover the endless possibilities of AI in the realm of writing.\n\n### Understanding AI Writing\n\nAI writing refers to the use of artificial intelligence algorithms to generate written content. These algorithms analyze vast amounts of data and learn from patterns and structures in existing text to produce unique and relevant pieces. With AI writing, the possibilities are endless, from creating articles, stories, poems, and even entire books.\n\nAI writing"
+      },
+      {
+        "prompt": "Salut, tsara ve ny andro?",
+        "answer": "### Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re: Re"
+      },
+      {
+        "prompt": "Hey, efa nifoha ve?",
+        "answer": "Hey, efa nifoha ve?(anchor)\n\n(anchor) Hey, efa nifoha ve?\n\nHey, efa nifoha ve? (Hi, are you awake?) is an English phrase which is used to wake someone up. It is used in the song of the same name by American R&B singer Usher.\n\nThe phrase is also used in the title of a song by American R&B singer Usher. It is the first single from his second studio album, Usher (2001). The song was written by Usher, Jermaine Dupri, and Chris Brown, and produced by Dup"
+      },
+      {
+        "prompt": "Bonsoir! Mbola tsy matory ve?",
+        "answer": "Ny tsara indrindra dia ny matory tsara! Fa aiza ny tsara indrindra? Tsy tsara indrindra ho an'ny ankamaroan'ny olona izany. Raha tsy mahazo torimaso ianao dia tsy matory tsara.\nNy tsara indrindra dia ny matory tsara! Fa aiza ny tsara indrindra? Tsy tsara indrindra ho an'ny ankamaroan'ny olona izany. Raha tsy mahazo torimaso ianao"
+      },
+      {
+        "prompt": "Ahoana ny weekend-nao?",
+        "answer": "## How to find the volume of a sphere\n\nThe volume of a sphere is equal to four-thirds the volume of a cylinder with the same radius, using the formula: Volume = 4/3 πr3. The volume of a sphere with radius r is 4/3 πr3.\n\n## What is the volume of a sphere?\n\nThe volume of a sphere is the space occupied by the sphere within its boundaries. The volume of a sphere is measured in cubic units. The volume of a sphere can be easily calculated by using its radius or diameter.\n\n## What is the formula for the volume of a sphere?\n\nThe formula for"
+      },
+      {
+        "prompt": "Tsara ve ny dia?",
+        "answer": "Tsy mbola nanana fahafahana nandeha aho, ary tsy manana eritreritra mihitsy. Izany no antony tiako hanontany anao. Misy toerana azo antoka ve ny dia? Fa ny fahitana voalohany dia tsy izany. Misy zavatra azo antoka ve izay tsy tokony hatao? Amin'ny fomba ahoana no ahafahanao mitondra olona iray ho any amin'ny toerana iray iz"
+      },
+      {
+        "prompt": "Efa nisakafo ve ianao?",
+        "answer": "Raha tsy nisakafo ianao dia mihinàna an’ireo vokatra ireo mba hihazonana ny haavon’ny glucose ambony kokoa. Raha efa nisakafo ianao dia ampiasao izy ireo ho fanampin-tsakafo mba hampitomboana ny tahan’ny metabolisma sy ny fihenan’ny tavy.\n\nTsy maintsy ampiasaina amin’ny fomba voafetra izy ireo satria misy fiantraikany amin"
+      },
+      {
+        "prompt": "Inona no ataonao zao?",
+        "answer": "Inona no ataonao zao??\n- tsy maninona\n- tsy maninona\n- tsy manininona\n- tsy maninona\n- tsy maninona\n- tsy maninona\n- tsy maninona\n- tsy maninona\n- tsy maninona\n- tsy maninona\n- tsy maninona\n- tsy maninona\n- tsy maninona\n- tsy maninona\n- tsy maninona\n- tsy maninona\n- tsy manin"
+      },
+      {
+        "prompt": "Aiza ianao zao?",
+        "answer": "### 1\n\nThe given matrix is already in reduced row echelon form. The rank of a matrix is the number of non-zero rows in its reduced row echelon form, so the rank of this matrix is 3. The nullity of a matrix is the number of columns minus the rank, so the nullity of this matrix is 2. The dimension of the row space of a matrix is equal to its rank, so the dimension of the row space of this matrix is 3. The dimension of the column space of a matrix is also equal to its rank, so the dimension of the column space of this matrix is"
+      },
+      {
+        "prompt": "Mbola miasa ve ialahy?",
+        "answer": "# 2 Answers\n\nYou can do the following. First, let $f(x) = \\frac{1}{1+x}$, so $f^{(n)}(x) = (-1)^n \\frac{n!}{(1+x)^{n+1}}$. Then you can use the Cauchy formula to see that $$\\frac{f^{(n)}(x)}{n!} = \\frac{1}{2\\pi i} \\int_{|z-x| = r} \\frac{f(z)}{(z-x)^{n+1}} \\, dz$$ for any"
+      },
+      {
+        "prompt": "Reraka be aho androany 😩",
+        "answer": "Assistant\n\n``````// You can also use the following code for this challenge:\n// https://replit.com/@mirko785/challenge-724\n\n// My solution\n// https://replit.com/@mirko785/challenge-724``````\n\n``````// You can also use the following code for this challenge:\n// https://replit.com/@mirko785/challenge-724\n\n// My solution\n// https://replit.com/@mirko785/challenge-724``````\n\n### Testcases\n\n````"
+      },
+      {
+        "prompt": "Sady mafana no feno be ny taxi-be androany",
+        "answer": "# 3.3k\n\n## 3.3k\n\n 11.9k ## 11.9k\n\n 3 3 bronze badges 3 3 bronze badges 3 3 bronze badges 3 3 bronze badges 3 3 bronze badges 3 3 bronze badges 3 3 bronze badges 3 3 bronze badges 3 3 bronze badges 3 3 bronze badges\n\n# 3.3k\n\n## 3.3k\n\n 11.9k ## 11.9k\n\n# 3.3k\n\n## 3."
+      },
+      {
+        "prompt": "Faly mahita anao indray!",
+        "answer": "# Is there a formula for the number of arrangements of n distinct objects in k slots?\n\nTo find the number of arrangements of n distinct objects in k slots, you can use the formula:\n\nNumber of arrangements = n! / (n - k)!\n\nWhere:\n– n is the total number of distinct objects.\n– k is the number of slots available.\n\nThis formula is derived from the concept of permutations, where the order of arrangement matters. It takes into account the fact that once an object is placed in a slot, it cannot be used again.\n\nFor example, if you have 5 distinct objects and 3 slots available, the"
+      }
+    ]
+  },
+  "qlora_smoke": {
+    "ok": true,
+    "steps": 30,
+    "seq_len": 2048,
+    "batch": "1 x grad-accum 8",
+    "peak_vram_gb": 7.79,
+    "sec_per_step": 74.3,
+    "seconds": 2269,
+    "loss_first": 1.1323297023773193,
+    "loss_last": 0.7007304430007935,
+    "nan_loss": false,
+    "lora": "r16 a16 all linear (language only)",
+    "compute_dtype": "torch.float16"
+  },
+  "done": true
+}

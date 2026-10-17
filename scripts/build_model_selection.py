@@ -22,6 +22,7 @@ LICENSES = {
     "McGill-NLP/AfriqueQwen-8B": "CC-BY-4.0",
     "unsloth/gemma-3-12b-it-unsloth-bnb-4bit": "Gemma Terms of Use",
 }
+BASE_MODELS = {"McGill-NLP/AfriqueQwen-8B"}  # not instruction-tuned: Belebele via the completion protocol
 
 
 def main(fetch: bool) -> None:
@@ -37,7 +38,10 @@ def main(fetch: bool) -> None:
         "chosen_size": previous.get("chosen_size"),
         "license": previous.get("license"),
         "hf_license": previous.get("hf_license"),
-        "candidates": [selection_row(r, LICENSES[r["model"]["hub_id"]]) for r in results],
+        "candidates": [
+            selection_row(r, LICENSES[r["model"]["hub_id"]], base_model=r["model"]["hub_id"] in BASE_MODELS)
+            for r in results
+        ],
     }
     OUT.write_text(json.dumps(selection, indent=2, ensure_ascii=False) + "\n")
     print(f"wrote {OUT} with {len(results)} candidates")

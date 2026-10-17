@@ -61,20 +61,29 @@ def chrf_pp(hyps: list[str], refs: list[str]) -> float:
     return sacrebleu.CHRF(word_order=2).corpus_score(hyps, [refs]).score
 
 
-def selection_row(result: dict, license: str) -> dict:
+def selection_row(result: dict, license: str, base_model: bool = False) -> dict:
     """One `candidates[]` row of results/model_selection.json from a results/baseline/<slug>.json file.
 
-    Sections the run did not produce (skipped model, FLORES pending) stay None.
+    Sections the run did not produce (skipped model, FLORES pending) stay None. A base model is scored
+    only with the plain-text completion protocol: the chat-template protocol asks it to follow an
+    instruction it was never tuned for, so that number is not a measure of its Malagasy.
     `sniff_natural` is filled later from the owner's ratings.
     """
     flores = result.get("flores", {})
     smoke = result.get("qlora_smoke", {})
+    if base_model:
+        acc = result.get("belebele_completion", {}).get("acc")
+        protocol = "completion 0-shot" if acc is not None else "completion 0-shot (pending)"
+    else:
+        acc, protocol = result.get("belebele", {}).get("acc"), "chat 0-shot"
     return {
         "model": result["model"]["hub_id"],
         "license": license,
-        "belebele_acc": result.get("belebele", {}).get("acc"),
+        "belebele_acc": acc,
+        "belebele_protocol": protocol,
         "chrf_plt_eng": flores.get("plt-eng_chrf++"),
         "chrf_eng_plt": flores.get("eng-plt_chrf++"),
+        "flores": "measured" if flores else "pending",
         "tokens_per_word": result.get("tokens_per_word", {}).get("value"),
         "sniff_natural": None,
         "peak_vram_gb": smoke.get("peak_vram_gb"),

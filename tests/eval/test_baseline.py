@@ -76,15 +76,25 @@ def test_selection_row_maps_baseline_json_to_paper_schema():
         "qlora_smoke": {"ok": True, "peak_vram_gb": 12.0, "sec_per_step": 30.0},
     }
     assert selection_row(result, "Apache-2.0") == {
-        "model": "org/m", "license": "Apache-2.0", "belebele_acc": 0.5, "chrf_plt_eng": 50.0,
-        "chrf_eng_plt": 40.0, "tokens_per_word": 2.1, "sniff_natural": None,
-        "peak_vram_gb": 12.0, "sec_per_step": 30.0, "qlora_fits": True,
+        "model": "org/m", "license": "Apache-2.0", "belebele_acc": 0.5, "belebele_protocol": "chat 0-shot",
+        "chrf_plt_eng": 50.0, "chrf_eng_plt": 40.0, "flores": "measured", "tokens_per_word": 2.1,
+        "sniff_natural": None, "peak_vram_gb": 12.0, "sec_per_step": 30.0, "qlora_fits": True,
     }
 
 
 def test_selection_row_leaves_missing_sections_none():
     row = selection_row({"model": {"slug": "m", "hub_id": "org/m"}, "skipped": "403"}, "x")
     assert row["belebele_acc"] is None and row["chrf_plt_eng"] is None and row["qlora_fits"] is None
+    assert row["flores"] == "pending"
+
+
+def test_selection_row_base_model_uses_only_the_completion_protocol():
+    result = {"model": {"slug": "m", "hub_id": "org/m"}, "belebele": {"acc": 0.24}}
+    row = selection_row(result, "x", base_model=True)
+    assert row["belebele_acc"] is None and row["belebele_protocol"] == "completion 0-shot (pending)"
+    result["belebele_completion"] = {"acc": 0.7}
+    row = selection_row(result, "x", base_model=True)
+    assert row["belebele_acc"] == 0.7 and row["belebele_protocol"] == "completion 0-shot"
 
 
 def test_belebele_completion_prompt_is_plain_text_ending_in_answer():

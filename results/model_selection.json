@@ -1,0 +1,36 @@
+{
+  "chosen": null,
+  "chosen_size": null,
+  "license": null,
+  "hf_license": null,
+  "candidates": [
+    {
+      "model": "McGill-NLP/AfriqueQwen-8B",
+      "license": "CC-BY-4.0",
+      "belebele_acc": null,
+      "belebele_protocol": "completion 0-shot (pending)",
+      "chrf_plt_eng": null,
+      "chrf_eng_plt": null,
+      "flores": "pending",
+      "tokens_per_word": 2.952,
+      "sniff_natural": null,
+      "peak_vram_gb": 7.79,
+      "sec_per_step": 74.3,
+      "qlora_fits": true
+    },
+    {
+      "model": "google/gemma-4-12B-it",
+      "license": "Apache-2.0",
+      "belebele_acc": 0.75,
+      "belebele_protocol": "chat 0-shot",
+      "chrf_plt_eng": null,
+      "chrf_eng_plt": null,
+      "flores": "pending",
+      "tokens_per_word": 2.792,
+      "sniff_natural": null,
+      "peak_vram_gb": 9.18,
+      "sec_per_step": 126.3,
+      "qlora_fits": true
+    }
+  ]
+}
