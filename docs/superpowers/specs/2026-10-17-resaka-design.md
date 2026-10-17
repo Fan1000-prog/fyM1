@@ -124,16 +124,47 @@ Owner chose the recommendation: a large **open-weight model with a permissive li
 Owner will recruit a few other native speakers. They need **one easy link**: a small public HF Space ("arena") showing a prompt and two unlabelled answers in random order; raters pick the more natural one (and flag wrong ones). No login. Votes saved to a private HF dataset. Short instructions in Malagasy.
 
 ### 7.4 Timeline: ship today (2026-10-17)
+> **Updated 2026-10-17 (§8.1):** v0.1 ships when the Messenger export is in, not on a fixed day (owner: tomorrow is fine). The scope below is unchanged.
+
 "Today" means **v0.1**, honestly labelled:
 - In today: model pick from quick baseline tests; data pipeline; one or two QLoRA runs; automatic metrics + owner's own blind ratings; vocabulary trimming only if it passes its checks; model + demo Space + arena Space + GitHub repo + paper v0.1.
 - After today (v0.2): the panel's blind A/B results (raters vote over the following days), layer-pruning experiment, longer training. The paper and README say clearly which results are in and which are pending.
 
 ### 7.5 Name and identity
-- Name: **fyM1** — "fy" (Malagasy: sweet, pleasant) + M(alagasy) + 1. HF model repo `Fan1000-Prog/fyM1-<size>`, GitHub `Fan1000-prog/fyM1`. (Supersedes the "Resaka" placeholder.)
-- System prompt (in Malagasy, with an English gloss in the model card): a helpful Malagasy assistant trained by **Fan's lab**. Training data includes a small set of "who are you?" answers consistent with this.
+- Name: **fy-m-1** ("fy", Malagasy: sweet, pleasant; version "m-1"), written `fy-m-1` everywhere public: README, model card, paper, Space titles, system prompt, identity lines. Public ids: HF model `Fan1000-Prog/fy-m-1-<size>`, Spaces `Fan1000-Prog/fy-m-1-chat` and `Fan1000-Prog/fy-m-1-arena`, GitHub `Fan1000-prog/fy-m-1` (recreated at release, §8.2). Private repos keep `fyM1-*`; the Python package stays `fym1`. (Supersedes "fyM1" and the "Resaka" placeholder.)
+- System prompt (in Malagasy, with an English gloss in the model card): a helpful Malagasy assistant trained by **Fan's lab**. Training data includes 16 "who are you?" and polite-refusal chats consistent with this, written by the owner in their own words.
 
 ### 7.6 Calls made by the designer after the builder check
 - Data volume unknown until the export arrives; the mix adapts — the fewer real chats, the more checked synthetic chats.
 - Test prompts are written fresh (owner-approved), not taken from private chats, so the test set is public and rerunnable.
 - **Leak gate:** before release, any fyM1 answer that shares a run of 8 words with the real chats blocks release. The owner sees only the matched 8 words (never the chat) and release goes ahead only if every match is a generic phrase. Counts go to `results/eval/leak_review.json` `{matches, approved_generic, rejected}`.
 - **Safety:** small set of polite refusals + identity answers in training; a basic safety check before release; limits stated in the model card.
+
+## 8. Updates from the build session (2026-10-17)
+
+Decisions made while building. They override earlier sections where they conflict. Current status lives in `docs/project-update.md`.
+
+### 8.1 Timeline and compute
+- v0.1 ships when the Messenger export is in. The owner chose this over a same-day model trained only on Wikipedia + identity lines, which would still talk formally (an anti-goal, §2).
+- Colab's free GPU quota runs out after a few hours of tests a day. No paid compute. Kaggle's free GPUs are the owner-suggested fallback; the lead decides.
+
+### 8.2 Privacy and release
+- Anonymiser backstops, kept even after the leak fixes: owner's 100-sample review; a "leftover names" list (surviving capitalised words not in the common-word list, counts only) the owner ticks into a blocklist; a count-only post-run check for phone-like digit runs; the strict leak gate (§7.6).
+- `@mentions` are replaced as a whole by one fake name (privacy over an occasional lost word), and that fake never equals or sits inside the mentioned name.
+- Raw per-prompt answers and the arena A/B key stay private until the arena closes (v0.2); v0.1 publishes aggregates only. The owner's own arena votes count as "early votes".
+- At release the GitHub repo is deleted and recreated from one clean snapshot (owner pre-approved): no old history, screenshots or browser files. Then it goes public.
+
+### 8.3 Model selection (§5.1)
+- The owner delegated the pick to the lead, who reports the table and the reason before training.
+- Candidates measured: Gemma 4 12B, AfriqueQwen-8B (base model, no chat-tuned version), Gemma 3 12B. A chat-tuned AfriqueQwen 3.5 9B may be added as a fourth.
+- Belebele uses one protocol for every candidate: plain-text 0-shot, no chat template. A chat-template score is kept as a second column, empty for base models.
+- FLORES+ is the gated `openlanguagedata/flores_plus` dataset (terms accepted by the owner).
+
+### 8.4 Training (§5.3)
+- Colab is driven by agents through Playwright; one agent only. The HF token reaches Colab through a token-safe flow (`docs/colab_operator.md`) and never enters a transcript.
+- Training code reaches Colab only by syncing clean `origin/main` to the private checkpoint repo. Baseline runs may use branch code if each result records its code version.
+- Chat templates run with thinking turned off, and every assistant turn in training carries the same empty thinking block the model sees when answering.
+- Early stopping uses the repo's own tested rule, which survives a Colab restart.
+
+### 8.5 Judge disclosure
+- The LLM judge is named in the paper as a method: "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code; rubric in `src/fym1/eval/judge_rubric.md`." This is a methods disclosure, not authorship.
