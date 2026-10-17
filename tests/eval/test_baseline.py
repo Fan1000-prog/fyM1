@@ -72,12 +72,14 @@ def test_selection_row_maps_baseline_json_to_paper_schema():
     result = {
         "model": {"slug": "m", "hub_id": "org/m"},
         "belebele": {"acc": 0.5},
+        "belebele_completion": {"acc": 0.6},
         "flores": {"eng-plt_chrf++": 40.0, "plt-eng_chrf++": 50.0},
         "tokens_per_word": {"value": 2.1},
         "qlora_smoke": {"ok": True, "peak_vram_gb": 12.0, "sec_per_step": 30.0},
     }
     assert selection_row(result, "Apache-2.0") == {
-        "model": "org/m", "license": "Apache-2.0", "belebele_acc": 0.5, "belebele_protocol": "chat 0-shot",
+        "model": "org/m", "license": "Apache-2.0", "belebele_acc": 0.6, "belebele_protocol": "completion 0-shot",
+        "belebele_chat_acc": 0.5,
         "chrf_plt_eng": 50.0, "chrf_eng_plt": 40.0, "flores": "measured", "tokens_per_word": 2.1,
         "sniff_natural": None, "peak_vram_gb": 12.0, "sec_per_step": 30.0, "qlora_fits": True,
     }
@@ -89,13 +91,11 @@ def test_selection_row_leaves_missing_sections_none():
     assert row["flores"] == "pending"
 
 
-def test_selection_row_base_model_uses_only_the_completion_protocol():
+def test_selection_row_base_model_has_no_chat_column():
     result = {"model": {"slug": "m", "hub_id": "org/m"}, "belebele": {"acc": 0.24}}
     row = selection_row(result, "x", base_model=True)
-    assert row["belebele_acc"] is None and row["belebele_protocol"] == "completion 0-shot (pending)"
-    result["belebele_completion"] = {"acc": 0.7}
-    row = selection_row(result, "x", base_model=True)
-    assert row["belebele_acc"] == 0.7 and row["belebele_protocol"] == "completion 0-shot"
+    assert row["belebele_acc"] is None and row["belebele_chat_acc"] is None
+    assert row["belebele_protocol"] == "completion 0-shot (pending)"
 
 
 def test_belebele_completion_prompt_is_plain_text_ending_in_answer():
@@ -105,11 +105,12 @@ def test_belebele_completion_prompt_is_plain_text_ending_in_answer():
     assert p.endswith("Answer:")
 
 
-def test_missing_sections_instruct_vs_base():
-    full = {"belebele": {}, "flores": {}, "tokens_per_word": {}, "greetings": {}, "qlora_smoke": {}}
-    assert missing_sections(full, base_model=False) == []
-    assert missing_sections(full, base_model=True) == ["belebele_completion"]
-    assert missing_sections({"belebele": {}}, base_model=False) == ["flores", "tokens_per_word", "greetings", "qlora_smoke"]
+def test_missing_sections_completion_for_all_chat_for_instruct_only():
+    full = {"belebele_completion": {}, "flores": {}, "tokens_per_word": {}, "greetings": {}, "qlora_smoke": {}}
+    assert missing_sections(full, base_model=True) == []
+    assert missing_sections(full, base_model=False) == ["belebele"]
+    assert missing_sections({"belebele": {}}, base_model=False) == [
+        "belebele_completion", "flores", "tokens_per_word", "greetings", "qlora_smoke"]
 
 
 def test_missing_sections_skipped_model_is_complete():

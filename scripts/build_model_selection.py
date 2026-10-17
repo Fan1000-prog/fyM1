@@ -22,7 +22,23 @@ LICENSES = {
     "McGill-NLP/AfriqueQwen-8B": "CC-BY-4.0",
     "unsloth/gemma-3-12b-it-unsloth-bnb-4bit": "Gemma Terms of Use",
 }
-BASE_MODELS = {"McGill-NLP/AfriqueQwen-8B"}  # not instruction-tuned: Belebele via the completion protocol
+BASE_MODELS = {"McGill-NLP/AfriqueQwen-8B"}  # not instruction-tuned: no chat-template Belebele column
+# Base -> chat with little data is a risk, so record whether an instruct sibling exists (checked 2026-10-17).
+INSTRUCT_VERSION = {
+    "McGill-NLP/AfriqueQwen-8B": {
+        "exists": False,
+        "nearest": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
+        "nearest_license": "cc-by-4.0",
+        "nearest_note": "different size and architecture (Qwen3.5, 9B); its base lists mg; not measured",
+    },
+}
+
+
+def candidate(result: dict) -> dict:
+    hub_id = result["model"]["hub_id"]
+    row = selection_row(result, LICENSES[hub_id], base_model=hub_id in BASE_MODELS)
+    row["instruct_version"] = INSTRUCT_VERSION.get(hub_id, {"exists": True, "note": "is the instruct model"})
+    return row
 
 
 def main(fetch: bool) -> None:
@@ -38,10 +54,7 @@ def main(fetch: bool) -> None:
         "chosen_size": previous.get("chosen_size"),
         "license": previous.get("license"),
         "hf_license": previous.get("hf_license"),
-        "candidates": [
-            selection_row(r, LICENSES[r["model"]["hub_id"]], base_model=r["model"]["hub_id"] in BASE_MODELS)
-            for r in results
-        ],
+        "candidates": [candidate(r) for r in results],
     }
     OUT.write_text(json.dumps(selection, indent=2, ensure_ascii=False) + "\n")
     print(f"wrote {OUT} with {len(results)} candidates")

@@ -9,6 +9,7 @@
       "license": "CC-BY-4.0",
       "belebele_acc": null,
       "belebele_protocol": "completion 0-shot (pending)",
+      "belebele_chat_acc": null,
       "chrf_plt_eng": null,
       "chrf_eng_plt": null,
       "flores": "pending",
@@ -16,13 +17,20 @@
       "sniff_natural": null,
       "peak_vram_gb": 7.79,
       "sec_per_step": 74.3,
-      "qlora_fits": true
+      "qlora_fits": true,
+      "instruct_version": {
+        "exists": false,
+        "nearest": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
+        "nearest_license": "cc-by-4.0",
+        "nearest_note": "different size and architecture (Qwen3.5, 9B); its base lists mg; not measured"
+      }
     },
     {
       "model": "google/gemma-4-12B-it",
       "license": "Apache-2.0",
-      "belebele_acc": 0.75,
-      "belebele_protocol": "chat 0-shot",
+      "belebele_acc": null,
+      "belebele_protocol": "completion 0-shot (pending)",
+      "belebele_chat_acc": 0.75,
       "chrf_plt_eng": null,
       "chrf_eng_plt": null,
       "flores": "pending",
@@ -30,7 +38,11 @@
       "sniff_natural": null,
       "peak_vram_gb": 9.18,
       "sec_per_step": 126.3,
-      "qlora_fits": true
+      "qlora_fits": true,
+      "instruct_version": {
+        "exists": true,
+        "note": "is the instruct model"
+      }
     }
   ]
 }
