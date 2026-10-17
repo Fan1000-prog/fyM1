@@ -38,6 +38,9 @@ def glotlid_loaded():
         "Tongava soa",
         "Mafy be",
         "Aleo aloha",
+        "Akory?",
+        "Akory, ok?",
+        "Bonjour aby!",
     ],
 )
 def test_everyday_malagasy_is_malagasy(text):
