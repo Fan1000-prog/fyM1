@@ -2,7 +2,7 @@
 
 Usage: python scripts/build_model_selection.py [--fetch]
 --fetch first downloads results/baseline/*.json from the private Fan1000-Prog/fyM1-ckpt repo.
-`chosen`/`chosen_size` stay as already recorded in the output file (the lead fills them in).
+`chosen`/`chosen_size`/`license`/`hf_license` stay as already recorded in the output file (the lead fills them in).
 """
 
 import argparse
@@ -36,6 +36,7 @@ def main(fetch: bool) -> None:
         "chosen": previous.get("chosen"),
         "chosen_size": previous.get("chosen_size"),
         "license": previous.get("license"),
+        "hf_license": previous.get("hf_license"),
         "candidates": [selection_row(r, LICENSES[r["model"]["hub_id"]]) for r in results],
     }
     OUT.write_text(json.dumps(selection, indent=2, ensure_ascii=False) + "\n")

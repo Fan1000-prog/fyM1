@@ -10,6 +10,10 @@ import re
 from collections.abc import Callable
 
 Render = Callable[..., str]
+
+# One set of chat-template options for training, eval generation and the trim gates (03_trim uses the
+# same value). Templates without a thinking switch ignore it.
+CHAT_TEMPLATE_KWARGS = {"enable_thinking": False}
 _Q, _A, _Q2 = "Q7xq", "A7xq", "Q8xq"
 
 
