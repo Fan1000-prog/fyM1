@@ -1,17 +1,20 @@
 """Build the blind judge batch, then results/eval/judge.json and results/eval/scores.json.
 
-Privacy: answers_*.jsonl, judge_input.jsonl, judge_key.json and judge_raw.json show which
-model wrote each answer. They are git-ignored, live in the private fyM1-ckpt repo under
-results/, and stay private until the arena closes (v0.2). Download them into results/eval/
-to run the steps below. Only judge.json and scores.json (aggregates) are committed.
+Privacy: answers_*.jsonl, judge_batch/judge_input.jsonl, judge_key.json and judge_raw.json
+show which model wrote each answer. They are git-ignored, live in the private fyM1-ckpt repo
+under results/, and stay private until the arena closes (v0.2). Download them into
+results/eval/ to run the steps below. Only judge.json and scores.json (aggregates) are
+committed.
 
 Step 1, before judging:
   uv run python scripts/score.py blind \
       --answers results/eval/answers_base.jsonl results/eval/answers_fym1.jsonl \
-      --out results/eval/judge_input.jsonl --key results/eval/judge_key.json
+      --out results/eval/judge_batch/judge_input.jsonl --key results/eval/judge_key.json
 
-Judge agents score judge_input.jsonl with src/fym1/eval/judge_rubric.md and write a JSON list
-of {"id", "naturalness", "correctness", "note"} to results/eval/judge_raw.json.
+Judge agents read ONLY results/eval/judge_batch/ (plus src/fym1/eval/judge_rubric.md): never
+the answer files or the key, which would unblind them. `blind` refuses to put the key in
+the batch dir. Judges write a JSON list of {"id", "naturalness", "correctness", "note"} to
+results/eval/judge_raw.json; every blind id must be judged.
 
 Step 2, unblind the judge scores:
   uv run python scripts/score.py judge \
@@ -67,7 +70,7 @@ from fym1.eval.scoring import (
     model_name,
     read_jsonl,
 )
-from fym1.eval.metrics import leak_matches
+from fym1.eval.metrics import leak_matches, leak_rate
 
 BLIND_SEED = 42
 
@@ -95,6 +98,8 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
 
 
 def cmd_blind(args: argparse.Namespace) -> None:
+    if args.key.resolve().parent == args.out.resolve().parent:
+        raise SystemExit("--key must not be in the judge batch dir; judges read that whole dir")
     items, key = blind_batch(load_answers(args.answers), seed=BLIND_SEED)
     write_jsonl(args.out, items)
     write_json(args.key, key)
@@ -118,9 +123,12 @@ def cmd_leaks(args: argparse.Namespace) -> None:
         # It may already hold the owner's verdicts; never overwrite them silently.
         raise SystemExit(f"{args.matches} exists; move it away first to start a new leak review")
     train = [text for path in args.train for text in chat_texts(read_jsonl(path.expanduser()))]
-    matches = [match | {"verdict": None} for match in leak_matches(read_jsonl(args.answers), train)]
+    answers = read_jsonl(args.answers)
+    matches = [match | {"verdict": None} for match in leak_matches(answers, train)]
     write_jsonl(args.matches, matches)
     write_json(args.review, leak_review(matches))
+    rate = leak_rate([row["response"] for row in answers], train)
+    print(f"leak_rate {rate:.4f} (compare with scores.json)")
     print(f"{len(matches)} distinct leaked 8-gram(s); see {args.matches} (private)")
 
 

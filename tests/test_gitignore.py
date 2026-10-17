@@ -39,7 +39,7 @@ def test_code_and_fixtures_are_tracked(path):
     [
         "results/eval/answers_base.jsonl",
         "results/eval/answers_fym1.jsonl",
-        "results/eval/judge_input.jsonl",
+        "results/eval/judge_batch/judge_input.jsonl",
         "results/eval/judge_key.json",
         "results/eval/judge_raw.json",
         "results/eval/leak_matches.jsonl",  # 8-grams copied from real chats

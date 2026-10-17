@@ -42,14 +42,18 @@ def gate(review: Path) -> subprocess.CompletedProcess:
 
 def test_no_leak_passes_the_gate(tmp_path):
     answers, chats, matches, review = setup_leak(tmp_path, "z y x w v u t s")
-    assert leaks(answers, chats, matches, review).returncode == 0
+    result = leaks(answers, chats, matches, review)
+    assert result.returncode == 0
+    assert "leak_rate 0.0000" in result.stdout
     assert json.loads(review.read_text()) == {"matches": 0, "approved_generic": 0, "rejected": 0}
     assert gate(review).returncode == 0
 
 
 def test_leak_blocks_until_owner_approves_every_match(tmp_path):
     answers, chats, matches, review = setup_leak(tmp_path, LEAKED)
-    assert leaks(answers, chats, matches, review).returncode == 0
+    result = leaks(answers, chats, matches, review)
+    assert result.returncode == 0
+    assert "leak_rate 1.0000" in result.stdout
     rows = [json.loads(line) for line in matches.read_text().splitlines()]
     assert rows == [{"ngram": LEAKED, "ids": ["p1"], "verdict": None}]
     assert json.loads(review.read_text()) == {"matches": 1, "approved_generic": 0, "rejected": 0}
@@ -88,3 +92,24 @@ def test_leaks_never_overwrites_owner_verdicts(tmp_path):
     write_jsonl(matches, reviewed)
     assert leaks(answers, chats, matches, review).returncode != 0
     assert [json.loads(line) for line in matches.read_text().splitlines()] == reviewed
+
+
+def blind(tmp_path: Path, out: Path, key: Path) -> subprocess.CompletedProcess:
+    rows = [{"id": "p1", "prompt": "x", "response": "Salama"}]
+    base = write_jsonl(tmp_path / "answers_base.jsonl", rows)
+    fym1 = write_jsonl(tmp_path / "answers_fym1.jsonl", rows)
+    return run("blind", "--answers", str(base), str(fym1), "--out", str(out), "--key", str(key))
+
+
+def test_blind_writes_the_judge_batch_apart_from_the_key(tmp_path):
+    out = tmp_path / "judge_batch" / "judge_input.jsonl"
+    result = blind(tmp_path, out, tmp_path / "judge_key.json")
+    assert result.returncode == 0
+    assert sorted(p.name for p in out.parent.iterdir()) == ["judge_input.jsonl"]
+
+
+def test_blind_refuses_a_key_inside_the_judge_batch_dir(tmp_path):
+    out = tmp_path / "judge_batch" / "judge_input.jsonl"
+    result = blind(tmp_path, out, out.parent / "judge_key.json")
+    assert result.returncode != 0
+    assert not out.exists()
