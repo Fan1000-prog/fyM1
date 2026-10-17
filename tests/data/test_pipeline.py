@@ -4,11 +4,12 @@ from fym1.data.pipeline import build_records
 MIN = 60_000
 
 
-def chat(lines):
+def chat(lines, nicknames=None):
     return Thread(
         title="Nirina Rakoto",
         participants=["Nirina Rakoto", "Tojo Randria"],
         messages=[Message(sender=s, text=t, ts_ms=i * MIN) for i, (s, t) in enumerate(lines)],
+        nicknames=nicknames or {},
     )
 
 
@@ -23,7 +24,7 @@ def all_text(records):
 def test_build_records_anonymises_and_ids():
     thread = chat([("Nirina Rakoto", "Salama ry Tojo"), ("Tojo Randria", "Eny ry nirin, 034 12 345 67")])
 
-    records = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+    records, _ = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
 
     assert len(records) == 1
     text = all_text(records)
@@ -35,8 +36,8 @@ def test_build_records_anonymises_and_ids():
 def test_build_records_ids_are_stable():
     thread = chat([("Nirina Rakoto", "Salama"), ("Tojo Randria", "Eny")])
 
-    first = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
-    again = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+    first, _ = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+    again, _ = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
 
     assert [r["id"] for r in first] == [r["id"] for r in again]
 
@@ -45,13 +46,33 @@ def test_build_records_keeps_half_malagasy_drops_less():
     half = chat([("Nirina Rakoto", "fr: Bonjour"), ("Tojo Randria", "Salama")])
     mostly_french = chat([("Nirina Rakoto", "fr: Bonjour"), ("Tojo Randria", "fr: Ça va")])
 
-    assert len(build_records([half], owner="Tojo Randria", is_malagasy=says_malagasy)) == 1
-    assert build_records([mostly_french], owner="Tojo Randria", is_malagasy=says_malagasy) == []
+    assert len(build_records([half], owner="Tojo Randria", is_malagasy=says_malagasy).records) == 1
+    assert build_records([mostly_french], owner="Tojo Randria", is_malagasy=says_malagasy).records == []
 
 
 def test_build_records_drops_duplicates():
     thread = chat([("Nirina Rakoto", "Salama"), ("Tojo Randria", "Eny")])
 
-    records = build_records([thread, thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+    records, _ = build_records([thread, thread], owner="Tojo Randria", is_malagasy=says_malagasy)
 
     assert len(records) == 1
+
+
+def test_build_records_replaces_nicknames():
+    thread = chat([("Nirina Rakoto", "Salama Bebe"), ("Tojo Randria", "Eny")], nicknames={"Bebe": "Tojo Randria"})
+
+    records, _ = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+
+    assert "Bebe" not in all_text(records)
+
+
+def test_build_records_counts_common_words_replaced():
+    vola = Thread(
+        title="Vola Rabe",
+        participants=["Vola Rabe", "Tojo Randria"],
+        messages=[Message("Vola Rabe", "Misy vola ve?", 0), Message("Tojo Randria", "Tsy misy", MIN)],
+    )
+
+    result = build_records([vola], owner="Tojo Randria", is_malagasy=says_malagasy)
+
+    assert result.common_word_replacements == 1
