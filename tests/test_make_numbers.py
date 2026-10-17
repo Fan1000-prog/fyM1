@@ -21,6 +21,7 @@ _spec.loader.exec_module(numbers)
 def results_dir(tmp_path: Path) -> Path:
     (tmp_path / "eval").mkdir()
     (tmp_path / "data_stats.json").write_text(json.dumps({"threads": 12, "conversations": 3456}))
+    (tmp_path / "eval" / "leak_review.json").write_text(json.dumps({"matches": 2, "approved_generic": 2, "rejected": 0}))
     # Same shape scripts/score.py writes (PR #6): metrics not measured yet are left out.
     (tmp_path / "eval" / "scores.json").write_text(
         json.dumps({"n_prompts": 150, "base": {"drift_rate": 0.4}, "fym1": {"drift_rate": 0.0533, "leak_rate": 0.0}})
@@ -66,6 +67,7 @@ def test_present_values_are_formatted(results_dir):
     assert macro(tex, "drift-fym1") == r"5.3\%"
     assert macro(tex, "natural-fym1") == "4.12"
     assert macro(tex, "model-repo") == "Fan1000-Prog/fyM1-8B"
+    assert (macro(tex, "leak-matches"), macro(tex, "leak-generic"), macro(tex, "leak-rejected")) == ("2", "2", "0")
 
 
 def test_text_values_are_latex_escaped(results_dir):
@@ -85,7 +87,7 @@ def test_only_known_result_files_are_read(results_dir):
     (results_dir / "eval" / "judge_key.json").write_text("{not json")
     (results_dir / "eval" / "judge_raw.json").write_text("{not json")
     loaded = numbers.load_results(results_dir)
-    assert set(loaded) == {"data_stats.json", "eval/scores.json", "eval/judge.json", "model_selection.json"}
+    assert set(loaded) == {"data_stats.json", "eval/scores.json", "eval/judge.json", "eval/leak_review.json", "model_selection.json"}
 
 
 def test_every_number_gets_a_macro_even_with_no_results(tmp_path):

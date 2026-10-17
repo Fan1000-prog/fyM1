@@ -17,10 +17,11 @@ Expected files (keys are dotted paths below):
                          candidates[{model, license, belebele_acc, chrf_plt_eng, chrf_eng_plt,
                          tokens_per_word, sniff_natural}]
   train_log.json         gpu, steps, epochs, wall_time_s, final_train_loss, best_eval_loss,
-                         config.{lora_r, lora_alpha, lr, max_seq_len, effective_batch}
+                         config.{lora_r, lora_alpha, lr, lr_scheduler, max_seq_len, effective_batch}
   eval/scores.json       n_prompts, {base,fym1}.{drift_rate, leak_rate, perplexity,
                          belebele_acc, chrf_plt_eng, chrf_eng_plt}
   eval/judge.json        judge, {base,fym1}.{naturalness, correctness}
+  eval/leak_review.json  matches, approved_generic, rejected (owner's review of matched 8-word runs)
   eval/arena.json        votes, raters, fym1_win_rate, ci_low, ci_high (early votes at v0.1)
   shrink.json            gates_passed, vocab_before, vocab_after, params_before, params_after,
                          gguf_bytes_before, gguf_bytes_after, tokens_per_sec_before, tokens_per_sec_after
@@ -147,6 +148,7 @@ NUMBERS: list[Number] = [
     Number("lora-r", "train_log.json", "config.lora_r", count),
     Number("lora-alpha", "train_log.json", "config.lora_alpha", count),
     Number("learning-rate", "train_log.json", "config.lr", lambda v: f"{_number(v):g}"),
+    Number("lr-scheduler", "train_log.json", "config.lr_scheduler", text),
     Number("max-seq-len", "train_log.json", "config.max_seq_len", count),
     Number("effective-batch", "train_log.json", "config.effective_batch", count),
     # automatic eval
@@ -154,6 +156,9 @@ NUMBERS: list[Number] = [
     Number("drift-base", "eval/scores.json", "base.drift_rate", percent),
     Number("drift-fym1", "eval/scores.json", "fym1.drift_rate", percent),
     Number("leak-fym1", "eval/scores.json", "fym1.leak_rate", percent),
+    Number("leak-matches", "eval/leak_review.json", "matches", count),
+    Number("leak-generic", "eval/leak_review.json", "approved_generic", count),
+    Number("leak-rejected", "eval/leak_review.json", "rejected", count),
     Number("ppl-base", "eval/scores.json", "base.perplexity", fixed(2)),
     Number("ppl-fym1", "eval/scores.json", "fym1.perplexity", fixed(2)),
     Number("belebele-base", "eval/scores.json", "base.belebele_acc", percent),
