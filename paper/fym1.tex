@@ -176,6 +176,10 @@ private, so training can be rerun only on other data.
   \item The style comes mostly from one person's chats and their contacts. It reflects
         Antananarivo-style everyday speech, not other regions or dialects.
   \item The human comparison is still running. Until it is in, the main evidence is automatic.
+  \item The drift metric can be a little low. A reply counts as Malagasy if GlotLID says so, or if at
+        least 10\% of its words are common Malagasy words. English that contains a Malagasy name or a
+        quoted Malagasy word (e.g.\ ``Hi Vola, how are you?'') can therefore pass. Fully French or
+        English replies with no Malagasy words are caught.
   \item An LLM judge may not understand Malagasy slang well; its scores can be wrong in either direction.
   \item The model is small and runs on a free CPU. It can be slow, get facts wrong, and invent things.
   \item We train only once or twice on free hardware, so settings are not carefully tuned.
