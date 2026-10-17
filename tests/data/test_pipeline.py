@@ -26,7 +26,7 @@ def all_text(records):
 def test_build_records_anonymises_and_ids():
     thread = chat([("Nirina Rakoto", "Salama ry Tojo"), ("Tojo Randria", "Eny ry nirin, 034 12 345 67")])
 
-    records, _ = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+    records = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy).records
 
     assert len(records) == 1
     text = all_text(records)
@@ -38,8 +38,8 @@ def test_build_records_anonymises_and_ids():
 def test_build_records_ids_are_stable():
     thread = chat([("Nirina Rakoto", "Salama"), ("Tojo Randria", "Eny")])
 
-    first, _ = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
-    again, _ = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+    first = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy).records
+    again = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy).records
 
     assert [r["id"] for r in first] == [r["id"] for r in again]
 
@@ -55,7 +55,7 @@ def test_build_records_keeps_half_malagasy_drops_less():
 def test_build_records_drops_duplicates():
     thread = chat([("Nirina Rakoto", "Salama"), ("Tojo Randria", "Eny")])
 
-    records, _ = build_records([thread, thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+    records = build_records([thread, thread], owner="Tojo Randria", is_malagasy=says_malagasy).records
 
     assert len(records) == 1
 
@@ -63,7 +63,7 @@ def test_build_records_drops_duplicates():
 def test_build_records_replaces_nicknames():
     thread = chat([("Nirina Rakoto", "Salama Bebe"), ("Tojo Randria", "Eny")], nicknames={"Bebe": "Tojo Randria"})
 
-    records, _ = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+    records = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy).records
 
     assert "Bebe" not in all_text(records)
 
@@ -109,6 +109,22 @@ def test_deleted_account_display_names_are_not_treated_as_names(deleted):
         messages=[Message(deleted, "Iza ilay user?", 0), Message("Tojo Randria", "Facebook ve", MIN)],
     )
 
-    records, _ = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+    records = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy).records
 
     assert all_text(records) == "Iza ilay user? Facebook ve"
+
+
+def test_build_records_applies_blocklist_everywhere():
+    thread = chat([("Nirina Rakoto", "Hoy i Koto sy Kotoaaa"), ("Tojo Randria", "Eny, Koto ve?")])
+
+    records = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy, blocklist=["Koto"]).records
+
+    assert "koto" not in all_text(records).lower()
+
+
+def test_build_records_reports_leftover_names():
+    thread = chat([("Nirina Rakoto", "Hoy i Bema"), ("Tojo Randria", "Eny, Bema ve?")])
+
+    result = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+
+    assert result.leftover_names["Bema"] == 2

@@ -1,6 +1,8 @@
 """Messenger export -> anonymised Malagasy conversations (JSONL) + an HTML review sheet.
 
-Runs on the owner's laptop only. Prints counts, never text.
+Runs on the owner's laptop only. Prints counts, never text. Also writes leftover_names.html
+next to the review sheet: capitalised words that survived anonymising, with counts. Tick the
+real names, save blocklist.txt, and run again with --blocklist to replace them everywhere.
 
     uv run python scripts/build_chats.py --export ~/malagasy-data/raw --owner "<name>" \
         --out ~/malagasy-data/private/chats.jsonl --sheet ~/malagasy-data/private/review.html
@@ -12,6 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from fym1.data.leftovers import read_blocklist, render_leftover_sheet
 from fym1.data.messenger import load_threads
 from fym1.data.pipeline import build_records, merge_data_stats
 from fym1.data.review_sheet import render_review_sheet, sample_for_review
@@ -25,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--owner", required=True, help="owner's name exactly as Messenger shows it")
     parser.add_argument("--out", type=Path, required=True, help="JSONL of anonymised conversations")
     parser.add_argument("--sheet", type=Path, required=True, help="HTML review sheet")
+    parser.add_argument("--blocklist", type=Path, help="blocklist.txt saved from leftover_names.html")
     parser.add_argument("--sample", type=int, default=100, help="conversations on the review sheet")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--stats", type=Path, default=REPO / "results/data_stats.json", help="counts only")
@@ -51,6 +55,8 @@ def private_path(path: Path) -> Path:
 def main() -> None:
     args = parse_args()
     out, sheet = private_path(args.out), private_path(args.sheet)
+    leftover_sheet = private_path(sheet.with_name("leftover_names.html"))
+    blocklist = read_blocklist(args.blocklist.expanduser()) if args.blocklist else []
     export = args.export.expanduser()
     threads = load_threads(export)
     if not threads:
@@ -65,13 +71,16 @@ def main() -> None:
             raise
         sys.exit("fym1.eval.lang is missing: merge Task 3 (eval metrics) before running this.")
 
-    records, common_word_replacements = build_records(threads, owner=args.owner, is_malagasy=is_malagasy)
+    records, common_word_replacements, leftovers = build_records(
+        threads, owner=args.owner, is_malagasy=is_malagasy, blocklist=blocklist
+    )
 
     out.parent.mkdir(parents=True, exist_ok=True)
     sheet.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records), encoding="utf-8")
     sample = sample_for_review(records, n=args.sample, seed=args.seed)
     sheet.write_text(render_review_sheet(sample), encoding="utf-8")
+    leftover_sheet.write_text(render_leftover_sheet(leftovers), encoding="utf-8")
 
     existing = json.loads(args.stats.read_text()) if args.stats.exists() else {}
     stats = merge_data_stats(existing, threads=len(threads), conversations=len(records))
@@ -84,6 +93,8 @@ def main() -> None:
         "review_sample": len(sample),
         "common_word_replacements": common_word_replacements,
         "unharvested_nickname_events": sum(t.unharvested_nickname_events for t in threads),
+        "blocklist": len(blocklist),
+        "leftover_names": len(leftovers),
     }))  # fmt: skip
 
 
