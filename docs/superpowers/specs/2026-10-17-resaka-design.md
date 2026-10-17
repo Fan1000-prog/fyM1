@@ -51,7 +51,7 @@ Two audiences:
 - Two personas as above; prompts are short everyday chat ("Sali ahn", "De ahoana?").
 - Native-speaker owner checks samples and supplies real conversations from their Messenger export (export in progress — both the standard "Download your information" JSON export and the end-to-end-encrypted "secure storage" download).
 - Both sides of the conversations may be used (consent given).
-- GitHub account: `Fan1000-prog` (already authenticated on this machine via `gh`). Hugging Face account: `Fan1000-prog` (not yet authenticated on this machine).
+- GitHub account: `Fan1000-prog` (already authenticated on this machine via `gh`). Hugging Face account: `Fan1000-Prog` (capital P) (not yet authenticated on this machine).
 - Free Colab T4 for training. QLoRA, 4-bit.
 - Publish on HF for people to interact with; public GitHub repo with README covering goals, what this is, how/why the model was chosen and trained, CTA "try it" linking to the model and the paper.
 - Work split across a team of agents.
@@ -111,8 +111,8 @@ Exact hyperparameters, chunking of conversations, anonymiser technique, LLM-judg
 ## 7. Answers from the owner (after builder check)
 
 ### 7.1 What "everyday Malagasy" looks like (owner, with a real chat sample)
-Real sample: "Lancement inona?" / "Dia mahay aika rakia nareo ka!" / "Mbola miasa zany ialahy io" / "Mety e. Lancer o tsara bé😂".
-- **French mixing is normal and wanted**, including French verbs used Malagasy-style ("Lancer o").
+The owner shared a real chat screenshot (not reproduced here — private). Made-up lines in the same style: "De aona ry zalahy?" / "Mety be zany, lancer-na fotsiny😂" / "Mbola miasa ve ialahy?" / "Ok fa aza adino ny rdv rahampitso".
+- **French mixing is normal and wanted**, including French verbs used Malagasy-style ("lancer-na").
 - **Texting spelling is wanted**: shortened/phonetic forms ("zany" for "izany", "bé", "ahn"), slang ("ialahy"), emoji.
 - Short replies, friendly, a bit of teasing/humour.
 - Therefore: the language metric is "**not drifting into full French/English sentences**" — mixed Malagasy-French is a pass. The judge rubric and A/B rating guide reward this style. The formal slice is for facts, not for spelling style.
@@ -129,7 +129,7 @@ Owner will recruit a few other native speakers. They need **one easy link**: a s
 - After today (v0.2): the panel's blind A/B results (raters vote over the following days), layer-pruning experiment, longer training. The paper and README say clearly which results are in and which are pending.
 
 ### 7.5 Name and identity
-- Name: **fyM1** — "fy" (Malagasy: sweet, pleasant) + M(alagasy) + 1. HF model repo `Fan1000-prog/fyM1-<size>`, GitHub `Fan1000-prog/fyM1`. (Supersedes the "Resaka" placeholder.)
+- Name: **fyM1** — "fy" (Malagasy: sweet, pleasant) + M(alagasy) + 1. HF model repo `Fan1000-Prog/fyM1-<size>`, GitHub `Fan1000-prog/fyM1`. (Supersedes the "Resaka" placeholder.)
 - System prompt (in Malagasy, with an English gloss in the model card): a helpful Malagasy assistant trained by **Fan's lab**. Training data includes a small set of "who are you?" answers consistent with this.
 
 ### 7.6 Calls made by the designer after the builder check

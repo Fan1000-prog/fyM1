@@ -5,7 +5,7 @@ Read `docs/superpowers/specs/2026-10-17-resaka-design.md` (§7 overrides earlier
 
 ## Hard rules
 - Raw Messenger exports live in `~/malagasy-data/raw/` and never enter this repo, Colab, or any HF repo.
-  Only anonymised, owner-approved data goes to the private HF dataset `Fan1000-prog/fyM1-chats`.
+  Only anonymised, owner-approved data goes to the private HF dataset `Fan1000-Prog/fyM1-chats`.
 - Test fixtures are synthetic. Never paste real chat text into tests, commits, PRs, or results.
 - No closed-API (Claude/GPT/Gemini API) outputs in training data. Budget $0.
 - No AI attribution anywhere: no `Co-Authored-By`, no "Generated with", no 🤖.

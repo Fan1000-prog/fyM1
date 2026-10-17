@@ -1,5 +1,5 @@
 # Private data never enters git (raw Messenger exports, cleaned chats, votes)
-data/
+/data/
 *.zip
 .env
 *.token
