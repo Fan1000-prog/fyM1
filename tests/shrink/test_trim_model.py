@@ -163,3 +163,20 @@ def test_checkpoint_sentencepiece_model_trimmed(checkpoint):
     new = spm.SentencePieceProcessor(model_file=str(dst / "tokenizer.model"))
     for line in KEEP_CORPUS:
         assert [keep[i] for i in new.encode(line)] == old.encode(line)
+
+
+@pytest.mark.parametrize("bad", ["../evil.safetensors", "/tmp/evil.safetensors", "sub/evil.safetensors", ".."])
+def test_checkpoint_rejects_unsafe_shard_names(make_tokenizer, tmp_path, bad):
+    """Shard names come from a downloaded index file and must not escape src or dst."""
+    tokenizer = make_tokenizer("byte_level")
+    src = tmp_path / "src"
+    _tiny_model("llama_untied", tokenizer).save_pretrained(src, max_shard_size="20KB")
+    tokenizer.save_pretrained(src)
+    index_path = src / "model.safetensors.index.json"
+    index = json.loads(index_path.read_text())
+    index["weight_map"]["model.embed_tokens.weight"] = bad
+    index_path.write_text(json.dumps(index))
+    keep = tokens_to_keep(tokenizer, KEEP_CORPUS, always_keep=set())
+    with pytest.raises(ValueError, match="unsafe shard name"):
+        trim_checkpoint(src, tmp_path / "dst", keep)
+    assert not (tmp_path / "evil.safetensors").exists()

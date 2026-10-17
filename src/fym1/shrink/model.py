@@ -122,6 +122,9 @@ def _trim_shards(src: Path, dst: Path, keep_ids: list[int], rows: int) -> None:
     index_path = src / "model.safetensors.index.json"
     index = json.loads(index_path.read_text()) if index_path.exists() else None
     shards = sorted(set(index["weight_map"].values())) if index else ["model.safetensors"]
+    for shard in shards:  # names come from a downloaded file: never let them leave src / dst
+        if not isinstance(shard, str) or Path(shard).name != shard or shard in ("", ".", ".."):
+            raise ValueError(f"unsafe shard name in {index_path.name}: {shard!r}")
     keep_index = torch.tensor(keep_ids)
     trimmed, removed_bytes = [], 0
 
