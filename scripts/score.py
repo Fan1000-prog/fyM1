@@ -13,13 +13,15 @@ Step 1, before judging:
 
 Judge agents read ONLY results/eval/judge_batch/ (plus src/fym1/eval/judge_rubric.md): never
 the answer files or the key, which would unblind them. `blind` refuses to put the key
-anywhere inside the batch dir. Judges write a JSON list of {"id", "naturalness", "correctness", "note"} to
-results/eval/judge_raw.json; every blind id must be judged.
+anywhere inside the batch dir. Judges write a JSON list of
+{"id", "naturalness", "correctness", "note"} to results/eval/judge_raw.json; every blind id
+must be judged.
 
 Step 2, unblind the judge scores:
   uv run python scripts/score.py judge \
       --raw results/eval/judge_raw.json --key results/eval/judge_key.json \
-      --label "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code; rubric in src/fym1/eval/judge_rubric.md" \
+      --label "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code; \
+rubric in src/fym1/eval/judge_rubric.md" \
       --out results/eval/judge.json
 
   --label is the methods disclosure the paper cites for who judged; the value above is the one
@@ -52,6 +54,7 @@ Leak gate (release rule, run on the owner's laptop):
   uv run python scripts/score.py leak-gate \
       --matches results/eval/leak_matches.jsonl --review results/eval/leak_review.json
   recounts the verdicts and fails if leak_review.json disagrees (stale or edited by hand).
+  It trusts leak_matches.jsonl to be the complete output of `leaks`; never delete rows from it.
   It exits 0 only if there are no matches or every match is approved generic;
   otherwise 1 (do not ship).
 """
@@ -99,8 +102,18 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
         f.writelines(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
 
 
+def is_inside(path: Path, directory: Path) -> bool:
+    """True if `path` is in `directory` or below it, comparing folders on disk.
+
+    samefile also catches another spelling of the same folder on a case-insensitive disk.
+    """
+    return any(parent.exists() and parent.samefile(directory) for parent in path.absolute().parents)
+
+
 def cmd_blind(args: argparse.Namespace) -> None:
-    if args.key.resolve().is_relative_to(args.out.resolve().parent):
+    batch_dir = args.out.parent
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    if is_inside(args.key, batch_dir):
         raise SystemExit("--key must not be in the judge batch dir; judges read that whole dir")
     items, key = blind_batch(load_answers(args.answers), seed=BLIND_SEED)
     write_jsonl(args.out, items)
