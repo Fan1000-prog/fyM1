@@ -90,14 +90,15 @@ Recorded in the spec (§8) and plan ("Changes from the plan") as well.
 | Smoke loss | best at step 9, then rising | smooth, 1.13 → 0.70 | pending | pending |
 | 20 greetings | fluent, formal "AI assistant" | unusable (no chat tuning) | pending | pending |
 
-\* The Gemma 4 speed and memory figures were not yet written by a script in the repo (PR #13 review); they are
+\* PR #13's review found the Gemma 4 speed and memory figures were not yet written by a script in the repo; they are
 re-measured when Gemma 4 runs again.
 
 The 9B instruct model (`McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1`, cc-by-4.0) passed the no-GPU checks:
 Unsloth support, text-only load, ~6.5 GB in 4-bit. Run order once a GPU is free: Gemma 3 → 9B instruct → Gemma 4
 (FLORES+, plain-text Belebele) → AfriqueQwen-8B (same).
 
-Source: `results/baseline/*.json` and `results/model_selection.json` on the `baseline` branch (PR #13).
+Source: `results/baseline/*.json` and `results/model_selection.json` on the `baseline` branch (PR #13), for Gemma 4
+and AfriqueQwen-8B. The 9B checks come from the trainer's report.
 
 ## 5. Open now
 

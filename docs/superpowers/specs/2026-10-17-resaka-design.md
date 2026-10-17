@@ -90,7 +90,7 @@ Two audiences:
 ### 5.6 Publishing
 - **HF model repo** (public): merged 4-bit weights + LoRA adapter + GGUF (Q4_K_M) for CPU/llama.cpp/Ollama; model card with data description (no private content), limits, eval table, example chats.
 - **HF Space** (public, free CPU tier): Gradio chat running the GGUF. Slow but free. Pre-filled example prompts ("Sali ahn", "De ahoana?").
-- **GitHub repo** `Fan1000-prog/fyM1` (public): code, notebook, eval scripts, paper source + PDF, README (goals, what this is, how and why the model was chosen and trained — every decision with its reason, CTA "Try it" → Space, links to the model and paper). Private data paths are git-ignored.
+- **GitHub repo** `Fan1000-prog/fy-m-1` (public; name per §7.5, was `fyM1`): code, notebook, eval scripts, paper source + PDF, README (goals, what this is, how and why the model was chosen and trained — every decision with its reason, CTA "Try it" → Space, links to the model and paper). Private data paths are git-ignored.
 - **Paper:** short (4–6 page) LaTeX PDF: motivation, model selection, data (described, not shared), method, trimming/pruning, results, limits, ethics/privacy.
 
 ### 5.7 Team split (agents)
@@ -161,11 +161,11 @@ Decisions made while building. They override earlier sections where they conflic
 - FLORES+ is the gated `openlanguagedata/flores_plus` dataset (terms accepted by the owner).
 
 ### 8.4 Training (§5.3)
-- Colab is driven by agents through Playwright; only one agent drives it at a time. The HF token reaches Colab through a token-safe flow (`docs/colab_operator.md`) and never enters a transcript.
+- Where GPU work runs: Kaggle is the main runtime (§8.1), driven from the terminal with the Kaggle CLI; the owner types the HF token into Kaggle Secrets. Colab stays as a backup, driven through Playwright by one agent at a time, with the token-safe flow in `docs/colab_operator.md`. Below, "the notebook runtime" means whichever of the two runs. The HF token never enters a transcript.
 - The next three points are in PR #13.
-- Training code reaches Colab only by syncing clean `origin/main` to the private checkpoint repo. Baseline runs may use branch code if each result records its code version.
+- Training code reaches the notebook runtime only by syncing clean `origin/main` to the private checkpoint repo. Baseline runs may use branch code if each result records its code version.
 - Chat templates run with thinking turned off, and every assistant turn in training carries the same empty thinking block the model sees when answering.
-- Early stopping uses the repo's own tested rule, which survives a Colab restart.
+- Early stopping uses the repo's own tested rule, which survives a runtime restart.
 
 ### 8.5 Judge disclosure
 - The LLM judge is named in the paper as a method: "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code; rubric in `src/fym1/eval/judge_rubric.md`." This is a methods disclosure, not authorship.
