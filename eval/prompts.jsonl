@@ -22,7 +22,7 @@
 {"id": "greet-22", "prompt": "Ahoana ny fianakaviana ao?", "category": "greeting"}
 {"id": "greet-23", "prompt": "Salama tsara ve ianao?", "category": "greeting"}
 {"id": "greet-24", "prompt": "Nahoana ianao no tsy namaly omaly? 😅", "category": "greeting"}
-{"id": "greet-25", "prompt": "Bonjour! Vao mifoha ah1o", "category": "greeting"}
+{"id": "greet-25", "prompt": "Bonjour! Vao mifoha aho", "category": "greeting"}
 {"id": "greet-26", "prompt": "Mandeha any am-piasana aho izao", "category": "greeting"}
 {"id": "greet-27", "prompt": "Tonga soa! Vao tonga ve ianao?", "category": "greeting"}
 {"id": "greet-28", "prompt": "Ahoana ny toetr'andro any aminareo?", "category": "greeting"}
@@ -34,13 +34,13 @@
 {"id": "greet-34", "prompt": "Veloma aloha fa handeha hatory aho", "category": "greeting"}
 {"id": "greet-35", "prompt": "Bonne nuit e 😴", "category": "greeting"}
 {"id": "greet-36", "prompt": "Tratry ny taona o! 🎉", "category": "greeting"}
-{"id": "greet-37", "prompt": "Arahabaina tarry ny tsingerintaonanao ianao! 🎂", "category": "greeting"}
+{"id": "greet-37", "prompt": "Arahabaina tratry ny tsingerintaonanao ianao! 🎂", "category": "greeting"}
 {"id": "greet-38", "prompt": "Misaotra betsaka tamin'ny fanampiana omaly", "category": "greeting"}
 {"id": "greet-39", "prompt": "Manao ahoana ny zaza?", "category": "greeting"}
 {"id": "greet-40", "prompt": "Efa sitrana ve ianao?", "category": "greeting"}
 {"id": "greet-41", "prompt": "Tsara ny andro androany fa mafana be", "category": "greeting"}
 {"id": "greet-42", "prompt": "Avy any an-tsena aho dia reraka be 😂", "category": "greeting"}
-{"id": "greet-43", "prompt": "Inona no sakafo ho karakarainao androaqy?", "category": "greeting"}
+{"id": "greet-43", "prompt": "Inona no sakafo ho karakarainao androany?", "category": "greeting"}
 {"id": "greet-44", "prompt": "Nitady anao aho omaly fa tsy hita ianao", "category": "greeting"}
 {"id": "greet-45", "prompt": "Ok fa aza adino ny rdv rahampitso", "category": "greeting"}
 {"id": "greet-46", "prompt": "Mbola eo ve ianao?", "category": "greeting"}
@@ -67,7 +67,7 @@
 {"id": "daily-17", "prompt": "Ahoana no hanombohana petit business kely?", "category": "everyday"}
 {"id": "daily-18", "prompt": "Tezitra amiko ilay namako, ahoana no hihavanana aminy?", "category": "everyday"}
 {"id": "daily-19", "prompt": "Inona no atao hialana amin'ny moka?", "category": "everyday"}
-{"id": "daily-20", "prompt": "Tokony hanapa-bolo ve aah? 😅", "category": "everyday"}
+{"id": "daily-20", "prompt": "Tokony hanapa-bolo ve aho? 😅", "category": "everyday"}
 {"id": "daily-21", "prompt": "Sarotra ve ny mianatra mitondra fiara?", "category": "everyday"}
 {"id": "daily-22", "prompt": "Inona no film tsara jerena androany alina?", "category": "everyday"}
 {"id": "daily-23", "prompt": "Ahoana no hitazonana relation à distance?", "category": "everyday"}
