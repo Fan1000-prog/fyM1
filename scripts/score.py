@@ -12,8 +12,8 @@ Step 1, before judging:
       --out results/eval/judge_batch/judge_input.jsonl --key results/eval/judge_key.json
 
 Judge agents read ONLY results/eval/judge_batch/ (plus src/fym1/eval/judge_rubric.md): never
-the answer files or the key, which would unblind them. `blind` refuses to put the key in
-the batch dir. Judges write a JSON list of {"id", "naturalness", "correctness", "note"} to
+the answer files or the key, which would unblind them. `blind` refuses to put the key
+anywhere inside the batch dir. Judges write a JSON list of {"id", "naturalness", "correctness", "note"} to
 results/eval/judge_raw.json; every blind id must be judged.
 
 Step 2, unblind the judge scores:
@@ -49,8 +49,10 @@ Leak gate (release rule, run on the owner's laptop):
 
   leak_review.json is counts only: {"matches", "approved_generic", "rejected"}, where matches
   is the number of distinct 8-grams.
-  uv run python scripts/score.py leak-gate --review results/eval/leak_review.json
-  exits 0 only if there are no matches or every match is approved generic;
+  uv run python scripts/score.py leak-gate \
+      --matches results/eval/leak_matches.jsonl --review results/eval/leak_review.json
+  recounts the verdicts and fails if leak_review.json disagrees (stale or edited by hand).
+  It exits 0 only if there are no matches or every match is approved generic;
   otherwise 1 (do not ship).
 """
 
@@ -98,7 +100,7 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
 
 
 def cmd_blind(args: argparse.Namespace) -> None:
-    if args.key.resolve().parent == args.out.resolve().parent:
+    if args.key.resolve().is_relative_to(args.out.resolve().parent):
         raise SystemExit("--key must not be in the judge batch dir; judges read that whole dir")
     items, key = blind_batch(load_answers(args.answers), seed=BLIND_SEED)
     write_jsonl(args.out, items)
@@ -140,6 +142,13 @@ def cmd_leak_review(args: argparse.Namespace) -> None:
 
 def cmd_leak_gate(args: argparse.Namespace) -> None:
     review = read_json(args.review)
+    recounted = leak_review(read_jsonl(args.matches))
+    if review != recounted:
+        # Never trust counts that the owner's verdicts do not back up.
+        sys.exit(
+            f"leak gate BLOCKED: {args.review} is out of date ({review}); the verdicts in "
+            f"{args.matches} give {recounted}. Rerun leak-review."
+        )
     if not leak_gate_passes(review):
         sys.exit(f"leak gate BLOCKED: {review}; every match must be reviewed and approved generic")
     print(f"leak gate passed: {review}")
@@ -183,6 +192,7 @@ def main() -> None:
     review.set_defaults(run=cmd_leak_review)
 
     gate = sub.add_parser("leak-gate", help="exit non-zero unless the leak gate passes")
+    gate.add_argument("--matches", type=Path, required=True, help="verdicts, recounted")
     gate.add_argument("--review", type=Path, required=True)
     gate.set_defaults(run=cmd_leak_gate)
 
