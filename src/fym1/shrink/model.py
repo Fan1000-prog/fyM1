@@ -15,6 +15,7 @@ from fym1.shrink.vocab import trim_sentencepiece, trim_tokenizer
 # Tensors holding one row per token in Llama / Qwen / Gemma checkpoints (tied models have no lm_head).
 _VOCAB_TENSOR_SUFFIXES = ("embed_tokens.weight", "lm_head.weight", "lm_head.bias")
 # Tokenizer files written by trim_tokenizer; never copied from the untrimmed source.
+_INDEX_NAME = "model.safetensors.index.json"
 _TOKENIZER_FILE_PREFIXES = ("tokenizer", "added_tokens", "special_tokens_map", "vocab.json", "merges.txt")
 
 
@@ -27,6 +28,7 @@ def trim_checkpoint(src: str | Path, dst: str | Path, keep_ids: list[int]) -> No
     from transformers import AutoConfig, AutoTokenizer, GenerationConfig
 
     src, dst = Path(src), Path(dst)
+    index, shards = _read_shard_index(src)  # validate untrusted shard names before writing anything
     dst.mkdir(parents=True, exist_ok=True)
     new_id = {old: new for new, old in enumerate(keep_ids)}
 
@@ -45,7 +47,7 @@ def trim_checkpoint(src: str | Path, dst: str | Path, keep_ids: list[int]) -> No
         _remap_token_ids(generation_config, new_id)
         generation_config.save_pretrained(dst)
 
-    _trim_shards(src, dst, keep_ids, rows)
+    _trim_shards(src, dst, index, shards, keep_ids, rows)
     for path in src.iterdir():
         if path.is_file() and not (dst / path.name).exists() and not path.name.startswith(_TOKENIZER_FILE_PREFIXES):
             shutil.copy2(path, dst / path.name)
@@ -73,16 +75,22 @@ def _remap_token_ids(config, new_id: dict[int, int]) -> None:
         setattr(config, key, remapped if isinstance(value, list) else remapped[0])
 
 
-def _trim_shards(src: Path, dst: Path, keep_ids: list[int], rows: int) -> None:
+def _read_shard_index(src: Path) -> tuple[dict | None, list[str]]:
+    """The index (if sharded) and shard file names; names come from a downloaded file, so they
+    must be plain file names that cannot leave `src` / `dst`."""
+    index_path = src / _INDEX_NAME
+    index = json.loads(index_path.read_text()) if index_path.exists() else None
+    shards = sorted(set(index["weight_map"].values())) if index else ["model.safetensors"]
+    for shard in shards:
+        if not isinstance(shard, str) or Path(shard).name != shard or shard in ("", ".", ".."):
+            raise ValueError(f"unsafe shard name in {_INDEX_NAME}: {shard!r}")
+    return index, shards
+
+
+def _trim_shards(src: Path, dst: Path, index: dict | None, shards: list[str], keep_ids: list[int], rows: int) -> None:
     from safetensors import safe_open
     from safetensors.torch import save_file
 
-    index_path = src / "model.safetensors.index.json"
-    index = json.loads(index_path.read_text()) if index_path.exists() else None
-    shards = sorted(set(index["weight_map"].values())) if index else ["model.safetensors"]
-    for shard in shards:  # names come from a downloaded file: never let them leave src / dst
-        if not isinstance(shard, str) or Path(shard).name != shard or shard in ("", ".", ".."):
-            raise ValueError(f"unsafe shard name in {index_path.name}: {shard!r}")
     keep_index = torch.tensor(keep_ids)
     trimmed, removed_bytes = [], 0
 
@@ -111,7 +119,7 @@ def _trim_shards(src: Path, dst: Path, keep_ids: list[int], rows: int) -> None:
         index.setdefault("metadata", {})
         if "total_size" in index["metadata"]:
             index["metadata"]["total_size"] -= removed_bytes
-        (dst / index_path.name).write_text(json.dumps(index, indent=2))
+        (dst / _INDEX_NAME).write_text(json.dumps(index, indent=2))
 
 
 def _is_vocab_tensor(name: str, shape: list[int], rows: int) -> bool:

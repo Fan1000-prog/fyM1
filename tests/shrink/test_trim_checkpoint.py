@@ -138,3 +138,4 @@ def test_checkpoint_rejects_unsafe_shard_names(make_tokenizer, tmp_path, bad):
     with pytest.raises(ValueError, match="unsafe shard name"):
         trim_checkpoint(src, tmp_path / "dst", keep)
     assert not (tmp_path / "evil.safetensors").exists()
+    assert not (tmp_path / "dst").exists()  # nothing written before the check
