@@ -120,3 +120,41 @@ def assemble_scores(answers: dict[str, list[dict]], metrics: dict[str, dict]) ->
         scores[model] = {"drift_rate": drift_rate([row["response"] for row in rows])}
         scores[model] |= metrics.get(model, {})
     return scores
+
+
+def chat_texts(records: list[dict]) -> list[str]:
+    """Message texts from training-chat rows `{"id", "messages": [{"role", "content"}]}`.
+
+    Each message is its own text, so a leak n-gram never spans two messages.
+    """
+    return [message["content"] for record in records for message in record["messages"]]
+
+
+# Owner verdicts on a leaked n-gram. A missing or null verdict means not reviewed yet.
+GENERIC, REJECTED = "generic", "rejected"
+LEAK_REVIEW_KEYS = ("matches", "approved_generic", "rejected")
+
+
+def leak_review(matches: list[dict]) -> dict:
+    """leak_review.json content: counts only, never the n-grams themselves."""
+    verdicts = [match.get("verdict") for match in matches]
+    unknown = {v for v in verdicts if v not in (None, GENERIC, REJECTED)}
+    if unknown:
+        raise ValueError(
+            f"verdict must be {GENERIC!r}, {REJECTED!r} or null, got {sorted(unknown)}"
+        )
+    return {
+        "matches": len(matches),
+        "approved_generic": verdicts.count(GENERIC),
+        "rejected": verdicts.count(REJECTED),
+    }
+
+
+def leak_gate_passes(review: dict) -> bool:
+    """Release rule: no leaked n-grams, or the owner approved every one as generic."""
+    counts = {key: review.get(key) for key in LEAK_REVIEW_KEYS}
+    if any(type(value) is not int or value < 0 for value in counts.values()):
+        raise ValueError(f"leak review needs non-negative integer {LEAK_REVIEW_KEYS}, got {review}")
+    if counts["approved_generic"] + counts["rejected"] > counts["matches"]:
+        raise ValueError(f"more verdicts than matches in leak review: {review}")
+    return counts["matches"] == counts["approved_generic"]

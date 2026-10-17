@@ -10,6 +10,8 @@
 /results/eval/judge_input.jsonl
 /results/eval/judge_key.json
 /results/eval/judge_raw.json
+# Leak-check matches are 8-grams copied from real chats; only counts (leak_review.json) are public.
+/results/eval/leak_matches.jsonl
 
 # Python
 __pycache__/

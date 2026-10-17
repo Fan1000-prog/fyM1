@@ -5,8 +5,11 @@ import pytest
 from fym1.eval.scoring import (
     assemble_scores,
     blind_batch,
+    chat_texts,
     judge_means,
     judge_summary,
+    leak_gate_passes,
+    leak_review,
     model_name,
     read_jsonl,
 )
@@ -132,3 +135,60 @@ def test_assemble_scores_rejects_unknown_metric_name():
 def test_assemble_scores_rejects_reserved_model_name():
     with pytest.raises(ValueError, match="n_prompts"):
         assemble_scores({"n_prompts": rows("Salama!")}, metrics={})
+
+
+def test_chat_texts_takes_every_message_content():
+    records = [
+        {"id": "c1", "messages": [{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"}]},
+        {"id": "c2", "messages": [{"role": "user", "content": "z"}]},
+    ]
+    assert chat_texts(records) == ["x", "y", "z"]
+
+
+def test_leak_review_starts_with_nothing_reviewed():
+    matches = [{"id": "p1", "ngram": "a b c d e f g h", "verdict": None}]
+    assert leak_review(matches) == {"matches": 1, "approved_generic": 0, "rejected": 0}
+
+
+def test_leak_review_counts_owner_verdicts():
+    matches = [
+        {"id": "p1", "ngram": "n1", "verdict": "generic"},
+        {"id": "p1", "ngram": "n2", "verdict": "rejected"},
+        {"id": "p2", "ngram": "n3", "verdict": "generic"},
+        {"id": "p3", "ngram": "n4"},
+    ]
+    assert leak_review(matches) == {"matches": 4, "approved_generic": 2, "rejected": 1}
+
+
+def test_leak_review_rejects_unknown_verdict():
+    with pytest.raises(ValueError, match="verdict"):
+        leak_review([{"id": "p1", "ngram": "n1", "verdict": "ok"}])
+
+
+@pytest.mark.parametrize(
+    "review, passes",
+    [
+        ({"matches": 0, "approved_generic": 0, "rejected": 0}, True),
+        ({"matches": 2, "approved_generic": 2, "rejected": 0}, True),
+        ({"matches": 2, "approved_generic": 0, "rejected": 0}, False),  # not reviewed yet
+        ({"matches": 2, "approved_generic": 1, "rejected": 0}, False),  # partly reviewed
+        ({"matches": 2, "approved_generic": 1, "rejected": 1}, False),  # a real leak
+    ],
+)
+def test_leak_gate_passes_only_with_no_matches_or_all_generic(review, passes):
+    assert leak_gate_passes(review) is passes
+
+
+@pytest.mark.parametrize(
+    "review",
+    [
+        {"matches": 1, "approved_generic": 2, "rejected": 0},
+        {"matches": 1, "approved_generic": 1, "rejected": 1},
+        {"matches": -1, "approved_generic": 0, "rejected": 0},
+        {"matches": 1.0, "approved_generic": 1, "rejected": 0},
+        {"matches": 1, "approved_generic": 1},
+    ],
+)
+def test_leak_gate_rejects_inconsistent_review(review):
+    with pytest.raises(ValueError):
+        leak_gate_passes(review)

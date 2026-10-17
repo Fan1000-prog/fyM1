@@ -41,6 +41,7 @@ def test_code_and_fixtures_are_tracked(path):
         "results/eval/judge_input.jsonl",
         "results/eval/judge_key.json",
         "results/eval/judge_raw.json",
+        "results/eval/leak_matches.jsonl",  # 8-grams copied from real chats
     ],
 )
 def test_unblinding_eval_files_are_ignored(path):
@@ -49,7 +50,12 @@ def test_unblinding_eval_files_are_ignored(path):
 
 @pytest.mark.parametrize(
     "path",
-    ["results/eval/scores.json", "results/eval/judge.json", "results/eval/arena.json"],
+    [
+        "results/eval/scores.json",
+        "results/eval/judge.json",
+        "results/eval/arena.json",
+        "results/eval/leak_review.json",
+    ],
 )
 def test_aggregate_eval_results_are_tracked(path):
     assert not is_ignored(path)
