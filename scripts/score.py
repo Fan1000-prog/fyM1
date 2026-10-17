@@ -30,20 +30,42 @@ Step 3, automatic scores:
 notebook_metrics.json is {"<model>": {"leak_rate", "perplexity", "belebele_acc", "chrf_plt_eng",
 "chrf_eng_plt"}} from notebooks/02_eval_export.ipynb. --metrics is optional; missing metrics stay
 out of scores.json and the paper shows them as pending.
+
+Leak gate (release rule, run on the owner's laptop):
+  uv run python scripts/score.py leaks \
+      --answers results/eval/answers_fym1.jsonl --train ~/malagasy-data/private/chats.jsonl \
+      --matches results/eval/leak_matches.jsonl --review results/eval/leak_review.json
+
+  leak_matches.jsonl (private, git-ignored) holds one {"id", "ngram", "verdict": null} row per
+  8-gram that a reply shares with the training chats: only the 8 words, never the chat around
+  them. The owner sets each "verdict" to "generic" (an everyday phrase anyone would say) or
+  "rejected" (copied from a real chat), then recounts:
+  uv run python scripts/score.py leak-review \
+      --matches results/eval/leak_matches.jsonl --review results/eval/leak_review.json
+
+  leak_review.json is counts only: {"matches", "approved_generic", "rejected"}.
+  uv run python scripts/score.py leak-gate --review results/eval/leak_review.json
+  exits 0 only if there are no matches or every match is approved generic;
+  otherwise 1 (do not ship).
 """
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from fym1.eval.scoring import (
     assemble_scores,
     blind_batch,
+    chat_texts,
     judge_means,
     judge_summary,
+    leak_gate_passes,
+    leak_review,
     model_name,
     read_jsonl,
 )
+from fym1.eval.metrics import leak_matches
 
 BLIND_SEED = 42
 
@@ -64,11 +86,15 @@ def write_json(path: Path, data) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def write_jsonl(path: Path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        f.writelines(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
+
+
 def cmd_blind(args: argparse.Namespace) -> None:
     items, key = blind_batch(load_answers(args.answers), seed=BLIND_SEED)
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    with args.out.open("w", encoding="utf-8") as f:
-        f.writelines(json.dumps(item, ensure_ascii=False) + "\n" for item in items)
+    write_jsonl(args.out, items)
     write_json(args.key, key)
     print(f"wrote {len(items)} blind items to {args.out}")
 
@@ -83,6 +109,30 @@ def cmd_scores(args: argparse.Namespace) -> None:
     metrics = read_json(args.metrics) if args.metrics else {}
     write_json(args.out, assemble_scores(load_answers(args.answers), metrics=metrics))
     print(f"wrote {args.out}")
+
+
+def cmd_leaks(args: argparse.Namespace) -> None:
+    if args.matches.exists():
+        # It may already hold the owner's verdicts; never overwrite them silently.
+        raise SystemExit(f"{args.matches} exists; move it away first to start a new leak review")
+    train = [text for path in args.train for text in chat_texts(read_jsonl(path.expanduser()))]
+    matches = [match | {"verdict": None} for match in leak_matches(read_jsonl(args.answers), train)]
+    write_jsonl(args.matches, matches)
+    write_json(args.review, leak_review(matches))
+    print(f"{len(matches)} leaked 8-gram(s); see {args.matches} (private)")
+
+
+def cmd_leak_review(args: argparse.Namespace) -> None:
+    review = leak_review(read_jsonl(args.matches))
+    write_json(args.review, review)
+    print(f"wrote {args.review}: {review}")
+
+
+def cmd_leak_gate(args: argparse.Namespace) -> None:
+    review = read_json(args.review)
+    if not leak_gate_passes(review):
+        sys.exit(f"leak gate BLOCKED: {review}; every match must be reviewed and approved generic")
+    print(f"leak gate passed: {review}")
 
 
 def main() -> None:
@@ -109,6 +159,22 @@ def main() -> None:
     scores.add_argument("--metrics", type=Path)
     scores.add_argument("--out", type=Path, required=True)
     scores.set_defaults(run=cmd_scores)
+
+    leaks = sub.add_parser("leaks", help="list leaked 8-grams for owner review")
+    leaks.add_argument("--answers", type=Path, required=True, help="the model to ship")
+    leaks.add_argument("--train", type=Path, nargs="+", required=True, help="training chats")
+    leaks.add_argument("--matches", type=Path, required=True)
+    leaks.add_argument("--review", type=Path, required=True)
+    leaks.set_defaults(run=cmd_leaks)
+
+    review = sub.add_parser("leak-review", help="recount owner verdicts into leak_review.json")
+    review.add_argument("--matches", type=Path, required=True)
+    review.add_argument("--review", type=Path, required=True)
+    review.set_defaults(run=cmd_leak_review)
+
+    gate = sub.add_parser("leak-gate", help="exit non-zero unless the leak gate passes")
+    gate.add_argument("--review", type=Path, required=True)
+    gate.set_defaults(run=cmd_leak_gate)
 
     args = parser.parse_args()
     args.run(args)
