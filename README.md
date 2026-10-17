@@ -70,7 +70,7 @@ Every choice, and why we made it:
 | Save a checkpoint to a private repo often, and resume from the latest one. | Free Colab sessions disconnect. No work is lost. |
 | Stop early if the held-out loss gets worse. | Reduces overfitting. The leak check below is what tests memorising. |
 | Test prompts are written fresh, not taken from the chats. | So the test prompts can be public and anyone can run them. The models' answers to them come out in v0.2. |
-| **Leak check** before release: any answer that shares a run of 8 words with the training chats blocks release. The owner sees only the matched 8 words, never the chat, and it ships only if every match is a generic phrase. | Privacy again. |
+| **Leak check** before release: any fyM1 answer that shares a run of 8 words with the training chats blocks release. The owner sees only the matched 8 words, never the chat, and it ships only if every match is a generic phrase. | Privacy again. |
 | **Vocabulary trimming**: drop tokens Malagasy, French and English never use. Ships only if it passes its checks. | A smaller download. The checks: held-out Malagasy text comes back unchanged, at least 95% of test answers stay identical (greedy decoding), and Belebele stays within 1 point. |
 | No layer pruning yet. | Cutting real layers needs a lot of retraining to heal. Free GPU time cannot pay for that. Planned for v0.2 as an experiment. |
 | Demo runs a 4-bit GGUF file on a free CPU. | Free for everyone. It is slow. |
