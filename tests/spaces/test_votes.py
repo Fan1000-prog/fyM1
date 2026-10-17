@@ -4,11 +4,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from votes import load_pairs, make_vote, pick_pair
+from votes import VoteBook, is_valid_session_id, load_pairs, make_vote, new_session_id, pick_pair, sign
 
-from fym1.eval.arena import tally
+from fym1.eval.arena import build_pairs, tally
 
 SAMPLE_PAIRS = Path(__file__).resolve().parents[2] / "spaces" / "arena" / "pairs.sample.jsonl"
+KEY = b"test-key"
 PAIR = {"pair_id": "p1", "prompt": "q", "a": "x", "b": "y", "a_is": "fym1"}
 
 
@@ -90,9 +91,63 @@ def test_shipped_sample_pairs_load_and_are_marked_synthetic():
     assert all(p["pair_id"].startswith("SYNTHETIC-") for p in pairs)
 
 
+def test_built_pairs_load_in_the_space(tmp_path):
+    # Contract between scripts/build_pairs.py (writer) and the Space (reader).
+    rows = [{"id": "p1", "prompt": "q", "response": "r"}]
+    pairs, _ = build_pairs(rows, rows, random.Random(42))
+    assert load_pairs(write_pairs(tmp_path, *pairs)) == pairs
+
+
 def test_votes_from_the_space_tally_offline():
     # Contract between the Space (writer) and scripts/tally_votes.py (reader).
     vote = make_vote("p1", "A", "s", set(), wrong=["B"])
     result = tally([json.loads(json.dumps(vote))], {"p1": "fym1"})
     assert result["fym1_wins"] == 1
     assert result["wrong_flags"] == {"base": 1, "fym1": 0}
+
+
+def test_minted_session_id_is_valid():
+    assert is_valid_session_id(new_session_id(KEY), KEY)
+
+
+@pytest.mark.parametrize(
+    "session_id",
+    [None, 7, {"x": 1}, "", "abc", "abc.def", "." + "0" * 64, "a" * 200],
+)
+def test_junk_session_ids_are_rejected(session_id):
+    assert not is_valid_session_id(session_id, KEY)
+
+
+def test_session_id_signed_with_another_key_is_rejected():
+    assert not is_valid_session_id(new_session_id(b"other-key"), KEY)
+
+
+def test_overlong_session_id_is_rejected_even_if_signed():
+    nonce = "n" * 100
+    assert not is_valid_session_id(f"{nonce}.{sign(nonce, KEY)}", KEY)
+
+
+def test_vote_book_saves_once_per_pair():
+    book = VoteBook(KEY, max_votes_per_session=10)
+    session_id = new_session_id(KEY)
+    assert book.record("p1", "A", session_id) is not None
+    assert book.record("p1", "B", session_id) is None
+    assert book.votes_cast[session_id] == 1
+
+
+def test_vote_book_rejects_forged_session():
+    assert VoteBook(KEY, max_votes_per_session=10).record("p1", "A", "made-up.id") is None
+
+
+def test_vote_book_caps_votes_per_session():
+    book = VoteBook(KEY, max_votes_per_session=2)
+    session_id = new_session_id(KEY)
+    saved = [book.record(f"p{i}", "A", session_id) for i in range(3)]
+    assert [vote is not None for vote in saved] == [True, True, False]
+
+
+def test_vote_book_ignores_empty_choice():
+    book = VoteBook(KEY, max_votes_per_session=10)
+    session_id = new_session_id(KEY)
+    assert book.record("p1", None, session_id) is None
+    assert book.votes_cast[session_id] == 0

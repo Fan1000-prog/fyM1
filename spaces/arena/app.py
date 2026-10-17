@@ -1,8 +1,9 @@
 """fyM1 arena: raters see one prompt and two unlabelled answers (base vs fyM1) and pick the more natural one.
 
 Votes are appended to a local JSONL file that CommitScheduler pushes to the private dataset VOTES_REPO.
-Env: PAIRS_FILE (default pairs.jsonl), VOTES_REPO (default Fan1000-Prog/fyM1-votes; empty = keep votes
-local, for development), HF_TOKEN (Space secret with write access to VOTES_REPO).
+Env: ARENA_KEY (Space secret, signs session ids), HF_TOKEN (Space secret with write access to VOTES_REPO),
+PAIRS_FILE (default pairs.jsonl), VOTES_REPO (default Fan1000-Prog/fyM1-votes; empty = keep votes local,
+for development).
 """
 
 import json
@@ -15,7 +16,7 @@ from pathlib import Path
 
 import gradio as gr
 from huggingface_hub import CommitScheduler, HfApi
-from votes import load_pairs, make_vote, pick_pair
+from votes import VoteBook, is_valid_session_id, load_pairs, new_session_id, pick_pair
 
 # OWNER REVIEW: Malagasy below is a draft by the builder; the native-speaker owner fixes the wording.
 INSTRUCTIONS = """\
@@ -41,6 +42,9 @@ UI_TEXT = {
 }
 
 APP_DIR = Path(__file__).parent
+ARENA_KEY = os.environ.get("ARENA_KEY", "")
+if not ARENA_KEY:
+    raise RuntimeError("Set the ARENA_KEY secret in the Space settings (any long random string)")
 PAIRS = load_pairs(APP_DIR / os.environ.get("PAIRS_FILE", "pairs.jsonl"))
 VOTES_REPO = os.environ.get("VOTES_REPO", "Fan1000-Prog/fyM1-votes")
 VOTES_DIR = Path(tempfile.gettempdir()) / "fym1-votes"
@@ -68,19 +72,19 @@ def start_vote_upload() -> threading.Lock:
 
 
 write_lock = start_vote_upload()
-seen: set[tuple[str, str]] = set()  # (session_id, pair_id) already voted, since this process started
+# Remembers votes since this process started; a session can vote at most once per pair.
+vote_book = VoteBook(ARENA_KEY.encode(), max_votes_per_session=len(PAIRS))
 rng = random.Random()
 
 
 def save_vote(pair_id: str | None, choice: str, session_id: str, wrong: list[str]) -> bool:
-    """Append the vote unless it is empty or a repeat; True when it was saved."""
+    """Append the vote unless the vote book rejects it; True when it was saved."""
     if pair_id is None:  # nothing on screen: every pair already rated
         return False
     with write_lock:
-        vote = make_vote(pair_id, choice, session_id, seen, wrong=wrong)
+        vote = vote_book.record(pair_id, choice, session_id, wrong=wrong)
         if vote is None:
             return False
-        seen.add((session_id, pair_id))
         with VOTES_FILE.open("a", encoding="utf-8") as votes_file:
             votes_file.write(json.dumps(vote, ensure_ascii=False) + "\n")
     return True
@@ -88,21 +92,21 @@ def save_vote(pair_id: str | None, choice: str, session_id: str, wrong: list[str
 
 def next_pair(session_id: str, status: str):
     """Screen values for the next unrated pair: pair id, prompt, answer A, answer B, cleared flags, status."""
-    pair = pick_pair(PAIRS, session_id, seen, rng)
+    pair = pick_pair(PAIRS, session_id, vote_book.seen, rng)
     if pair is None:
         return None, "", "", "", [], UI_TEXT["done"]
     return pair["pair_id"], pair["prompt"], pair["a"], pair["b"], [], status
 
 
 def start_session(session_id):
-    if not isinstance(session_id, str) or not session_id:  # first visit, or junk sent by a client
-        session_id = uuid.uuid4().hex
+    if not is_valid_session_id(session_id, vote_book.key):  # first visit, or an id this server did not sign
+        session_id = new_session_id(vote_book.key)
     return session_id, *next_pair(session_id, "")
 
 
 def vote_for(choice: str):
     def handle(session_id, pair_id: str | None, wrong: list[str]):
-        if not isinstance(session_id, str) or not session_id:  # sent by the browser; never trust it
+        if not is_valid_session_id(session_id, vote_book.key):  # sent by the browser; never trust it
             raise gr.Error(UI_TEXT["reload"])
         status = UI_TEXT["saved"] if save_vote(pair_id, choice, session_id, wrong) else ""
         return next_pair(session_id, status)
@@ -112,8 +116,8 @@ def vote_for(choice: str):
 
 with gr.Blocks(title="fyM1 arena") as demo:
     # Kept in the browser so a page refresh keeps the same id (and cannot re-vote the same pair).
-    # The fixed secret lets the id survive Space restarts; it is a random id, not sensitive.
-    session_id = gr.BrowserState(None, storage_key="fym1-arena-session", secret="fym1-arena")
+    # The id is signed by the server; ARENA_KEY as the storage secret lets it survive Space restarts.
+    session_id = gr.BrowserState(None, storage_key="fym1-arena-session", secret=ARENA_KEY)
     pair_id = gr.State(None)
 
     gr.Markdown(INSTRUCTIONS)

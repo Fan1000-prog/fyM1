@@ -1,7 +1,11 @@
 """Arena logic with no Gradio and no network: reading pairs, picking one, turning a click into a vote."""
 
+import hashlib
+import hmac
 import json
 import random
+import secrets
+from collections import Counter
 from collections.abc import Collection
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,6 +14,7 @@ CHOICES = frozenset({"A", "B", "same"})
 SIDES = frozenset({"A", "B"})
 MODELS = frozenset({"base", "fym1"})
 PAIR_KEYS = ("pair_id", "prompt", "a", "b", "a_is")
+MAX_SESSION_ID_CHARS = 128
 
 
 def load_pairs(path: Path) -> list[dict]:
@@ -67,3 +72,48 @@ def make_vote(
         "session_id": session_id,
         "ts": (now or datetime.now(timezone.utc)).isoformat(),
     }
+
+
+def sign(nonce: str, key: bytes) -> str:
+    return hmac.new(key, nonce.encode(), hashlib.sha256).hexdigest()
+
+
+def new_session_id(key: bytes) -> str:
+    """A random id signed with the server key, so clients cannot invent their own."""
+    nonce = secrets.token_hex(16)
+    return f"{nonce}.{sign(nonce, key)}"
+
+
+def is_valid_session_id(session_id, key: bytes) -> bool:
+    """True only for an id this server minted (any type may arrive: the browser sends it)."""
+    if not isinstance(session_id, str) or len(session_id) > MAX_SESSION_ID_CHARS:
+        return False
+    nonce, _, signature = session_id.partition(".")
+    return bool(nonce) and hmac.compare_digest(signature, sign(nonce, key))
+
+
+class VoteBook:
+    """Server-side memory of who voted on what; decides whether a click becomes a saved vote.
+
+    Not thread-safe: the caller holds the write lock around `record`.
+    """
+
+    def __init__(self, key: bytes, max_votes_per_session: int):
+        self.key = key
+        self.max_votes_per_session = max_votes_per_session
+        self.seen: set[tuple[str, str]] = set()
+        self.votes_cast: Counter[str] = Counter()
+
+    def record(
+        self, pair_id: str, choice: str | None, session_id, wrong: Collection[str] = (), now: datetime | None = None
+    ) -> dict | None:
+        """The vote to save and remember, or None for a forged id, a session at its cap, or what make_vote rejects."""
+        if not is_valid_session_id(session_id, self.key):
+            return None
+        if self.votes_cast[session_id] >= self.max_votes_per_session:
+            return None
+        vote = make_vote(pair_id, choice, session_id, self.seen, wrong=wrong, now=now)
+        if vote is not None:
+            self.seen.add((session_id, pair_id))
+            self.votes_cast[session_id] += 1
+        return vote
