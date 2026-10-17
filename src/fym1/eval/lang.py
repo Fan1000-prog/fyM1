@@ -34,7 +34,8 @@ MALAGASY_WORDS = frozenset(
     mipetraka mahita mihinana misotro matory mody miverina tonga mankany avia andao
     andeha vita vao vaovao mihitsy sahady foana tsotra olona namana trano sakafo vola
     fotoana zavatra resaka ndray indray angamba toa hafa rehetra daholo misy tsisy mba
-    aza adino ko nao bé maintsy manana hisakafo
+    aza adino ko nao bé maintsy manana hisakafo azafady tompoko manahoana mandria
+    fahizay
     """.split()
 )
 
