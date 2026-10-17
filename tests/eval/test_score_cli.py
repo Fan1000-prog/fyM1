@@ -51,7 +51,7 @@ def test_leak_blocks_until_owner_approves_every_match(tmp_path):
     answers, chats, matches, review = setup_leak(tmp_path, LEAKED)
     assert leaks(answers, chats, matches, review).returncode == 0
     rows = [json.loads(line) for line in matches.read_text().splitlines()]
-    assert rows == [{"id": "p1", "ngram": LEAKED, "verdict": None}]
+    assert rows == [{"ngram": LEAKED, "ids": ["p1"], "verdict": None}]
     assert json.loads(review.read_text()) == {"matches": 1, "approved_generic": 0, "rejected": 0}
     assert gate(review).returncode != 0
 
@@ -63,16 +63,28 @@ def test_leak_blocks_until_owner_approves_every_match(tmp_path):
 def test_rejected_match_keeps_the_gate_blocked(tmp_path):
     answers, chats, matches, review = setup_leak(tmp_path, LEAKED)
     leaks(answers, chats, matches, review)
-    write_jsonl(matches, [{"id": "p1", "ngram": LEAKED, "verdict": "rejected"}])
+    write_jsonl(matches, [{"ngram": LEAKED, "ids": ["p1"], "verdict": "rejected"}])
     run("leak-review", "--matches", str(matches), "--review", str(review))
     assert json.loads(review.read_text()) == {"matches": 1, "approved_generic": 0, "rejected": 1}
     assert gate(review).returncode != 0
 
 
+def test_a_run_shared_by_two_answers_is_reviewed_once(tmp_path):
+    answers, chats, matches, review = setup_leak(tmp_path, LEAKED)
+    write_jsonl(answers, [
+        {"id": "p1", "prompt": "x", "response": LEAKED},
+        {"id": "p2", "prompt": "y", "response": f"ok {LEAKED}"},
+    ])
+    leaks(answers, chats, matches, review)
+    rows = [json.loads(line) for line in matches.read_text().splitlines()]
+    assert rows == [{"ngram": LEAKED, "ids": ["p1", "p2"], "verdict": None}]
+    assert json.loads(review.read_text())["matches"] == 1
+
+
 def test_leaks_never_overwrites_owner_verdicts(tmp_path):
     answers, chats, matches, review = setup_leak(tmp_path, LEAKED)
     leaks(answers, chats, matches, review)
-    reviewed = [{"id": "p1", "ngram": LEAKED, "verdict": "generic"}]
+    reviewed = [{"ngram": LEAKED, "ids": ["p1"], "verdict": "generic"}]
     write_jsonl(matches, reviewed)
     assert leaks(answers, chats, matches, review).returncode != 0
     assert [json.loads(line) for line in matches.read_text().splitlines()] == reviewed

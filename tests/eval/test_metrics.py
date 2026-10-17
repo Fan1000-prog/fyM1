@@ -63,20 +63,23 @@ def test_leak_rate_rejects_bad_n():
         leak_rate(["a"], ["a"], n=0)
 
 
-def test_leak_matches_lists_every_matched_ngram_per_response():
+def test_leak_matches_lists_each_distinct_ngram_with_its_answer_ids():
     responses = [
         {"id": "p1", "response": "A b c d e f g h i!"},
         {"id": "p2", "response": "z y x w v u t s"},
+        {"id": "p3", "response": "a b c d e f g h"},
     ]
     assert leak_matches(responses, ["a b c d e f g h i j"]) == [
-        {"id": "p1", "ngram": "a b c d e f g h"},
-        {"id": "p1", "ngram": "b c d e f g h i"},
+        {"ngram": "a b c d e f g h", "ids": ["p1", "p3"]},
+        {"ngram": "b c d e f g h i", "ids": ["p1"]},
     ]
 
 
-def test_leak_matches_reports_a_repeated_ngram_once_per_response():
+def test_leak_matches_lists_an_answer_once_per_ngram():
     responses = [{"id": "p1", "response": "a b c d e f g h a b c d e f g h"}]
-    assert leak_matches(responses, ["a b c d e f g h"]) == [{"id": "p1", "ngram": "a b c d e f g h"}]
+    assert leak_matches(responses, ["a b c d e f g h"]) == [
+        {"ngram": "a b c d e f g h", "ids": ["p1"]}
+    ]
 
 
 def test_leak_matches_agrees_with_leak_rate_on_no_leak():

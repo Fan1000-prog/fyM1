@@ -146,23 +146,29 @@ def test_chat_texts_takes_every_message_content():
 
 
 def test_leak_review_starts_with_nothing_reviewed():
-    matches = [{"id": "p1", "ngram": "a b c d e f g h", "verdict": None}]
+    matches = [{"ngram": "a b c d e f g h", "ids": ["p1"], "verdict": None}]
     assert leak_review(matches) == {"matches": 1, "approved_generic": 0, "rejected": 0}
 
 
 def test_leak_review_counts_owner_verdicts():
     matches = [
-        {"id": "p1", "ngram": "n1", "verdict": "generic"},
-        {"id": "p1", "ngram": "n2", "verdict": "rejected"},
-        {"id": "p2", "ngram": "n3", "verdict": "generic"},
-        {"id": "p3", "ngram": "n4"},
+        {"ngram": "n1", "ids": ["p1"], "verdict": "generic"},
+        {"ngram": "n2", "ids": ["p1"], "verdict": "rejected"},
+        {"ngram": "n3", "ids": ["p2", "p3"], "verdict": "generic"},
+        {"ngram": "n4", "ids": ["p3"]},
     ]
     assert leak_review(matches) == {"matches": 4, "approved_generic": 2, "rejected": 1}
 
 
 def test_leak_review_rejects_unknown_verdict():
     with pytest.raises(ValueError, match="verdict"):
-        leak_review([{"id": "p1", "ngram": "n1", "verdict": "ok"}])
+        leak_review([{"ngram": "n1", "ids": ["p1"], "verdict": "ok"}])
+
+
+def test_leak_review_rejects_a_duplicated_ngram():
+    row = {"ngram": "n1", "ids": ["p1"], "verdict": "generic"}
+    with pytest.raises(ValueError, match="more than once"):
+        leak_review([row, row])
 
 
 @pytest.mark.parametrize(

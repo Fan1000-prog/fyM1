@@ -136,7 +136,13 @@ LEAK_REVIEW_KEYS = ("matches", "approved_generic", "rejected")
 
 
 def leak_review(matches: list[dict]) -> dict:
-    """leak_review.json content: counts only, never the n-grams themselves."""
+    """leak_review.json content: counts only, never the n-grams themselves.
+
+    `matches` rows are `{"ngram", "ids", "verdict"}`, one per distinct n-gram.
+    """
+    ngrams = [match["ngram"] for match in matches]
+    if len(set(ngrams)) != len(ngrams):
+        raise ValueError("an n-gram is listed more than once; each must be reviewed once")
     verdicts = [match.get("verdict") for match in matches]
     unknown = {v for v in verdicts if v not in (None, GENERIC, REJECTED)}
     if unknown:

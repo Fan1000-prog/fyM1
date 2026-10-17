@@ -48,16 +48,17 @@ def leak_rate(responses: list[str], train_texts: Iterable[str], n: int = 8) -> f
 
 
 def leak_matches(responses: list[dict], train_texts: Iterable[str], n: int = 8) -> list[dict]:
-    """Every word n-gram a reply shares with the training texts: `{"id", "ngram"}` rows.
+    """Each distinct word n-gram that replies share with the training texts.
 
-    `responses` rows are `{"id", "response"}`. The n-grams are normalised as in
-    `leak_rate`, so `leak_rate == 0` exactly when this list is empty.
+    `responses` rows are `{"id", "response"}`. Returns `{"ngram", "ids"}` rows in order of
+    first appearance; `ids` lists every reply containing it, so each n-gram is reviewed once.
+    Normalised as in `leak_rate`, so `leak_rate == 0` exactly when this list is empty.
     """
     _require_responses(responses)
     train_ngrams = _train_ngrams(train_texts, n)
-    return [
-        {"id": row["id"], "ngram": " ".join(gram)}
-        for row in responses
-        for gram in _ngrams(row["response"], n)
-        if gram in train_ngrams
-    ]
+    ids_by_ngram: dict[str, list[str]] = {}
+    for row in responses:
+        for gram in _ngrams(row["response"], n):
+            if gram in train_ngrams:
+                ids_by_ngram.setdefault(" ".join(gram), []).append(row["id"])
+    return [{"ngram": ngram, "ids": ids} for ngram, ids in ids_by_ngram.items()]

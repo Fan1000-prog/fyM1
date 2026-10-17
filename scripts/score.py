@@ -36,14 +36,16 @@ Leak gate (release rule, run on the owner's laptop):
       --answers results/eval/answers_fym1.jsonl --train ~/malagasy-data/private/chats.jsonl \
       --matches results/eval/leak_matches.jsonl --review results/eval/leak_review.json
 
-  leak_matches.jsonl (private, git-ignored) holds one {"id", "ngram", "verdict": null} row per
-  8-gram that a reply shares with the training chats: only the 8 words, never the chat around
-  them. The owner sets each "verdict" to "generic" (an everyday phrase anyone would say) or
-  "rejected" (copied from a real chat), then recounts:
+  leak_matches.jsonl (private, git-ignored) holds one {"ngram", "ids", "verdict": null} row
+  per distinct 8-gram that replies share with the training chats; ids are the answers that
+  contain it. It shows only the 8 words, never the chat around them. The owner sets each
+  "verdict" to "generic" (an everyday phrase anyone would say) or "rejected" (copied from a
+  real chat), then recounts:
   uv run python scripts/score.py leak-review \
       --matches results/eval/leak_matches.jsonl --review results/eval/leak_review.json
 
-  leak_review.json is counts only: {"matches", "approved_generic", "rejected"}.
+  leak_review.json is counts only: {"matches", "approved_generic", "rejected"}, where matches
+  is the number of distinct 8-grams.
   uv run python scripts/score.py leak-gate --review results/eval/leak_review.json
   exits 0 only if there are no matches or every match is approved generic;
   otherwise 1 (do not ship).
@@ -119,7 +121,7 @@ def cmd_leaks(args: argparse.Namespace) -> None:
     matches = [match | {"verdict": None} for match in leak_matches(read_jsonl(args.answers), train)]
     write_jsonl(args.matches, matches)
     write_json(args.review, leak_review(matches))
-    print(f"{len(matches)} leaked 8-gram(s); see {args.matches} (private)")
+    print(f"{len(matches)} distinct leaked 8-gram(s); see {args.matches} (private)")
 
 
 def cmd_leak_review(args: argparse.Namespace) -> None:
