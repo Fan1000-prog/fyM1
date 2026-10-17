@@ -50,11 +50,12 @@ _SEP = r"\s*[./,_-]?\s*"
 _INTL = r"(?:\+|(?<!\d[ .,])00)"  # "00" not inside a long amount: "1 000 000 000 Ar"
 # A Malagasy number, written once so the spaced and glued rules accept the same forms.
 _MG_COUNTRY = rf"(?:\(\s*{_INTL}?261\s*\)|{_INTL}?261)"  # +261, 00261, 261, (+261)
-_MG_TRUNK = r"(?:\(\s*0\s*\)|[0Oo])"  # 0, (0), or "O" typed with a letter O
+# 0 or (0), then any gap; a letter O only when it touches the digits ("O34…", never "manao 300…")
+_MG_TRUNK = rf"(?:(?:\(\s*0\s*\)|0){_SEP}|[Oo])"
 _MG_PHONE = (
-    rf"(?:{_MG_COUNTRY}{_SEP}(?:{_MG_TRUNK}{_SEP})?\d(?:{_SEP}\d){{8}}"  # +261 34 …, +261 (0)34 …, (+261)34 …
-    rf"|{_MG_TRUNK}{_SEP}[23](?:{_SEP}\d){{8}}"  # 034 12 345 67, any grouping
-    rf"|\(\s*[0Oo][23]\d\s*\)(?:{_SEP}\d){{7}})"  # area code in brackets: (034) 12 345 67
+    rf"(?:{_MG_COUNTRY}{_SEP}{_MG_TRUNK}?\d(?:{_SEP}\d){{8}}"  # +261 34 …, +261 (0)34 …, (+261)34 …
+    rf"|{_MG_TRUNK}[23](?:{_SEP}\d){{8}}"  # 034 12 345 67, any grouping
+    rf"|\(\s*[0Oo]\d\d\s*\)(?:{_SEP}\d){{7}})"  # area code in brackets: (034) 12 345 67, (089) …
 )
 PHONE = re.compile(
     r"(?<![\w+])(?:"
@@ -65,7 +66,7 @@ PHONE = re.compile(
     r"|\d{9,15}"  # any other long run of digits
     r")(?!\w)"
     rf"|(?<![\d+]){_MG_PHONE}(?!\d)"  # glued to a word: "laharana034 …", "wa+26134…", "tel(034) …"
-    rf"|(?<=[^\W\d_])3[2-9](?:{_SEP}\d){{7}}(?!\d)"  # glued, no leading 0: "tel34 12 345 67"
+    rf"|(?<=[^\W\d_])(?<![Aa][Rr])(?<!MGA)(?<![Ff][Mm][Gg])3[2-9](?:{_SEP}\d){{7}}(?!\d)"  # glued, no 0: "tel34 12 345 67", not "Ar350 000 000"
 )
 # "01/02/2026 03/04" is dates, not a phone: a year next to / or -.
 _DATE_LIKE = re.compile(r"[/-](?:19|20)\d\d\b|\b(?:19|20)\d\d[/-]")
@@ -130,7 +131,7 @@ def _is_free(fake: str, real_keys: set[str]) -> bool:
 
 
 def _letters_only(key: str) -> str:
-    """`key` with every non-letter dropped, so "mia_ly" and "onj2a" read "mialy" and "onja"."""
+    """`key` with every non-letter dropped, so "mia_ly" and "lov_va" read "mialy" and "lovva"."""
     return re.sub(r"[\W\d_]", "", key)
 
 
@@ -147,7 +148,7 @@ def _hashed_fake(text: str, words: int, firsts: list[str], lasts: list[str]) -> 
     its words or its letters joined up, are skipped, so "@Mialy", "@itsmialy" and "@mia_ly"
     never come out as "Mialy".
     """
-    own_keys = {compare_key(p) for p in WORD.findall(text)} | {_letters_only(compare_key(text))}
+    own_keys = {compare_key(p) for p in WORD.findall(text)} | {compare_key(_letters_only(fold(text)))}
     firsts = [f for f in firsts if _is_free_of_mention(f, own_keys)] or [FALLBACK_NAME]
     lasts = [s for s in lasts if _is_free_of_mention(s, own_keys)] or [FALLBACK_NAME]
     number = int.from_bytes(hashlib.sha256(compare_key(text).encode("utf-8")).digest()[:4], "big")

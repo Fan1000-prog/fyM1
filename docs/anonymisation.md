@@ -44,3 +44,7 @@ When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit ref
 - Nicknames used in chat but never set through Messenger.
 
 These are pinned as `xfail` tests in `tests/data/test_anonymize_probes.py`.
+
+Over-matches we accept, because they lean private: a 9-digit amount glued to a word with no space
+("ilay320 000 000", "io200000000") reads as a glued phone and becomes `<TEL>`; with a space, or after
+`Ar`, `MGA` or `Fmg`, it stays.
