@@ -16,5 +16,5 @@ jobs:
         with:
           path: ~/.cache/huggingface/hub
           key: glotlid-v2-85cd6716494360367b75f642b5bc78667605d0b4
-      - run: uv sync
+      - run: uv sync --all-groups
       - run: uv run pytest -q
