@@ -6,6 +6,7 @@ from fym1.eval.baseline import (
     chrf_pp,
     first_line,
     sample_sentences,
+    selection_row,
     tokens_per_word,
     translation_prompt,
 )
@@ -63,3 +64,23 @@ def test_tokens_per_word_divides_total_tokens_by_total_words():
 def test_chrf_pp_perfect_and_disjoint():
     assert chrf_pp(["Salama tompoko"], ["Salama tompoko"]) == pytest.approx(100.0)
     assert chrf_pp(["xyz"], ["Salama tompoko"]) < 5
+
+
+def test_selection_row_maps_baseline_json_to_paper_schema():
+    result = {
+        "model": {"slug": "m", "hub_id": "org/m"},
+        "belebele": {"acc": 0.5},
+        "flores": {"eng-plt_chrf++": 40.0, "plt-eng_chrf++": 50.0},
+        "tokens_per_word": {"value": 2.1},
+        "qlora_smoke": {"ok": True, "peak_vram_gb": 12.0, "sec_per_step": 30.0},
+    }
+    assert selection_row(result, "Apache-2.0") == {
+        "model": "org/m", "license": "Apache-2.0", "belebele_acc": 0.5, "chrf_plt_eng": 50.0,
+        "chrf_eng_plt": 40.0, "tokens_per_word": 2.1, "sniff_natural": None,
+        "peak_vram_gb": 12.0, "sec_per_step": 30.0, "qlora_fits": True,
+    }
+
+
+def test_selection_row_leaves_missing_sections_none():
+    row = selection_row({"model": {"slug": "m", "hub_id": "org/m"}, "skipped": "403"}, "x")
+    assert row["belebele_acc"] is None and row["chrf_plt_eng"] is None and row["qlora_fits"] is None

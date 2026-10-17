@@ -59,3 +59,25 @@ def tokens_per_word(sentences: list[str], count_tokens: Callable[[str], int]) ->
 def chrf_pp(hyps: list[str], refs: list[str]) -> float:
     """Corpus chrF++ (chrF with word bigrams), 0-100."""
     return sacrebleu.CHRF(word_order=2).corpus_score(hyps, [refs]).score
+
+
+def selection_row(result: dict, license: str) -> dict:
+    """One `candidates[]` row of results/model_selection.json from a results/baseline/<slug>.json file.
+
+    Sections the run did not produce (skipped model, FLORES pending) stay None.
+    `sniff_natural` is filled later from the owner's ratings.
+    """
+    flores = result.get("flores", {})
+    smoke = result.get("qlora_smoke", {})
+    return {
+        "model": result["model"]["hub_id"],
+        "license": license,
+        "belebele_acc": result.get("belebele", {}).get("acc"),
+        "chrf_plt_eng": flores.get("plt-eng_chrf++"),
+        "chrf_eng_plt": flores.get("eng-plt_chrf++"),
+        "tokens_per_word": result.get("tokens_per_word", {}).get("value"),
+        "sniff_natural": None,
+        "peak_vram_gb": smoke.get("peak_vram_gb"),
+        "sec_per_step": smoke.get("sec_per_step"),
+        "qlora_fits": smoke.get("ok"),
+    }
