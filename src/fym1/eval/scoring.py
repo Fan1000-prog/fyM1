@@ -1,4 +1,4 @@
-"""Build results/eval/scores.json and results/eval/judge.json (schema read by paper/numbers.py).
+"""Build results/eval/scores.json and results/eval/judge.json (schema read by paper/make_numbers.py).
 
 Answer files are `answers_<model>.jsonl`, one row per prompt: `{"id", "prompt", "response"}`.
 scores.json: `{"n_prompts", "<model>": {"drift_rate", <NOTEBOOK_METRICS>...}}`.
