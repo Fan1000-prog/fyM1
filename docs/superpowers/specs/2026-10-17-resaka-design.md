@@ -162,7 +162,6 @@ Decisions made while building. They override earlier sections where they conflic
 
 ### 8.4 Training (§5.3)
 - Where GPU work runs: Kaggle is the main runtime (§8.1), driven from the terminal with the Kaggle CLI; the owner types the HF token into Kaggle Secrets. Colab stays as a backup, driven through Playwright by one agent at a time, with the token-safe flow in `docs/colab_operator.md`. Below, "the notebook runtime" means whichever of the two runs. The HF token never enters a transcript.
-- The next three points are in PR #13.
 - Training code reaches the notebook runtime only by syncing clean `origin/main` to the private checkpoint repo. Baseline runs may use branch code if each result records its code version.
 - Chat templates run with thinking turned off, and every assistant turn in training carries the same empty thinking block the model sees when answering.
 - Early stopping uses the repo's own tested rule, which survives a runtime restart.
