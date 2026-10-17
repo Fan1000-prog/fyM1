@@ -8,6 +8,7 @@ Runs on the owner's laptop only. Prints counts, never text.
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -31,10 +32,19 @@ def parse_args() -> argparse.Namespace:
 
 
 def private_path(path: Path) -> Path:
-    """`path` resolved, refusing anywhere inside this git repo (chat text must never be committable)."""
+    """`path` resolved, refusing anywhere inside a git work tree (chat text must never be committable)."""
     resolved = path.expanduser().resolve()
-    if resolved.is_relative_to(REPO):
-        sys.exit(f"{path} is inside the repo {REPO}. Write chat data outside it, e.g. ~/malagasy-data/private/.")
+    existing = next(p for p in (resolved, *resolved.parents) if p.exists())
+    if not existing.is_dir():
+        existing = existing.parent
+    toplevel = subprocess.run(
+        ["git", "-C", str(existing), "rev-parse", "--show-toplevel"], capture_output=True, text=True
+    )
+    if toplevel.returncode == 0:
+        sys.exit(
+            f"{path} is inside the git work tree {toplevel.stdout.strip()}. "
+            "Write chat data outside any repo, e.g. ~/malagasy-data/private/."
+        )
     return resolved
 
 
@@ -73,6 +83,7 @@ def main() -> None:
         "conversations": len(records),
         "review_sample": len(sample),
         "common_word_replacements": common_word_replacements,
+        "unharvested_nickname_events": sum(t.unharvested_nickname_events for t in threads),
     }))  # fmt: skip
 
 
