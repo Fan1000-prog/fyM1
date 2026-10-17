@@ -108,7 +108,7 @@ no private text and is public.
 We train with QLoRA \citep{dettmers2023qlora}: the base model is frozen in 4-bit NF4 and we learn LoRA
 adapters \citep{hu2022lora} on all linear layers, with rank \fyLoraR{} and alpha \fyLoraAlpha{}. We use
 Unsloth \citep{unsloth} on a free Google Colab GPU (\fyTrainGpu{}). Settings: learning rate
-\fyLearningRate{} with a cosine schedule, sequence length \fyMaxSeqLen{}, effective batch size
+\fyLearningRate{} with a \fyLrScheduler{} schedule, sequence length \fyMaxSeqLen{}, effective batch size
 \fyEffectiveBatch{}, \fyTrainEpochs{} epochs (\fyTrainSteps{} steps, \fyTrainTime{} of training).
 Loss is computed on assistant turns only, in the base model's own chat template, with a fixed system
 prompt in Malagasy. Free sessions disconnect, so checkpoints are pushed to a private repository during
@@ -121,7 +121,7 @@ Much of a multilingual model's vocabulary is for scripts and languages fyM1 neve
 \citet{ushio-etal-2023-efficient}, we keep only the tokens seen in Malagasy, French and English text,
 plus all special and byte-fallback tokens, and drop the matching embedding and output rows.
 The trim ships only if it passes three gates: held-out Malagasy text round-trips through the new
-tokenizer unchanged; greedy answers to the test prompts are unchanged for almost all prompts; and
+tokenizer unchanged; greedy answers are unchanged for at least 95\% of the test prompts; and
 Belebele stays within one point. Result: gates \fyTrimGates{}. Vocabulary \fyVocabBefore{} $\to$
 \fyVocabAfter{} tokens; parameters \fyParamsBefore{} $\to$ \fyParamsAfter{}; download \fyGgufBefore{}
 $\to$ \fyGgufAfter{}; speed on the demo CPU \fyTpsBefore{} $\to$ \fyTpsAfter{} tokens/s.
@@ -158,8 +158,10 @@ FLORES+ chrF++ en$\to$mg ($\uparrow$) & \fyChrfEnMgBase & \fyChrfEnMgFymOne \\
 shuffled, on a published 1--5 rubric for naturalness and correctness
 \citep{zheng2023judging}. Judge: \fyJudgeModel{}. Judge scores are a cheap signal, not a substitute for native speakers.
 
-\paragraph{Leak check.} We test whether fyM1 repeats training text: \fyLeakFymOne{} of its answers share
-an 8-word sequence with the training chats. The release gate was at most 1\%.
+\paragraph{Leak check.} Any fyM1 answer that shares a run of 8 words with the training chats blocks
+release. \fyLeakFymOne{} of answers had such a run (\fyLeakMatches{} matches in total). The owner saw only
+the matched 8 words, never the chat around them, and release required every match to be a generic phrase:
+\fyLeakGeneric{} were judged generic and \fyLeakRejected{} were rejected.
 
 \paragraph{Blind human comparison (early votes).} Native speakers rate pairs of answers in a public
 ``arena'': same prompt, two unlabelled answers in random order, pick the more natural one. These are the
@@ -182,7 +184,7 @@ private, so training can be rerun only on other data.
   \item The drift metric can be a little low. A reply counts as Malagasy if GlotLID says so, or if at
         least 10\% of its words are common Malagasy words. English that contains a Malagasy name or a
         quoted Malagasy word (e.g.\ ``Hi Vola, how are you?'') can therefore pass. Fully French or
-        English replies with no Malagasy words are caught.
+        English replies with no Malagasy words are counted as drift.
   \item An LLM judge may not understand Malagasy slang well; its scores can be wrong in either direction.
   \item The model is small and runs on a free CPU. It can be slow, get facts wrong, and invent things.
   \item We train only once or twice on free hardware, so settings are not carefully tuned.

@@ -95,8 +95,10 @@ All numbers are written by scripts in the GitHub repo.
 | Blind human votes so far (early votes): fyM1 win rate | - | pending |
 <!-- numbers:end -->
 
-Leak gate: the model does not ship if it repeats sentences from the training chats
-(`leak_rate` in `results/eval/scores.json`).
+Leak gate: any answer that shares a run of 8 words with the training chats blocks release.
+The owner sees only the matched 8 words, never the chat, and it ships only if every match is a generic phrase.
+At release: <!-- n:leak-matches -->pending<!-- /n --> matches, <!-- n:leak-generic -->pending<!-- /n --> approved as generic,
+<!-- n:leak-rejected -->pending<!-- /n --> rejected (`results/eval/leak_review.json`).
 
 ## Example chats
 
