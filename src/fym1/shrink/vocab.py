@@ -40,6 +40,23 @@ def tokens_to_keep(tokenizer, corpus: Iterable[str], always_keep: set[int]) -> l
     return sorted(_merge_closure(model, keep))
 
 
+def chat_texts(tokenizer, conversations: Iterable[list[dict]], system_prompt: str = "", **template_kwargs) -> Iterator[str]:
+    """Keep-corpus texts for chat data, rendered exactly as the model sees them.
+
+    Yields each whole conversation and, before every assistant turn, the prefix rendered with
+    `add_generation_prompt=True`: generation prompts (e.g. a "thought" channel header) only appear
+    there. Pass the same `template_kwargs` (e.g. `enable_thinking=False`) used for training and serving.
+    """
+    for conversation in conversations:
+        messages = ([{"role": "system", "content": system_prompt}] if system_prompt else []) + list(conversation)
+        yield tokenizer.apply_chat_template(messages, tokenize=False, **template_kwargs)
+        for turn, message in enumerate(messages):
+            if message["role"] == "assistant":
+                yield tokenizer.apply_chat_template(
+                    messages[:turn], tokenize=False, add_generation_prompt=True, **template_kwargs
+                )
+
+
 def trim_tokenizer(tokenizer, keep_ids: list[int]):
     """Return a new tokenizer holding only `keep_ids`; new id `n` is old id `keep_ids[n]`."""
     tok_json = _tokenizer_json(tokenizer)

@@ -4,7 +4,7 @@ import pytest
 import sentencepiece as spm
 from synthetic_text import HELD_OUT, KEEP_CORPUS
 
-from fym1.shrink.vocab import tokens_to_keep, trim_sentencepiece, trim_tokenizer
+from fym1.shrink.vocab import chat_texts, tokens_to_keep, trim_sentencepiece, trim_tokenizer
 
 
 def _encode(tok, text):
@@ -153,6 +153,56 @@ def test_rejects_non_bpe():
     wrapped = PreTrainedTokenizerFast(tokenizer_object=tok, unk_token="[UNK]")
     with pytest.raises(NotImplementedError):
         tokens_to_keep(wrapped, ["a"], always_keep=set())
+
+
+# --- chat_texts -----------------------------------------------------------------------------------
+
+# The generation prompt carries text (words from OTHER_LANGUAGES) that no message contains, like
+# Gemma 4's "<|turn>model\n<|channel>thought\n<channel|>" header; enable_thinking changes it too.
+CHAT_TEMPLATE = (
+    "{% for m in messages %}<|im_start|>{{ m['role'] }}\n{{ m['content'] }}<|im_end|>\n{% endfor %}"
+    "{% if add_generation_prompt %}<|im_start|>assistant\n"
+    "{% if enable_thinking is defined and not enable_thinking %}Fuchs springt{% else %}Hund{% endif %}\n{% endif %}"
+)
+CONVERSATIONS = [
+    [{"role": "user", "content": KEEP_CORPUS[0]}, {"role": "assistant", "content": KEEP_CORPUS[1]}],
+    [{"role": "user", "content": KEEP_CORPUS[2]}, {"role": "assistant", "content": KEEP_CORPUS[3]}],
+]
+
+
+@pytest.fixture
+def chat_tokenizer(make_tokenizer):
+    tok = make_tokenizer("byte_level")
+    tok.chat_template = CHAT_TEMPLATE
+    return tok
+
+
+def _prompt(tok, enable_thinking=False):
+    messages = [{"role": "system", "content": "Mpanampy"}, {"role": "user", "content": KEEP_CORPUS[0]}]
+    return tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=enable_thinking)
+
+
+def test_chat_texts_cover_generation_prompt(chat_tokenizer):
+    """A prompt as sent at inference encodes to the same tokens after trimming."""
+    texts = list(chat_texts(chat_tokenizer, CONVERSATIONS, "Mpanampy", enable_thinking=False))
+    keep = tokens_to_keep(chat_tokenizer, texts, always_keep=set())
+    new = trim_tokenizer(chat_tokenizer, keep)
+    assert [keep[i] for i in _encode(new, _prompt(chat_tokenizer))] == _encode(chat_tokenizer, _prompt(chat_tokenizer))
+
+
+def test_whole_conversations_alone_miss_generation_prompt(chat_tokenizer):
+    """Why chat_texts adds generation-prompt prefixes: without them the header re-tokenizes."""
+    rendered = [chat_tokenizer.apply_chat_template(c, tokenize=False) for c in CONVERSATIONS]
+    keep = tokens_to_keep(chat_tokenizer, rendered, always_keep=set())
+    new = trim_tokenizer(chat_tokenizer, keep)
+    assert [keep[i] for i in _encode(new, _prompt(chat_tokenizer))] != _encode(chat_tokenizer, _prompt(chat_tokenizer))
+
+
+def test_chat_texts_pass_template_kwargs(chat_tokenizer):
+    texts = list(chat_texts(chat_tokenizer, CONVERSATIONS[:1], enable_thinking=False))
+    assert any("Fuchs springt" in t for t in texts)
+    assert not any("Hund" in t for t in texts)
+    assert texts[0].startswith("<|im_start|>user")  # no empty system turn when no system prompt
 
 
 # --- trim_sentencepiece ---------------------------------------------------------------------------
