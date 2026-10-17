@@ -11,6 +11,8 @@ from fym1.data.messenger import Thread
 from fym1.data.segment import Conversation, to_conversations
 
 MIN_MALAGASY_SHARE = 0.5
+# results/data_stats.json, read by paper/numbers.py. Counts only, never text.
+DATA_STATS_KEYS = ("threads", "conversations", "approved", "identity", "formal", "synthetic", "train_examples")
 
 
 class BuildResult(NamedTuple):
@@ -57,3 +59,12 @@ def build_records(
                 record_id = _record_id(conversation)
                 records.setdefault(record_id, {"id": record_id, "messages": conversation})
     return BuildResult(list(records.values()), anonymize.common_word_replacements)
+
+
+def merge_data_stats(existing: dict, **counts: int) -> dict:
+    """`existing` stats with `counts` written over them; keys not known yet stay None."""
+    unknown = set(counts) - set(DATA_STATS_KEYS)
+    if unknown:
+        raise ValueError(f"Unknown data_stats keys {sorted(unknown)}; expected {DATA_STATS_KEYS}")
+    merged = {**existing, **counts}
+    return {key: merged.get(key) for key in DATA_STATS_KEYS}

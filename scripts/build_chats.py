@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from fym1.data.messenger import load_threads
-from fym1.data.pipeline import build_records
+from fym1.data.pipeline import build_records, merge_data_stats
 from fym1.data.review_sheet import render_review_sheet, sample_for_review
 
 REPO = Path(__file__).resolve().parents[1]
@@ -26,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sheet", type=Path, required=True, help="HTML review sheet")
     parser.add_argument("--sample", type=int, default=100, help="conversations on the review sheet")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--stats", type=Path, default=REPO / "results/data_stats.json", help="counts only")
     return parser.parse_args()
 
 
@@ -61,6 +62,10 @@ def main() -> None:
     out.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records), encoding="utf-8")
     sample = sample_for_review(records, n=args.sample, seed=args.seed)
     sheet.write_text(render_review_sheet(sample), encoding="utf-8")
+
+    existing = json.loads(args.stats.read_text()) if args.stats.exists() else {}
+    stats = merge_data_stats(existing, threads=len(threads), conversations=len(records))
+    args.stats.write_text(json.dumps(stats, indent=2) + "\n")
 
     print(json.dumps({
         "threads": len(threads),

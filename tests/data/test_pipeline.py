@@ -1,5 +1,7 @@
+import pytest
+
 from fym1.data.messenger import Message, Thread
-from fym1.data.pipeline import build_records
+from fym1.data.pipeline import build_records, merge_data_stats
 
 MIN = 60_000
 
@@ -76,3 +78,24 @@ def test_build_records_counts_common_words_replaced():
     result = build_records([vola], owner="Tojo Randria", is_malagasy=says_malagasy)
 
     assert result.common_word_replacements == 1
+
+
+def test_merge_data_stats_fills_build_counts_and_keeps_later_ones():
+    later = {"approved": 90, "identity": 16}
+
+    stats = merge_data_stats(later, threads=3, conversations=120)
+
+    assert stats == {
+        "threads": 3,
+        "conversations": 120,
+        "approved": 90,
+        "identity": 16,
+        "formal": None,
+        "synthetic": None,
+        "train_examples": None,
+    }
+
+
+def test_merge_data_stats_rejects_unknown_keys():
+    with pytest.raises(ValueError, match="texts"):
+        merge_data_stats({}, texts=1)
