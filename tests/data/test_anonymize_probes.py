@@ -285,14 +285,16 @@ def fake_first(person):
 @pytest.mark.parametrize(
     "text, expected",
     [
-        ("@Nirina Rakotomalala Aiza ianao?", FINAL_NAMES["Nirina Rakotomalala"] + " Aiza ianao?"),
-        ("@Nirina Mbola tsy vita", fake_first("Nirina Rakotomalala") + " Mbola tsy vita"),
+        # owner's call (round 4): every capitalised word after "@" goes, even "Aiza"
+        ("@Nirina Rakotomalala Aiza ianao?", FINAL_NAMES["Nirina Rakotomalala"] + " ianao?"),
+        ("@Nirina Mbola tsy vita", fake_first("Nirina Rakotomalala") + " tsy vita"),
         ("@Nirina mbola tsy vita", fake_first("Nirina Rakotomalala") + " mbola tsy vita"),
         ("@Nirina Rakotomalala", FINAL_NAMES["Nirina Rakotomalala"]),
-        ("@Fara Ok ve?", fake_first("Fara Randria") + " Ok ve?"),
+        ("@Fara Ok ve?", fake_first("Fara Randria") + " ve?"),
+        ("@Fara Randria Tojo ve?", FINAL_NAMES["Fara Randria"] + " ve?"),
     ],
 )
-def test_mention_takes_only_the_known_name(text, expected):
+def test_mention_replaces_every_capitalised_word(text, expected):
     assert Anonymizer(FINAL_NAMES)(text) == expected
 
 
@@ -365,3 +367,31 @@ def test_hashed_fake_avoids_real_names():
     names = assign_fake_names([f"{first} Rakotobe" for first in FIRST_NAMES[1:]])
 
     assert Anonymizer(names)("@Zafindraibe") == FIRST_NAMES[0]
+
+
+@pytest.mark.parametrize("text", ["@Haja Rabe Aiza ianao?", "@Marie-Claire Rasoanaivo Aiza ianao?"])
+def test_unknown_mention_becomes_one_fake_name(text):
+    out = Anonymizer(FINAL_NAMES)(text)
+    name = out.removesuffix(" ianao?")
+
+    assert out.endswith(" ianao?")
+    assert len(name.split()) == 2 and all(w[0].isupper() for w in name.split())
+    assert not {"haja", "rabe", "aiza", "marie", "claire", "rasoanaivo"} & {compare_key(w) for w in name.split()}
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("laharana034 12 345 67", "laharana<TEL>"),
+        ("tel034.12.345.67", "tel<TEL>"),
+        ("num034-12-345-67 io", "num<TEL> io"),
+        ("Tel:020 22 345 67", "Tel:<TEL>"),
+    ],
+)
+def test_glued_phones_with_gaps(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+@pytest.mark.parametrize("text", ["Taona 2020-03-12 io", "ny 2023 12 345 olona"])
+def test_glued_phone_rule_skips_years(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text

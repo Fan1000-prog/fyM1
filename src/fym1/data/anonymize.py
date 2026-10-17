@@ -57,7 +57,7 @@ PHONE = re.compile(
     rf"|3[2-9]{_SEP}\d\d{_SEP}\d{{3}}{_SEP}\d\d"  # mobile without the 0: 34 12 345 67
     r"|\d{9,15}"  # any other long run of digits
     r")(?!\w)"
-    r"|(?<!\d)0[23]\d{8}(?!\d)"  # glued to a word: "laharana0341234567"
+    rf"|(?<![\d+])0[23]\d(?:{_SEP}\d){{7}}(?!\d)"  # glued to a word: "laharana034 12 345 67", "tel034.12…"
 )
 # "01/02/2026 03/04" is dates, not a phone: a year next to / or -.
 _DATE_LIKE = re.compile(r"[/-](?:19|20)\d\d\b|\b(?:19|20)\d\d[/-]")
@@ -72,8 +72,11 @@ LABELLED_HANDLE = re.compile(
 )
 # "@nirina.rk", or a display-name mention "@Marie-Claire Rasoanaivo": up to 3 words, read
 # by Anonymizer._mention; it decides how many belong to the name. Never "@15h".
+MENTION_MAX_WORDS = 3
 _LETTER_START = r"[^\W\d_]"
-MENTION = re.compile(rf"(?<![\w.])@({_LETTER_START}(?:[\w.-]*\w)?)((?:[ \t]+{_LETTER_START}(?:[\w-]*\w)?){{0,2}})")
+MENTION = re.compile(
+    rf"(?<![\w.])@({_LETTER_START}(?:[\w.-]*\w)?)((?:[ \t]+{_LETTER_START}(?:[\w-]*\w)?){{0,{MENTION_MAX_WORDS - 1}}})"
+)
 _HANDLE_CHARS = re.compile(r"[._\d]")
 WORD = re.compile(r"\w+")
 _PLACEHOLDER_SLOT = "{}"  # private-use marks: never part of a \w word
@@ -97,6 +100,12 @@ _COMMON_KEYS = {compare_key(w) for w in COMMON_WORDS}
 # Short words a short name part ("Ny", "Fa") must never replace: the most widespread
 # Wikipedia words plus texting words Wikipedia lacks.
 PROTECTED_SHORT_WORDS = {compare_key(w) for w in COMMON_WORDS[:300]} | {"ve", "eh", "e", "ah", "ahn", "aho", "ry", "o", "ok"}
+
+
+def is_everyday_word(word: str) -> bool:
+    """A common Malagasy word (or short texting word) that is never taken for a name."""
+    key = compare_key(word)
+    return key in _COMMON_KEYS or key in PROTECTED_SHORT_WORDS
 
 
 def _shares_prefix(a: str, b: str) -> bool:
@@ -128,7 +137,7 @@ def _lot_address(match: re.Match) -> str:
 
 def _labelled_handle(match: re.Match) -> str:
     sep, handle = match["sep"], match["handle"]
-    is_word = handle[0].isdigit() or compare_key(handle) in _COMMON_KEYS | PROTECTED_SHORT_WORDS
+    is_word = handle[0].isdigit() or is_everyday_word(handle)
     # after a bare space, only something handle-shaped counts: "snap ve?" is just a word
     looks_like_handle = not is_word and (sep.strip() or _HANDLE_CHARS.search(handle))
     return f"{match['label']}{sep.rstrip('@')}<HANDLE>" if looks_like_handle else match.group()
@@ -181,35 +190,36 @@ class Anonymizer:
         return self._park(parked, fake) + body[spans[taken - 1].end() :]
 
     def _fake_for_mention(self, words: list[str]) -> tuple[int, str]:
-        """(how many leading `words` are the name, its fake)."""
+        """(how many leading `words` the mention covers, the one fake name replacing them).
+
+        A capitalised mention covers every capitalised word after it ("@Nirina Mbola" ->
+        one fake): the owner chose losing a word over leaking a surname. A lower-case
+        one ("@haja rabe ok") runs while words are not everyday words.
+        """
         if _HANDLE_CHARS.search(words[0]):  # @nirina.rk: a handle, one word
             known = self._fake_for_word(words[0])
             return 1, known or _hashed_fake(words[0], 1, self._free_firsts, self._free_lasts)
-        for taken in range(len(words), 1, -1):  # a participant's full name
-            keys = tuple(compare_key(p) for w in words[:taken] for p in WORD.findall(w))
+        taken = 1
+        for word in words[1:]:
+            if words[0][0].isupper() and not word[0].isupper():
+                break
+            if not words[0][0].isupper() and is_everyday_word(word):
+                break
+            taken += 1
+        name = words[:taken]
+        for length in range(taken, 1, -1):  # a participant's full name
+            keys = tuple(compare_key(p) for w in name[:length] for p in WORD.findall(w))
             if keys in self._full_names:
                 return taken, self._full_names[keys]
-        known = []  # leading run of known name parts: "@Nirina Mbola" -> just "Nirina"
-        for word in words:
+        known = []  # leading run of known name parts
+        for word in name:
             fakes = [self._fake_for_word(p) for p in WORD.findall(word)]
             if not all(fakes):
                 break
             known.append("-".join(fakes))
         if known:
-            return len(known), " ".join(known)
-        # nobody we know: the name runs while words are not everyday words; a capitalised
-        # first word only takes capitalised followers ("@Haja Rabe Aiza" vs "@haja rabe ok")
-        taken = 1
-        for word in words[1:]:
-            if self._is_everyday(word) or (words[0][0].isupper() and not word[0].isupper()):
-                break
-            taken += 1
-        return taken, _hashed_fake(" ".join(words[:taken]), min(taken, 2), self._free_firsts, self._free_lasts)
-
-    @staticmethod
-    def _is_everyday(word: str) -> bool:
-        key = compare_key(word)
-        return key in _COMMON_KEYS or key in PROTECTED_SHORT_WORDS
+            return taken, " ".join(known)
+        return taken, _hashed_fake(" ".join(name), min(taken, 2), self._free_firsts, self._free_lasts)
 
     def _replace_names(self, text: str) -> str:
         words = list(WORD.finditer(text))
