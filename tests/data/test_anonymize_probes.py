@@ -467,7 +467,16 @@ def test_hashed_handle_fake_never_repeats_a_name_inside_the_handle(prefix, first
     assert compare_key(out.split()[0]) != compare_key(first)
 
 
-def test_mention_stops_at_a_unicode_line_break():
-    out = NOBODY("@Fara\u2028Rabe salama")
+@pytest.mark.parametrize("gap", ["\u00a0", "\u202f", "\u2002", "\u2009", "\u3000", "\t"])
+def test_mention_across_unicode_spaces(gap):
+    out = NOBODY(f"@Fara{gap}Rabe salama")
 
-    assert out.endswith("\u2028Rabe salama")
+    assert "Rabe" not in out
+    assert out.endswith(" salama")
+
+
+@pytest.mark.parametrize("brk", ["\n", "\r\n", "\u2028", "\u2029", "\x85"])
+def test_mention_stops_at_a_line_break(brk):
+    out = NOBODY(f"@Fara{brk}Rabe salama")
+
+    assert out.endswith(f"{brk}Rabe salama")

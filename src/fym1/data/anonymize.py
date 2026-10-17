@@ -74,8 +74,9 @@ LABELLED_HANDLE = re.compile(
 # by Anonymizer._mention; it decides how many belong to the name. Never "@15h".
 MENTION_MAX_WORDS = 3
 _LETTER_START = r"[^\W\d_]"
+_MENTION_GAP = r"[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]"  # any space on the same line
 MENTION = re.compile(
-    rf"(?<![\w.])@({_LETTER_START}(?:[\w.-]*\w)?)((?:[ \t\u00a0\u202f]+{_LETTER_START}(?:[\w-]*\w)?){{0,{MENTION_MAX_WORDS - 1}}})"
+    rf"(?<![\w.])@({_LETTER_START}(?:[\w.-]*\w)?)((?:{_MENTION_GAP}+{_LETTER_START}(?:[\w-]*\w)?){{0,{MENTION_MAX_WORDS - 1}}})"
 )
 _HANDLE_CHARS = re.compile(r"[._\d]")
 WORD = re.compile(r"\w+")
