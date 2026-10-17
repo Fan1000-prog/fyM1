@@ -94,8 +94,8 @@ def _select_rows(weight: torch.Tensor, keep_ids: list[int]) -> torch.nn.Paramete
 
 
 def _update_config(config, new_id: dict[int, int]) -> None:
-    text_config = config.get_text_config()
-    for cfg in {id(config): config, id(text_config): text_config}.values():
+    text_config = config.get_text_config()  # the config itself for text-only models
+    for cfg in [config] if text_config is config else [config, text_config]:
         _remap_token_ids(cfg, new_id)
     text_config.vocab_size = len(new_id)
 
