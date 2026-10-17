@@ -1,6 +1,7 @@
 """Automatic metrics over model replies: language drift and training-data leaks."""
 
 import re
+import unicodedata
 from collections.abc import Iterable
 
 from fym1.eval.lang import is_malagasy
@@ -22,7 +23,7 @@ def drift_rate(responses: list[str]) -> float:
 
 
 def _ngrams(text: str, n: int) -> set[tuple[str, ...]]:
-    words = _WORD.findall(text.lower())
+    words = _WORD.findall(unicodedata.normalize("NFC", text).lower())
     return {tuple(words[i : i + n]) for i in range(len(words) - n + 1)}
 
 

@@ -19,24 +19,25 @@ GLOTLID_REVISION = "85cd6716494360367b75f642b5bc78667605d0b4"  # pinned for reru
 # Plateau Malagasy plus the Malagasy dialect labels GlotLID uses for short texts.
 MALAGASY_LABELS = frozenset({"plt_Latn", "xmv_Latn", "tdx_Latn", "skg_Latn"})
 
-# Common Malagasy words, including texting forms ("zany", "aona", "ahn", "zah").
+# Common Malagasy words, including texting forms ("zao", "aona", "ahn", "zah").
 # Words that are also English/French words or common names are left out on purpose
 # ("be", "no", "any", "sa", "lay", "marina", "e", "eh", "na", "ho", "mba", "aloha",
-# "tonga", "tia", "ko", "vita", "mila", "koa"), so a French or English sentence never
-# passes on a look-alike word.
+# "tonga", "tia", "ko", "vita", "mila", "koa", "zany"), so a French or English
+# sentence never passes on a look-alike word. Known limit: English that contains a
+# Malagasy name or a quoted Malagasy word can still pass ("Hi Vola, how are you?").
 MALAGASY_WORDS = frozenset(
     """
     ny ilay ve fa dia ka ary sy amin amina aminy amin'ny tamin'ny an'ny kosa satria raha
-    rehefa nefa kanefa sady fotsiny ihany avy eto ety ao eo izao zao izany zany ireo io
-    ity iny iry ireto inona iza aiza oviana ahoana aona nahoana firy ohatrinona tsy tsia
-    eny ia mbola efa tena loatra kely tsara ratsy mety tokony afaka tiako fantatro haiko
-    hoy aho ahy ianao anao ianareo anareo izy azy izahay izaho zah isika antsika ialahy
-    ry zalahy ahn rahampitso omaly anio androany rahariva alina maraina hariva misaotra
+    rehefa nefa kanefa sady fotsiny ihany avy eto ety ao eo izao zao izany ireo io ity
+    iny iry ireto inona iza aiza oviana ahoana aona nahoana firy ohatrinona tsy tsia eny
+    ia mbola efa tena loatra kely tsara ratsy mety tokony afaka tiako fantatro haiko hoy
+    aho ahy ianao anao ianareo anareo izy azy izahay izaho zah isika antsika ialahy ry
+    zalahy ahn rahampitso omaly anio androany rahariva alina maraina hariva misaotra
     betsaka veloma salama manao mandeha miasa mipetraka mahita mihinana misotro matory
     mody miverina mankany avia andao andeha vao vaovao mihitsy sahady foana tsotra olona
     namana trano sakafo vola fotoana zavatra resaka ndray indray angamba toa hafa
     rehetra daholo misy tsisy aza adino nao bé maintsy manana hisakafo azafady tompoko
-    manahoana mandria fahizay
+    manahoana mandria fahizay soa mafy mazotoa aleo tongava
     """.split()
 )
 

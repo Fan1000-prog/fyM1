@@ -34,6 +34,10 @@ def glotlid_loaded():
         "Manao ahoana ianao?\nTsara ve ny weekend?",
         "Inona no vaovao?",
         "Andao hisakafo, tsy maintsy manana vola kely aloha",
+        "Mazotoa",
+        "Tongava soa",
+        "Mafy be",
+        "Aleo aloha",
     ],
 )
 def test_everyday_malagasy_is_malagasy(text):
@@ -70,6 +74,8 @@ def test_everyday_malagasy_is_malagasy(text):
         "My tia lives in Tonga",
         "Mila is my friend",
         "Koa wood is expensive",
+        "Such a zany idea",
+        "So zany lol",
         "The IO board is broken",
     ],
 )
