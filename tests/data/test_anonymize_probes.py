@@ -441,13 +441,23 @@ def test_exact_mention_of_participant_first_name_with_unknown_surname():
         ("tel00261341234567", "tel<TEL>"),
         ("tel+2610341234567", "tel<TEL>"),
         ("tel2610341234567", "tel<TEL>"),
+        ("tel(034) 12 345 67", "tel<TEL>"),
+        ("tel+261 (0)34 123 45 67", "tel<TEL>"),
+        ("Tel(+261)34 123 45 67", "Tel<TEL>"),
+        ("tel(00261)34 123 45 67", "tel<TEL>"),
+        ("tel34 12 345 67", "tel<TEL>"),
+        ("tel341234567", "tel<TEL>"),
+        ("telO34 12 345 67", "tel<TEL>"),
+        ("tel+261 3 4 1 2 3 4 5 6 7", "tel<TEL>"),
     ],
 )
 def test_glued_international_phones(text, expected):
     assert Anonymizer(PRIV_NAMES)(text) == expected
 
 
-@pytest.mark.parametrize("text", ["20:30", "Amin'ny 20:30 isika", "1 000 000 Ar"])
+@pytest.mark.parametrize(
+    "text", ["20:30", "Amin'ny 20:30 isika", "1 000 000 Ar", "261 300 000 Ar", "1 261 340 000 Ar", "solo 34 olona"]
+)
 def test_times_and_amounts_stay(text):
     assert Anonymizer(PRIV_NAMES)(text) == text
 
@@ -480,3 +490,12 @@ def test_mention_stops_at_a_line_break(brk):
     out = NOBODY(f"@Fara{brk}Rabe salama")
 
     assert out.endswith(f"{brk}Rabe salama")
+
+
+@pytest.mark.parametrize("split", ["{a}_{b}", "{a}.{b}", "its{a}_{b}", "{a}2{b}"])
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_handle_fake_never_rebuilds_a_split_name(split, first):
+    key = first.lower()
+    out = NOBODY("@" + split.format(a=key[:2], b=key[2:]) + " salama")
+
+    assert compare_key(out.split()[0]) != compare_key(first)

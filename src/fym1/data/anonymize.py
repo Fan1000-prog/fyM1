@@ -48,16 +48,24 @@ URL = re.compile(
 )
 _SEP = r"\s*[./,_-]?\s*"
 _INTL = r"(?:\+|(?<!\d[ .,])00)"  # "00" not inside a long amount: "1 000 000 000 Ar"
+# A Malagasy number, written once so the spaced and glued rules accept the same forms.
+_MG_COUNTRY = rf"(?:\(\s*{_INTL}?261\s*\)|{_INTL}?261)"  # +261, 00261, 261, (+261)
+_MG_TRUNK = r"(?:\(\s*0\s*\)|[0Oo])"  # 0, (0), or "O" typed with a letter O
+_MG_PHONE = (
+    rf"(?:{_MG_COUNTRY}{_SEP}(?:{_MG_TRUNK}{_SEP})?\d(?:{_SEP}\d){{8}}"  # +261 34 …, +261 (0)34 …, (+261)34 …
+    rf"|{_MG_TRUNK}{_SEP}[23](?:{_SEP}\d){{8}}"  # 034 12 345 67, any grouping
+    rf"|\(\s*[0Oo][23]\d\s*\)(?:{_SEP}\d){{7}})"  # area code in brackets: (034) 12 345 67
+)
 PHONE = re.compile(
     r"(?<![\w+])(?:"
-    rf"(?:\(\s*{_INTL}261\s*\)|{_INTL}?261){_SEP}(?:\(0\){_SEP})?\d(?:{_SEP}\d){{8}}"  # Madagascar, intl
+    rf"{_MG_PHONE}"
     rf"|{_INTL}\d{{1,3}}(?:\s*\(\d{{1,4}}\))?(?:{_SEP}\d){{6,13}}"  # other intl: +33 6 …, +1 (555) …
-    rf"|\(\s*[0Oo]\d\d\s*\)(?:{_SEP}\d){{7}}"  # area code in brackets: (034) 12 345 67
     rf"|[0Oo](?:{_SEP}\d){{9}}"  # national, 10 digits however grouped; "O34" typed with a letter O
     rf"|3[2-9]{_SEP}\d\d{_SEP}\d{{3}}{_SEP}\d\d"  # mobile without the 0: 34 12 345 67
     r"|\d{9,15}"  # any other long run of digits
     r")(?!\w)"
-    rf"|(?<![\d+])(?:(?:\+|00)?261{_SEP}(?:0{_SEP})?|0)[23]\d(?:{_SEP}\d){{7}}(?!\d)"  # glued: "laharana034…", "wa+26134…"
+    rf"|(?<![\d+]){_MG_PHONE}(?!\d)"  # glued to a word: "laharana034 …", "wa+26134…", "tel(034) …"
+    rf"|(?<=[^\W\d_])3[2-9](?:{_SEP}\d){{7}}(?!\d)"  # glued, no leading 0: "tel34 12 345 67"
 )
 # "01/02/2026 03/04" is dates, not a phone: a year next to / or -.
 _DATE_LIKE = re.compile(r"[/-](?:19|20)\d\d\b|\b(?:19|20)\d\d[/-]")
@@ -121,6 +129,11 @@ def _is_free(fake: str, real_keys: set[str]) -> bool:
     return not any(key == w or _shares_prefix(key, w) for w in real_keys)
 
 
+def _letters_only(key: str) -> str:
+    """`key` with every non-letter dropped, so "mia_ly" and "onj2a" read "mialy" and "onja"."""
+    return re.sub(r"[\W\d_]", "", key)
+
+
 def _is_free_of_mention(name: str, own_keys: set[str]) -> bool:
     """`name` is free of the mention's words and sits inside none of them ("@itsmialy" -> not "Mialy")."""
     key = compare_key(name)
@@ -131,9 +144,10 @@ def _hashed_fake(text: str, words: int, firsts: list[str], lasts: list[str]) -> 
     """A fake name derived from `text`, so the same handle always reads the same.
 
     Pool names that share a word or 4+ letter start with `text` itself, or sit inside one of
-    its words, are skipped, so "@Mialy" and "@itsmialy" never come out as "Mialy".
+    its words or its letters joined up, are skipped, so "@Mialy", "@itsmialy" and "@mia_ly"
+    never come out as "Mialy".
     """
-    own_keys = {compare_key(p) for p in WORD.findall(text)}
+    own_keys = {compare_key(p) for p in WORD.findall(text)} | {_letters_only(compare_key(text))}
     firsts = [f for f in firsts if _is_free_of_mention(f, own_keys)] or [FALLBACK_NAME]
     lasts = [s for s in lasts if _is_free_of_mention(s, own_keys)] or [FALLBACK_NAME]
     number = int.from_bytes(hashlib.sha256(compare_key(text).encode("utf-8")).digest()[:4], "big")
