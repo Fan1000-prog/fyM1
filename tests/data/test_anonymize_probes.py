@@ -2,7 +2,7 @@
 
 import pytest
 
-from fym1.data.anonymize import Anonymizer, assign_fake_names, compare_key
+from fym1.data.anonymize import FIRST_NAMES, SURNAMES, Anonymizer, assign_fake_names, compare_key
 
 PEOPLE = ["Nirina Rakotomalala", "Soa Randria", "Haja Andrianasolo", "Fy Rakoto", "Jo Be", "Hélène Rabe"]
 REAL_PARTS = {compare_key(w) for name in PEOPLE for w in name.split()}
@@ -397,9 +397,7 @@ def test_glued_phone_rule_skips_years(text):
     assert Anonymizer(PRIV_NAMES)(text) == text
 
 
-# --- fresh review (PR #3 round 5) --------------------------------------------------------
-
-from fym1.data.anonymize import FIRST_NAMES, SURNAMES  # noqa: E402
+# --- leak fix: mention echo, glued +261 phones --------------------------------------------------------
 
 NOBODY = Anonymizer({})
 
@@ -440,6 +438,9 @@ def test_exact_mention_of_participant_first_name_with_unknown_surname():
         ("laharana+261341234567", "laharana<TEL>"),
         ("laharana261341234567", "laharana<TEL>"),
         ("laharana261 34 12 345 67", "laharana<TEL>"),
+        ("tel00261341234567", "tel<TEL>"),
+        ("tel+2610341234567", "tel<TEL>"),
+        ("tel2610341234567", "tel<TEL>"),
     ],
 )
 def test_glued_international_phones(text, expected):
@@ -452,7 +453,21 @@ def test_times_and_amounts_stay(text):
 
 
 def test_mention_across_a_non_breaking_space():
-    out = NOBODY("@Fara Rabe salama")
+    out = NOBODY("@Fara\u00a0Rabe salama")
 
-    assert not {"fara", "rabe"} & {compare_key(w) for w in out.replace(" ", " ").split()}
+    assert not {"fara", "rabe"} & {compare_key(w) for w in out.replace("\u00a0", " ").split()}
     assert out.endswith(" salama")
+
+
+@pytest.mark.parametrize("prefix", ["its", "xx", "i_", "mr", "the", "real"])
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_handle_fake_never_repeats_a_name_inside_the_handle(prefix, first):
+    out = NOBODY(f"@{prefix}{first.lower()} salama")
+
+    assert compare_key(out.split()[0]) != compare_key(first)
+
+
+def test_mention_stops_at_a_unicode_line_break():
+    out = NOBODY("@Fara\u2028Rabe salama")
+
+    assert out.endswith("\u2028Rabe salama")

@@ -57,7 +57,7 @@ PHONE = re.compile(
     rf"|3[2-9]{_SEP}\d\d{_SEP}\d{{3}}{_SEP}\d\d"  # mobile without the 0: 34 12 345 67
     r"|\d{9,15}"  # any other long run of digits
     r")(?!\w)"
-    rf"|(?<![\d+])(?:\+?261{_SEP}|0)[23]\d(?:{_SEP}\d){{7}}(?!\d)"  # glued: "laharana034 12…", "wa+26134…"
+    rf"|(?<![\d+])(?:(?:\+|00)?261{_SEP}(?:0{_SEP})?|0)[23]\d(?:{_SEP}\d){{7}}(?!\d)"  # glued: "laharana034…", "wa+26134…"
 )
 # "01/02/2026 03/04" is dates, not a phone: a year next to / or -.
 _DATE_LIKE = re.compile(r"[/-](?:19|20)\d\d\b|\b(?:19|20)\d\d[/-]")
@@ -75,7 +75,7 @@ LABELLED_HANDLE = re.compile(
 MENTION_MAX_WORDS = 3
 _LETTER_START = r"[^\W\d_]"
 MENTION = re.compile(
-    rf"(?<![\w.])@({_LETTER_START}(?:[\w.-]*\w)?)((?:[^\S\n]+{_LETTER_START}(?:[\w-]*\w)?){{0,{MENTION_MAX_WORDS - 1}}})"
+    rf"(?<![\w.])@({_LETTER_START}(?:[\w.-]*\w)?)((?:[ \t\u00a0\u202f]+{_LETTER_START}(?:[\w-]*\w)?){{0,{MENTION_MAX_WORDS - 1}}})"
 )
 _HANDLE_CHARS = re.compile(r"[._\d]")
 WORD = re.compile(r"\w+")
@@ -120,15 +120,21 @@ def _is_free(fake: str, real_keys: set[str]) -> bool:
     return not any(key == w or _shares_prefix(key, w) for w in real_keys)
 
 
+def _is_free_of_mention(name: str, own_keys: set[str]) -> bool:
+    """`name` is free of the mention's words and sits inside none of them ("@itsmialy" -> not "Mialy")."""
+    key = compare_key(name)
+    return _is_free(name, own_keys) and not any(key in w for w in own_keys)
+
+
 def _hashed_fake(text: str, words: int, firsts: list[str], lasts: list[str]) -> str:
     """A fake name derived from `text`, so the same handle always reads the same.
 
-    Pool names that share a word or 4+ letter start with `text` itself are skipped, so
-    "@Mialy" never comes out as "Mialy".
+    Pool names that share a word or 4+ letter start with `text` itself, or sit inside one of
+    its words, are skipped, so "@Mialy" and "@itsmialy" never come out as "Mialy".
     """
     own_keys = {compare_key(p) for p in WORD.findall(text)}
-    firsts = [f for f in firsts if _is_free(f, own_keys)] or [FALLBACK_NAME]
-    lasts = [s for s in lasts if _is_free(s, own_keys)] or [FALLBACK_NAME]
+    firsts = [f for f in firsts if _is_free_of_mention(f, own_keys)] or [FALLBACK_NAME]
+    lasts = [s for s in lasts if _is_free_of_mention(s, own_keys)] or [FALLBACK_NAME]
     number = int.from_bytes(hashlib.sha256(compare_key(text).encode("utf-8")).digest()[:4], "big")
     first = firsts[number % len(firsts)]
     return first if words == 1 else f"{first} {lasts[number // len(firsts) % len(lasts)]}"
