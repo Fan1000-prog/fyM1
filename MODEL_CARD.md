@@ -1,10 +1,10 @@
 ---
-# TODO(final): set license, base_model and model-index from results/model_selection.json.
+# Values tagged "# n:NAME" are filled by paper/make_numbers.py from results/.
 language:
   - mg
   - fr
-license: other
-base_model: pending
+license: pending # n:base-license-hf
+base_model: pending # n:base-model
 library_name: transformers
 pipeline_tag: text-generation
 tags:
@@ -17,9 +17,10 @@ tags:
 # fyM1
 
 fyM1 chats in everyday Malagasy: short, friendly, mixing in French, with texting spelling and emoji.
-It is a QLoRA fine-tune of *pending* (base model), made by Fan's lab.
+It is a QLoRA fine-tune of <!-- n:base-model -->pending<!-- /n -->, made by Fan's lab.
 
-**Status: v0.1.** Some results are pending. They will land in v0.2.
+**Status: v0.1.** *pending* means not measured yet. *pending (v0.2)* means it comes after this release
+(the blind human ratings).
 
 - Demo: [fyM1-chat](https://huggingface.co/spaces/Fan1000-Prog/fyM1-chat)
 - Code, notebooks and paper: [github.com/Fan1000-prog/fyM1](https://github.com/Fan1000-prog/fyM1)
@@ -29,9 +30,9 @@ It is a QLoRA fine-tune of *pending* (base model), made by Fan's lab.
 
 | File | What |
 |---|---|
-| *pending* | Merged 4-bit weights |
-| *pending* | LoRA adapter |
-| *pending* | GGUF Q4_K_M, for llama.cpp / Ollama / CPU |
+| TODO(final) | Merged 4-bit weights |
+| TODO(final) | LoRA adapter |
+| TODO(final) | GGUF Q4_K_M, for llama.cpp / Ollama / CPU |
 
 ## Intended use
 
@@ -48,21 +49,22 @@ It is a QLoRA fine-tune of *pending* (base model), made by Fan's lab.
 
 ```bash
 # TODO(final): exact file name of the GGUF.
-llama-cli -hf Fan1000-Prog/fyM1-<size> -p "Sali ahn"
+llama-cli -hf Fan1000-Prog/fyM1-<size>:Q4_K_M -p "Sali ahn"
 ```
 
 ## System prompt
 
 The model was trained with this system prompt. Use it for best results.
 
-- Malagasy: *pending (owner-approved wording)*
+- Malagasy: TODO(final): the owner-approved wording
 - English gloss: "You are a helpful Malagasy assistant trained by Fan's lab."
 
 ## Training data
 
 Described here, not shared. It contains private conversations.
 
-- Real everyday chats from a native speaker's Messenger export. Everyone in the chats agreed to this use.
+- Real everyday chats from one person's Messenger export (both sides of each conversation). The owner
+  confirmed everyone in the chats agreed to this use.
   Names, phone numbers, emails, links and handles were removed on the owner's laptop. A native speaker
   approved samples. The cleaned data is kept in a private dataset and is not released.
 - A small slice of Malagasy Wikipedia, for facts and spelling.
@@ -79,7 +81,7 @@ turns only. Full settings and the loss curve:
 
 ## Evaluation
 
-All numbers are written by scripts in the GitHub repo. *pending* means not measured yet.
+All numbers are written by scripts in the GitHub repo.
 
 <!-- numbers:start -->
 | Measure | Base model | fyM1 |
@@ -90,7 +92,7 @@ All numbers are written by scripts in the GitHub repo. *pending* means not measu
 | Belebele Malagasy reading (accuracy) | pending | pending |
 | FLORES chrF++ Malagasy to English | pending | pending |
 | FLORES chrF++ English to Malagasy | pending | pending |
-| Blind human votes: fyM1 win rate (v0.2) | - | pending |
+| Blind human votes: fyM1 win rate | - | pending (v0.2) |
 <!-- numbers:end -->
 
 Leak gate: the model does not ship if it repeats sentences from the training chats
@@ -98,18 +100,18 @@ Leak gate: the model does not ship if it repeats sentences from the training cha
 
 ## Example chats
 
-*pending* — taken only from the public test prompts in `eval/prompts.jsonl`, never from private chats.
+TODO(final): taken only from the public test prompts in `eval/prompts.jsonl`, never from private chats.
 
 ## Limits
 
 - The style comes mostly from one person's chats: everyday Antananarivo-style speech, not every dialect.
-- The blind human comparison is still running (v0.2).
+- The blind human comparison comes after release (v0.2).
 - It can be wrong, and it can invent things.
 - It has only a basic safety check. It is not a safety-tested product.
 
 ## License
 
-Follows the base model's license: *pending*. Code in the GitHub repo is Apache-2.0.
+Follows the base model's license: <!-- n:base-license -->pending<!-- /n -->. Code in the GitHub repo is Apache-2.0.
 
 ## Citation
 

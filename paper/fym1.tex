@@ -9,12 +9,12 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage{url}
 
-% Every measured number below is a macro written by paper/numbers.py from results/.
-% Rebuild with: uv run python paper/numbers.py && tectonic paper/fym1.tex
+% Every measured number below is a macro written by paper/make_numbers.py from results/.
+% Rebuild with: uv run python paper/make_numbers.py && tectonic paper/fym1.tex
 \input{numbers}
 
 \title{fyM1: Teaching an Open Model to Chat in Everyday Malagasy\\[0.3em]
-  \large Version 0.1 --- some results pending (v0.2)}
+  \large Version 0.1 --- human ratings pending (v0.2)}
 \author{Fan's lab}
 \date{October 2026}
 
@@ -22,15 +22,15 @@
 \maketitle
 
 \begin{abstract}
-% TODO(final): reword the result sentence to match the measured direction.
+% TODO(final): add one sentence on the main result once results/eval/ is in.
 Open language models that cover Malagasy tend to answer like an official letter: formal, stiff, and often
 half-translated from French or English. People in Madagascar do not text like that. We fine-tune an open
 model, \fyBaseModel{}, with QLoRA on a single free GPU so that it replies the way a friend would: short,
 friendly, mixing in French, and using everyday spelling. We describe how we chose the base model, how we
 built and anonymised the training data, how we trained and trimmed the model, and what we measured. On
-\fyEvalPrompts{} fresh everyday prompts, the share of replies that drift into full French or English falls
-from \fyDriftBase{} (base) to \fyDriftFymOne{} (fyM1). A blind human comparison is still collecting votes
-and is reported as pending.
+\fyEvalPrompts{} fresh everyday prompts, we report the share of replies that drift into full French or
+English (base: \fyDriftBase{}; fyM1: \fyDriftFymOne{}), LLM-judge scores, and regression checks on
+reading and translation. A blind human comparison is still collecting votes and is reported in v0.2.
 \end{abstract}
 
 \section{Motivation: the formal-versus-everyday gap}
@@ -78,10 +78,10 @@ Model & License & Belebele & chrF++ mg$\to$en & chrF++ en$\to$mg & Tokens/word &
 \label{sec:data}
 We describe the data but do not share it. It contains private conversations.
 
-\paragraph{Real chats.} The main source is a personal Messenger export from a native speaker. We parsed
-\fyDataThreads{} threads into \fyDataConversations{} short multi-turn conversations, splitting on long
-gaps and merging back-to-back messages from the same person. We kept conversations where most turns are
-Malagasy or Malagasy--French (language ID with GlotLID; \citealp{kargaran-etal-2023-glotlid}).
+\paragraph{Real chats.} The main source is one native speaker's Messenger export, using both sides of each
+conversation. We parsed \fyDataThreads{} threads into \fyDataConversations{} short multi-turn
+conversations, splitting on long gaps and merging back-to-back messages from the same side of the
+conversation. We kept conversations where at least half of the turns are Malagasy or Malagasy--French (language ID with GlotLID; \citealp{kargaran-etal-2023-glotlid}).
 A native speaker reviewed samples and approved \fyDataApproved{} conversations.
 
 \paragraph{Formal slice.} \fyDataFormal{} short single-turn examples built from Malagasy Wikipedia, so
@@ -153,9 +153,9 @@ FLORES+ chrF++ en$\to$mg ($\uparrow$) & \fyChrfEnMgBase & \fyChrfEnMgFymOne \\
 \label{tab:results}
 \end{table}
 
-\paragraph{Automatic judge.} An LLM judge (\fyJudgeModel{}) scored both answer sets blind, with labels
-hidden and order shuffled, on a published 1--5 rubric for naturalness and correctness
-\citep{zheng2023judging}. Judge scores are a cheap signal, not a substitute for native speakers.
+\paragraph{Automatic judge.} An LLM judge scored both answer sets blind, with labels hidden and order
+shuffled, on a published 1--5 rubric for naturalness and correctness
+\citep{zheng2023judging}. Judge: \fyJudgeModel{}. Judge scores are a cheap signal, not a substitute for native speakers.
 
 \paragraph{Leak check.} We test whether fyM1 repeats training text: \fyLeakFymOne{} of its answers share
 an 8-word sequence with the training chats. The release gate was at most 1\%.

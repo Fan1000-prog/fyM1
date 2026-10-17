@@ -6,7 +6,8 @@ An open AI model that chats in everyday Malagasy. The way people really text —
 
 **[Try it](#try-it)** · [Paper](paper/fym1.pdf) · [Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fyM1-arena)
 
-> **Status: v0.1.** Some results are still coming in. Anything marked *pending* will land in v0.2.
+> **Status: v0.1.** *pending* means not measured yet. *pending (v0.2)* means it comes after this
+> release: the blind human ratings, and the layer-pruning experiment.
 
 ## Goals
 
@@ -49,7 +50,7 @@ Each one was scored on:
 | License | We prefer a permissive license when quality is close. |
 
 The full table and the winner are in [`results/model_selection.md`](results/model_selection.md) and in
-the paper. Winner: *pending*.
+the paper. Winner: <!-- n:base-model -->pending<!-- /n --> (license: <!-- n:base-license -->pending<!-- /n -->).
 
 ## How it was trained
 
@@ -57,29 +58,29 @@ Every choice, and why we made it:
 
 | Choice | Why |
 |---|---|
-| **Real chats** from a native speaker's Messenger export are the main data. | That is where the everyday style lives. |
+| **Real chats** from one person's Messenger export (both sides of each conversation) are the main data. | That is where the everyday style lives. |
 | Names, phone numbers, emails, links and handles are removed **on the owner's laptop** before anything leaves it. | Privacy. Raw chats never go to git, Colab or any public place. |
 | The owner checks samples and approves the cleaned data. | A native speaker is the only real check for privacy and style. |
-| Cleaned data lives only in a **private** dataset. It is never released. | It is still people's private conversations. Everyone in the chats agreed to this use. |
+| Cleaned data lives only in a **private** dataset. It is never released. | It is still people's private conversations. The owner confirmed everyone in the chats agreed to this use. |
 | A **small** slice of formal Malagasy (Wikipedia) is mixed in. | Keeps facts and spelling. Kept small so the style does not turn formal again. |
 | Synthetic chats only if real chats are too few, made by an open model we run ourselves. | No paid APIs, no closed-model outputs, no private data sent to anyone. Budget: $0. |
-| A few "who are you?" answers and polite refusals, written by the owner. | The model knows it was made by Fan's lab and says no to harmful asks. |
-| **QLoRA**: the model stays frozen in 4-bit, we train small add-on weights (LoRA) on all linear layers. | It is the only way to fit this model size on a free 16 GB T4 GPU. |
+| A few "who are you?" answers and polite refusals, written by the owner. | Teaches it to say it was made by Fan's lab and to turn down harmful requests politely. This is a basic check, not a safety guarantee. |
+| **QLoRA**: the model stays frozen in 4-bit, we train small add-on weights (LoRA) on all linear layers. | It lets a 7-12B model train on one free 16 GB T4 GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). |
 | Learn from the assistant's replies only. | We want it to learn how to answer, not to copy the user. |
 | Save a checkpoint to a private repo often, and resume from the latest one. | Free Colab sessions disconnect. No work is lost. |
-| Stop early if the held-out loss gets worse. | Stops the model from memorising the training chats. |
+| Stop early if the held-out loss gets worse. | Reduces overfitting. The leak check below is what tests memorising. |
 | Test prompts are written fresh, not taken from the chats. | So the test set can be public and anyone can rerun it. |
 | **Leak check** before release: does the model repeat training sentences? If yes, it does not ship. | Privacy again. |
-| **Vocabulary trimming**: drop tokens Malagasy, French and English never use. Ships only if it passes its checks. | A smaller, faster download with the same answers. |
+| **Vocabulary trimming**: drop tokens Malagasy, French and English never use. Ships only if it passes its checks. | A smaller download. The checks: held-out Malagasy text comes back unchanged, at least 95% of test answers stay identical (greedy decoding), and Belebele stays within 1 point. |
 | No layer pruning yet. | Cutting real layers needs a lot of retraining to heal. Free GPU time cannot pay for that. Planned for v0.2 as an experiment. |
-| Demo runs a 4-bit GGUF file on a free CPU. | Free for everyone. Slow, but it works. |
+| Demo runs a 4-bit GGUF file on a free CPU. | Free for everyone. It is slow. |
 
 Exact settings and the training log are in [`results/train_log.json`](results/train_log.json).
 
 ## Results
 
 The numbers below come from files in [`results/`](results/), written by scripts in this repo. Nothing is
-typed by hand. *pending* means not measured yet.
+typed by hand.
 
 <!-- numbers:start -->
 | Measure | Base model | fyM1 |
@@ -90,13 +91,13 @@ typed by hand. *pending* means not measured yet.
 | Belebele Malagasy reading (accuracy) | pending | pending |
 | FLORES chrF++ Malagasy to English | pending | pending |
 | FLORES chrF++ English to Malagasy | pending | pending |
-| Blind human votes: fyM1 win rate (v0.2) | - | pending |
+| Blind human votes: fyM1 win rate | - | pending (v0.2) |
 <!-- numbers:end -->
 
 Where each number comes from:
 
 - Automatic scores: [`results/eval/scores.json`](results/eval/) and [`results/eval/judge.json`](results/eval/)
-- Blind human votes: [`results/eval/arena.json`](results/eval/) — *pending (v0.2)*, raters are still voting
+- Blind human votes: [`results/eval/arena.json`](results/eval/) — *pending (v0.2)*: raters vote after release
 - Model size before and after trimming: [`results/shrink.json`](results/shrink.json)
 - Data counts (counts only, never text): [`results/data_stats.json`](results/data_stats.json)
 
@@ -115,8 +116,8 @@ The LLM judge is a cheap extra signal. Native speakers are the real judges.
 
 - **Chat with it:** [fyM1-chat](https://huggingface.co/spaces/Fan1000-Prog/fyM1-chat) — free, no login.
   Try "Sali ahn" or "De ahoana?".
-- **Download the model:** [Fan1000-Prog/fyM1-&lt;size&gt;](https://huggingface.co/Fan1000-Prog) — *link pending*.
-  Works with llama.cpp and Ollama (GGUF file).
+- **Download the model:** <!-- n:model-repo -->pending<!-- /n --> on [Hugging Face](https://huggingface.co/Fan1000-Prog).
+  The GGUF file runs with llama.cpp and Ollama.
 - **Read the paper:** [paper/fym1.pdf](paper/fym1.pdf)
 - **Help us rate (native speakers):** [fyM1-arena](https://huggingface.co/spaces/Fan1000-Prog/fyM1-arena) —
   read two answers, pick the more natural one. No login.
@@ -140,7 +141,7 @@ Then, in order:
 5. Rebuild the numbers and the paper:
 
    ```bash
-   uv run python paper/numbers.py --markdown README.md MODEL_CARD.md
+   uv run python paper/make_numbers.py --markdown README.md MODEL_CARD.md
    cd paper && tectonic fym1.tex
    ```
 
