@@ -1,0 +1,48 @@
+{
+  "participants": [
+    {
+      "name": "Nirina Rakoto"
+    },
+    {
+      "name": "Tojo Randria"
+    }
+  ],
+  "messages": [
+    {
+      "sender_name": "Nirina Rakoto",
+      "timestamp_ms": 1760000240000,
+      "content": "tsy tokony ho hita ity",
+      "is_unsent": true
+    },
+    {
+      "sender_name": "Nirina Rakoto",
+      "timestamp_ms": 1760000180000,
+      "sticker": {
+        "uri": "stickers/1.png"
+      }
+    },
+    {
+      "sender_name": "Tojo Randria",
+      "timestamp_ms": 1760000120000,
+      "photos": [
+        {
+          "uri": "photos/1.jpg",
+          "creation_timestamp": 1760000000
+        }
+      ]
+    },
+    {
+      "sender_name": "Tojo Randria",
+      "timestamp_ms": 1760000060000,
+      "content": "Tsara be, ary ianao?"
+    },
+    {
+      "sender_name": "Nirina Rakoto",
+      "timestamp_ms": 1760000000000,
+      "content": "Salama ry Tojo! De aona?"
+    }
+  ],
+  "title": "Nirina Rakoto",
+  "is_still_participant": true,
+  "thread_path": "inbox/nirinarakoto_10001"
+}
