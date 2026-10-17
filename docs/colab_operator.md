@@ -75,14 +75,15 @@ How notebooks in `notebooks/` are run on a free Colab T4, driven by Playwright. 
      ```
 
      Continue only if `ok` and `accessOn` are `true`, `rows` is `1` and `leaks` is `false`.
-     - `ok: false`: something on the page changed. Do not retry blindly and do not snapshot the open
-       pane; report to the lead. A new one-time URL is needed for any retry (the server has exited).
+     - `ok: false` or `leaks: true` (on any error): reload the page (`page.reload()` inside
+       `browser_run_code_unsafe`), do not snapshot, run the grep-and-delete below, then report to the
+       lead. A new one-time URL is needed for any retry (the server has exited).
      - `rows` above `1`: an older run left duplicate `HF_TOKEN` rows. Ask the owner to delete the extras
        by hand in the Secrets pane, then re-run.
      The secret is saved per Google account; in a new notebook Colab asks **Grant access** on the first
      `userdata.get` instead.
-   - Finally scan Playwright output for the token pattern and delete any hit:
-     `grep -rlE 'hf_[A-Za-z0-9_.-]{20,}' ~/.playwright-mcp/ | xargs rm -f`.
+   - Finally scan Playwright output (home and current directory) for the token pattern and delete any hit:
+     `grep -rlZE 'hf_[A-Za-z0-9_.-]{20,}' ~/.playwright-mcp/ ./.playwright-mcp/ 2>/dev/null | xargs -0 rm -f`.
 4. **Runtime → Run all** (`Ctrl+F9`). Wait for "Allocating runtime" to finish (~30 s on T4).
    If a "Run anyway" (notebook not authored by Google) or "Grant access" dialog appears, accept it.
 5. Read outputs with `browser_find` on a marker the notebook prints (smoke prints `SMOKE_OK {...}`), or
