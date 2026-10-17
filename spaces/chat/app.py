@@ -9,14 +9,18 @@ import os
 import gradio as gr
 from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
-from prompt import build_messages
+from prompt import MessageTooLong, build_messages
 
 GITHUB_URL = "https://github.com/Fan1000-prog/fyM1"
 FOOTER = f"[Code]({GITHUB_URL}) · [Paper]({GITHUB_URL}/tree/main/paper) · [Arena](https://huggingface.co/spaces/Fan1000-Prog/fyM1-arena)"
 # Same sampling as the eval run, so the demo shows the model that was measured.
 SAMPLING = {"temperature": 0.7, "top_p": 0.9, "max_tokens": 256}
 CONTEXT_TOKENS = 4096
+# Room for the prompt: the window minus the reply, minus slack for template tokens the estimate misses.
+PROMPT_TOKEN_BUDGET = CONTEXT_TOKENS - SAMPLING["max_tokens"] - 64
 CPU_THREADS = 2  # free CPU Space has 2 vCPU; os.cpu_count() reports the host's cores
+# OWNER REVIEW: Malagasy below is a draft by the builder; the native-speaker owner fixes the wording.
+TOO_LONG = "Lava loatra ilay hafatra. Fohezo kely azafady."
 
 
 def required_env(name: str) -> str:
@@ -35,9 +39,17 @@ llm = Llama(
 )
 
 
+def count_tokens(text: str) -> int:
+    return len(llm.tokenize(text.encode("utf-8"), add_bos=False, special=True))
+
+
 def respond(message: str, history: list[dict]):
+    try:
+        messages = build_messages(SYSTEM_PROMPT, history, message, count_tokens, PROMPT_TOKEN_BUDGET)
+    except MessageTooLong:
+        raise gr.Error(TOO_LONG) from None
     reply = ""
-    stream = llm.create_chat_completion(build_messages(SYSTEM_PROMPT, history, message), stream=True, **SAMPLING)
+    stream = llm.create_chat_completion(messages, stream=True, **SAMPLING)
     for chunk in stream:
         reply += chunk["choices"][0]["delta"].get("content") or ""
         yield reply

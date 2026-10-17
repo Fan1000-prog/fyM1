@@ -58,6 +58,11 @@ def start_vote_upload() -> threading.Lock:
     if not VOTES_REPO:
         print(f"VOTES_REPO is empty: votes stay in {VOTES_DIR} and are not uploaded")
         return threading.Lock()
+    # Check privacy before the scheduler exists, so no vote can be pushed to a public repo.
+    api = HfApi()
+    api.create_repo(VOTES_REPO, repo_type="dataset", private=True, exist_ok=True)
+    if not api.repo_info(VOTES_REPO, repo_type="dataset").private:
+        raise RuntimeError(f"{VOTES_REPO} is public; make it private before collecting votes")
     scheduler = CommitScheduler(
         repo_id=VOTES_REPO,
         repo_type="dataset",
@@ -65,9 +70,8 @@ def start_vote_upload() -> threading.Lock:
         path_in_repo="votes",
         private=True,
         every=2,  # minutes
+        hf_api=api,
     )
-    if not HfApi().repo_info(VOTES_REPO, repo_type="dataset").private:
-        raise RuntimeError(f"{VOTES_REPO} is public; make it private before collecting votes")
     return scheduler.lock
 
 
