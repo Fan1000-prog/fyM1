@@ -9,6 +9,8 @@ How notebooks in `notebooks/` are run on a free Colab T4, driven by Playwright. 
 - The GitHub repo is private: never open notebooks from GitHub. Upload the `.ipynb` file instead.
   Notebooks get repo code from `Fan1000-Prog/fyM1-ckpt` under `code/`, or are self-contained.
 - The HF token never appears in a transcript, tool argument, commit, notebook, or cell output.
+- Nothing browser-related enters the repo: Playwright snapshots, screenshots and console logs stay in
+  `~/.playwright-mcp/` (outside every worktree; `.playwright-mcp/` is also gitignored).
 
 ## Click path
 1. Open `https://colab.research.google.com/?authuser=1` → **Upload notebook** → **Browse** → pick the
@@ -17,17 +19,37 @@ How notebooks in `notebooks/` are run on a free Colab T4, driven by Playwright. 
    **Connect T4**. If not: **Runtime → Change runtime type → T4 GPU → Save**.
 3. `HF_TOKEN` secret (once per Google account; it persists across notebooks, but notebook access is
    granted per notebook):
-   - Left sidebar key icon (**Secrets**) → **Add new secret** → name `HF_TOKEN`.
-   - Value: run `python scripts/serve_hf_token_once.py <random-path>` in the background, then in
-     `browser_run_code_unsafe`:
-     `const t = (await (await page.request.get('http://127.0.0.1:8765/<random-path>')).text()).trim();`
-     `await page.getByRole('textbox', { name: 'Value of new secret' }).fill(t);`
-     Return only booleans/length, never `t`. (`fs`/`process` are not available in that sandbox;
-     `page.request` runs in Node, so there is no CORS or mixed-content issue.)
-   - Toggle **notebook access** for `HF_TOKEN` (switch in the secret's row) and check it is on.
-   - **Close the Secrets pane before any snapshot.** The accessibility snapshot of the open pane
-     contains the secret value. Check with
-     `/hf_[A-Za-z0-9_.-]{20,}/.test(await page.locator('body').ariaSnapshot())` → must be `false`.
+   - **No snapshot-producing tool** (`browser_click`, `browser_type`, `browser_snapshot`,
+     `browser_find`, screenshots) may touch the page while the Secrets pane is open: they write the
+     accessibility tree, which contains the secret value, to `.playwright-mcp/page-*.yml`.
+   - Run `python scripts/serve_hf_token_once.py` in the background; it prints a one-time loopback URL.
+   - Then ONE `browser_run_code_unsafe` call does everything and returns booleans only
+     (`fs`/`process` are not available in that sandbox; `page.request` runs in Node):
+
+     ```js
+     async (page) => {
+       const t = (await (await page.request.get('<one-time URL>')).text()).trim();
+       await page.getByRole('button', { name: 'Secrets' }).click();
+       await page.getByRole('button', { name: 'Add new secret' }).click();
+       await page.getByRole('textbox', { name: 'Name of new secret' }).last().fill('HF_TOKEN');
+       await page.getByRole('textbox', { name: 'Value of new secret' }).last().fill(t);
+       await page.keyboard.press('Tab');
+       await page.waitForTimeout(1500);
+       const sw = page.getByRole('switch', { name: 'Toggle notebook access for secret "HF_TOKEN"' });
+       if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click();
+       await page.waitForTimeout(1000);
+       const accessOn = (await sw.getAttribute('aria-checked')) === 'true';
+       await page.getByRole('button', { name: 'Close left pane' }).click();
+       await page.waitForTimeout(500);
+       const leaks = /hf_[A-Za-z0-9_.-]{20,}/.test(await page.locator('body').ariaSnapshot());
+       return { filled: t.startsWith('hf_'), accessOn, leaks };
+     }
+     ```
+
+     Continue only if `accessOn` is `true` and `leaks` is `false`. The secret is saved per Google
+     account; in a new notebook Colab asks **Grant access** on the first `userdata.get` instead.
+   - Finally scan Playwright output for the token pattern and delete any hit:
+     `grep -rlE 'hf_[A-Za-z0-9_.-]{20,}' ~/.playwright-mcp/ | xargs rm -f`.
 4. **Runtime → Run all** (`Ctrl+F9`). Wait for "Allocating runtime" to finish (~30 s on T4).
    If a "Run anyway" (notebook not authored by Google) or "Grant access" dialog appears, accept it.
 5. Read outputs with `browser_find` on a marker the notebook prints (smoke prints `SMOKE_OK {...}`), or
