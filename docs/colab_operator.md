@@ -23,31 +23,64 @@ How notebooks in `notebooks/` are run on a free Colab T4, driven by Playwright. 
      `browser_find`, screenshots) may touch the page while the Secrets pane is open: they write the
      accessibility tree, which contains the secret value, to `.playwright-mcp/page-*.yml`.
    - Run `python scripts/serve_hf_token_once.py` in the background; it prints a one-time loopback URL.
-   - Then ONE `browser_run_code_unsafe` call does everything and returns booleans only
-     (`fs`/`process` are not available in that sandbox; `page.request` runs in Node):
+   - Then ONE `browser_run_code_unsafe` call does everything and returns booleans and counts only
+     (`fs`/`process` are not available in that sandbox; `page.request` runs in Node). After the token
+     fetch nothing can throw: any failure returns `{ ok: false }` and never error text, which could
+     echo page content. The pane is always closed (page reloaded if closing fails). On a re-run it
+     updates the existing `HF_TOKEN` row instead of adding a second one, because a duplicate row makes
+     the switch locator match twice.
 
      ```js
      async (page) => {
        const t = (await (await page.request.get('<one-time URL>')).text()).trim();
-       await page.getByRole('button', { name: 'Secrets' }).click();
-       await page.getByRole('button', { name: 'Add new secret' }).click();
-       await page.getByRole('textbox', { name: 'Name of new secret' }).last().fill('HF_TOKEN');
-       await page.getByRole('textbox', { name: 'Value of new secret' }).last().fill(t);
-       await page.keyboard.press('Tab');
-       await page.waitForTimeout(1500);
        const sw = page.getByRole('switch', { name: 'Toggle notebook access for secret "HF_TOKEN"' });
-       if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click();
-       await page.waitForTimeout(1000);
-       const accessOn = (await sw.getAttribute('aria-checked')) === 'true';
-       await page.getByRole('button', { name: 'Close left pane' }).click();
-       await page.waitForTimeout(500);
-       const leaks = /hf_[A-Za-z0-9_.-]{20,}/.test(await page.locator('body').ariaSnapshot());
-       return { filled: t.startsWith('hf_'), accessOn, leaks };
+       const valueBox = page.getByRole('textbox', { name: /value/i });
+       let result = { ok: false };
+       try {
+         await page.getByRole('button', { name: 'Secrets' }).click();
+         await page.waitForTimeout(1000);
+         const existing = await sw.count();
+         if (existing === 0) {
+           await page.getByRole('button', { name: 'Add new secret' }).click();
+           await page.getByRole('textbox', { name: 'Name of new secret' }).last().fill('HF_TOKEN');
+           await page.getByRole('textbox', { name: 'Value of new secret' }).last().fill(t);
+         } else {
+           // The HF_TOKEN row: the innermost element holding both its switch and a value field.
+           const row = page.locator('*').filter({ has: sw }).filter({ has: valueBox }).last();
+           await row.getByRole('textbox', { name: /value/i }).fill(t);
+         }
+         await page.keyboard.press('Tab');
+         await page.waitForTimeout(1500);
+         const rows = await sw.count();
+         if ((await sw.first().getAttribute('aria-checked')) !== 'true') await sw.first().click();
+         await page.waitForTimeout(1000);
+         const accessOn = (await sw.first().getAttribute('aria-checked')) === 'true';
+         result = { ok: true, filled: t.startsWith('hf_'), updatedExisting: existing > 0, rows, accessOn };
+       } catch {
+         result = { ok: false };
+       } finally {
+         try {
+           await page.getByRole('button', { name: 'Close left pane' }).click({ timeout: 5000 });
+         } catch {
+           try { await page.reload(); } catch { result = { ok: false }; }
+         }
+       }
+       let leaks = true;  // unknown counts as a leak
+       try {
+         await page.waitForTimeout(500);
+         leaks = /hf_[A-Za-z0-9_.-]{20,}/.test(await page.locator('body').ariaSnapshot());
+       } catch {}
+       return { ...result, leaks };
      }
      ```
 
-     Continue only if `accessOn` is `true` and `leaks` is `false`. The secret is saved per Google
-     account; in a new notebook Colab asks **Grant access** on the first `userdata.get` instead.
+     Continue only if `ok` and `accessOn` are `true`, `rows` is `1` and `leaks` is `false`.
+     - `ok: false`: something on the page changed. Do not retry blindly and do not snapshot the open
+       pane; report to the lead. A new one-time URL is needed for any retry (the server has exited).
+     - `rows` above `1`: an older run left duplicate `HF_TOKEN` rows. Ask the owner to delete the extras
+       by hand in the Secrets pane, then re-run.
+     The secret is saved per Google account; in a new notebook Colab asks **Grant access** on the first
+     `userdata.get` instead.
    - Finally scan Playwright output for the token pattern and delete any hit:
      `grep -rlE 'hf_[A-Za-z0-9_.-]{20,}' ~/.playwright-mcp/ | xargs rm -f`.
 4. **Runtime → Run all** (`Ctrl+F9`). Wait for "Allocating runtime" to finish (~30 s on T4).
