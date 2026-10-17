@@ -7,9 +7,13 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def is_ignored(path: str) -> bool:
+    # --no-index checks the rules themselves, even for paths already tracked
     result = subprocess.run(
-        ["git", "check-ignore", "-q", path], cwd=REPO, capture_output=True
+        ["git", "check-ignore", "-q", "--no-index", path],
+        cwd=REPO,
+        capture_output=True,
     )
+    assert result.returncode in (0, 1), result.stderr
     return result.returncode == 0
 
 
@@ -21,7 +25,7 @@ def test_private_paths_are_ignored(path):
 
 
 @pytest.mark.parametrize(
-    "path", ["src/fym1/data/__init__.py", "tests/data/fixtures/x.json"]
+    "path", ["src/fym1/data/new_module.py", "tests/data/fixtures/x.json"]
 )
 def test_code_and_fixtures_are_tracked(path):
     assert not is_ignored(path)

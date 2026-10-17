@@ -1,6 +1,6 @@
 # Resaka — an everyday-Malagasy chat model
 
-Design, 2026-10-17. Owner: Fandresena (native Malagasy speaker). Project name "Resaka" ("conversation") is a placeholder — builder's call unless the owner renames it.
+Design, 2026-10-17. Owner: Fan's lab (native Malagasy speaker). Project name "Resaka" ("conversation") is a placeholder — builder's call unless the owner renames it.
 
 ## 1. Intent — why this exists
 
@@ -90,7 +90,7 @@ Two audiences:
 ### 5.6 Publishing
 - **HF model repo** (public): merged 4-bit weights + LoRA adapter + GGUF (Q4_K_M) for CPU/llama.cpp/Ollama; model card with data description (no private content), limits, eval table, example chats.
 - **HF Space** (public, free CPU tier): Gradio chat running the GGUF. Slow but free. Pre-filled example prompts ("Sali ahn", "De ahoana?").
-- **GitHub repo** `Fan1000-prog/resaka` (public): code, notebook, eval scripts, paper source + PDF, README (goals, what this is, how and why the model was chosen and trained — every decision with its reason, CTA "Try it" → Space, links to the model and paper). Private data paths are git-ignored.
+- **GitHub repo** `Fan1000-prog/fyM1` (public): code, notebook, eval scripts, paper source + PDF, README (goals, what this is, how and why the model was chosen and trained — every decision with its reason, CTA "Try it" → Space, links to the model and paper). Private data paths are git-ignored.
 - **Paper:** short (4–6 page) LaTeX PDF: motivation, model selection, data (described, not shared), method, trimming/pruning, results, limits, ethics/privacy.
 
 ### 5.7 Team split (agents)
