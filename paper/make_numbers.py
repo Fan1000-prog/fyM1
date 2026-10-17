@@ -3,9 +3,10 @@
 Writes paper/numbers.tex (one \\newcommand per number). With --markdown it also refreshes each given
 file: the results table between <!-- numbers:start --> and <!-- numbers:end -->, inline values
 written as <!-- n:NAME -->value<!-- /n -->, and YAML front-matter lines ending in "# n:NAME".
-A value not measured yet renders as "pending" ("pending (v0.2)" for v0.2 items), so the paper
-always builds and no number is ever typed by hand. A key missing from a file that exists is
-printed as a warning. --strict (used at release) fails if any v0.1 value is missing.
+A value not measured yet renders as "pending", so the paper always builds and no number is ever
+typed by hand. Only the files listed below are read (never judge_key.json or judge_raw.json, which
+would unblind the judge). A key missing from a file that exists is printed as a warning.
+--strict (used at release) fails if any value is missing.
 
 Usage: uv run python paper/make_numbers.py [--results results] [--out paper/numbers.tex]
                                            [--markdown README.md MODEL_CARD.md] [--strict]
@@ -20,7 +21,7 @@ Expected files (keys are dotted paths below):
   eval/scores.json       n_prompts, {base,fym1}.{drift_rate, leak_rate, perplexity,
                          belebele_acc, chrf_plt_eng, chrf_eng_plt}
   eval/judge.json        judge, {base,fym1}.{naturalness, correctness}
-  eval/arena.json        votes, raters, fym1_win_rate, ci_low, ci_high                     (v0.2)
+  eval/arena.json        votes, raters, fym1_win_rate, ci_low, ci_high (early votes at v0.1)
   shrink.json            gates_passed, vocab_before, vocab_after, params_before, params_after,
                          gguf_bytes_before, gguf_bytes_after, tokens_per_sec_before, tokens_per_sec_after
 """
@@ -36,7 +37,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 PENDING = "pending"
-LATER = "v0.2"
 MACRO_PREFIX = "fy"
 README_START = "<!-- numbers:start -->"
 README_END = "<!-- numbers:end -->"
@@ -119,11 +119,6 @@ class Number:
     file: str  # path under results/
     key: str  # dotted path inside the JSON file
     fmt: Callable[[Any], str]
-    release: str = "v0.1"  # the release this number is due in; later ones may stay pending
-
-    @property
-    def pending(self) -> str:
-        return PENDING if self.release == "v0.1" else f"{PENDING} ({self.release})"
 
 
 # fmt: off
@@ -173,12 +168,12 @@ NUMBERS: list[Number] = [
     Number("natural-fym1", "eval/judge.json", "fym1.naturalness", fixed(2)),
     Number("correct-base", "eval/judge.json", "base.correctness", fixed(2)),
     Number("correct-fym1", "eval/judge.json", "fym1.correctness", fixed(2)),
-    # human arena: raters vote after release
-    Number("arena-votes", "eval/arena.json", "votes", count, LATER),
-    Number("arena-raters", "eval/arena.json", "raters", count, LATER),
-    Number("arena-win-rate", "eval/arena.json", "fym1_win_rate", percent, LATER),
-    Number("arena-ci-low", "eval/arena.json", "ci_low", percent, LATER),
-    Number("arena-ci-high", "eval/arena.json", "ci_high", percent, LATER),
+    # human arena: v0.1 reports the early votes in at release; the full panel's result is v0.2
+    Number("arena-votes", "eval/arena.json", "votes", count),
+    Number("arena-raters", "eval/arena.json", "raters", count),
+    Number("arena-win-rate", "eval/arena.json", "fym1_win_rate", percent),
+    Number("arena-ci-low", "eval/arena.json", "ci_low", percent),
+    Number("arena-ci-high", "eval/arena.json", "ci_high", percent),
     # vocabulary trimming
     Number("trim-gates", "shrink.json", "gates_passed", passed),
     Number("vocab-before", "shrink.json", "vocab_before", count),
@@ -191,7 +186,6 @@ NUMBERS: list[Number] = [
     Number("tps-after", "shrink.json", "tokens_per_sec_after", fixed(1)),
 ]
 # fmt: on
-BY_NAME = {n.name: n for n in NUMBERS}
 
 # README results table: (row label, base macro name or None, fyM1 macro name)
 README_ROWS: list[tuple[str, str | None, str]] = [
@@ -201,10 +195,11 @@ README_ROWS: list[tuple[str, str | None, str]] = [
     ("Belebele Malagasy reading (accuracy)", "belebele-base", "belebele-fym1"),
     ("FLORES chrF++ Malagasy to English", "chrf-mg-en-base", "chrf-mg-en-fym1"),
     ("FLORES chrF++ English to Malagasy", "chrf-en-mg-base", "chrf-en-mg-fym1"),
-    ("Blind human votes: fyM1 win rate", None, "arena-win-rate"),
+    ("Blind human votes so far (early votes): fyM1 win rate", None, "arena-win-rate"),
 ]
 
 SELECTION_FILE = "model_selection.json"
+RESULT_FILES = sorted({n.file for n in NUMBERS} | {SELECTION_FILE})
 SELECTION_COLUMNS = ["belebele_acc", "chrf_plt_eng", "chrf_eng_plt", "tokens_per_word", "sniff_natural"]
 SELECTION_FORMATS: dict[str, Callable[[Any], str]] = {
     "belebele_acc": percent,
@@ -220,7 +215,7 @@ class Resolved:
     values: dict[str, str | None]  # number name -> formatted plain text, None when not measured
     rows: list[list[str | None]]  # model-selection table
     missing_keys: list[str]  # "file: key" for keys absent from a file that exists
-    missing_now: list[str]  # "file: key" for every v0.1 value not measured (what --strict fails on)
+    missing: list[str]  # "file: key" for every value not measured (what --strict fails on)
 
 
 def latex_name(name: str) -> str:
@@ -237,10 +232,12 @@ def latex_escape(s: str) -> str:
 
 
 def load_results(results_dir: Path) -> dict[str, Any]:
-    """Every *.json under results_dir, keyed by its path relative to results_dir."""
+    """The known result files that exist, keyed by their path under results_dir. Nothing else is read."""
     loaded = {}
-    for path in sorted(results_dir.rglob("*.json")):
-        loaded[path.relative_to(results_dir).as_posix()] = json.loads(path.read_text(encoding="utf-8"))
+    for name in RESULT_FILES:
+        path = results_dir / name
+        if path.is_file():
+            loaded[name] = json.loads(path.read_text(encoding="utf-8"))
     return loaded
 
 
@@ -256,19 +253,18 @@ def lookup(data: Any, key: str) -> Any:
 def resolve(results: dict[str, Any], numbers: list[Number] = NUMBERS) -> Resolved:
     values: dict[str, str | None] = {}
     missing_keys: list[str] = []
-    missing_now: list[str] = []
+    missing: list[str] = []
 
-    def note_missing(file: str, key: str, release: str = "v0.1") -> None:
+    def note_missing(file: str, key: str) -> None:
         where = f"{file}: {key}"
         if file in results:
             missing_keys.append(where)
-        if release == "v0.1":
-            missing_now.append(where)
+        missing.append(where)
 
     for number in numbers:
         raw = lookup(results.get(number.file), number.key)
         if raw is None:
-            note_missing(number.file, number.key, number.release)
+            note_missing(number.file, number.key)
             values[number.name] = None
         else:
             values[number.name] = number.fmt(raw)
@@ -285,21 +281,17 @@ def resolve(results: dict[str, Any], numbers: list[Number] = NUMBERS) -> Resolve
                 note_missing(SELECTION_FILE, f"candidates[{i}].{col}")
             row.append(None if raw is None else SELECTION_FORMATS.get(col, text)(raw))
         rows.append(row)
-    return Resolved(values, rows, missing_keys, missing_now)
+    return Resolved(values, rows, missing_keys, missing)
 
 
-def _pending(name: str | None) -> str:
-    return BY_NAME[name].pending if name in BY_NAME else PENDING
-
-
-def _tex_cell(value: str | None, name: str | None = None) -> str:
-    return rf"\textbf{{{_pending(name)}}}" if value is None else latex_escape(value)
+def _tex_cell(value: str | None) -> str:
+    return rf"\textbf{{{PENDING}}}" if value is None else latex_escape(value)
 
 
 def render_tex(resolved: Resolved) -> str:
     lines = ["% Generated by paper/make_numbers.py from results/. Do not edit by hand."]
     for name, value in resolved.values.items():
-        lines.append(rf"\newcommand{{\{latex_name(name)}}}{{{_tex_cell(value, name)}}}")
+        lines.append(rf"\newcommand{{\{latex_name(name)}}}{{{_tex_cell(value)}}}")
     if resolved.rows:
         body = r" \\ ".join(" & ".join(_tex_cell(v) for v in row) for row in resolved.rows) + r" \\"
     else:
@@ -312,7 +304,7 @@ def render_tex(resolved: Resolved) -> str:
 def _md_value(values: dict[str, str | None], name: str) -> str:
     if name not in values:
         raise ValueError(f"unknown number {name!r}")
-    return values[name] or _pending(name)
+    return values[name] or PENDING
 
 
 def render_readme_table(values: dict[str, str | None]) -> str:
@@ -340,14 +332,14 @@ def main() -> None:
     parser.add_argument("--results", type=Path, default=here.parent / "results")
     parser.add_argument("--out", type=Path, default=here / "numbers.tex")
     parser.add_argument("--markdown", type=Path, nargs="*", default=[], help="also refresh these files")
-    parser.add_argument("--strict", action="store_true", help="fail if any v0.1 number is missing (release)")
+    parser.add_argument("--strict", action="store_true", help="fail if any number is missing (release)")
     args = parser.parse_args()
 
     resolved = resolve(load_results(args.results))
     for where in resolved.missing_keys:
         print(f"warning: missing key {where}", file=sys.stderr)
-    if args.strict and resolved.missing_now:
-        sys.exit("--strict: not measured yet:\n  " + "\n  ".join(resolved.missing_now))
+    if args.strict and resolved.missing:
+        sys.exit("--strict: not measured yet:\n  " + "\n  ".join(resolved.missing))
 
     args.out.write_text(render_tex(resolved), encoding="utf-8")
     for path in args.markdown:

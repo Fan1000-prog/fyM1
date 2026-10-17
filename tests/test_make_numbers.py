@@ -80,15 +80,17 @@ def test_missing_values_render_pending(results_dir):
     assert macro(tex, "train-steps") == r"\textbf{pending}"  # whole file missing
 
 
-def test_only_later_release_items_say_v02(results_dir):
-    tex = numbers.render_tex(resolve(results_dir))
-    assert macro(tex, "arena-win-rate") == r"\textbf{pending (v0.2)}"
-    assert "v0.2" not in macro(tex, "train-steps")
+def test_only_known_result_files_are_read(results_dir):
+    # The judge key would unblind the judge; a broken file proves it is never opened.
+    (results_dir / "eval" / "judge_key.json").write_text("{not json")
+    (results_dir / "eval" / "judge_raw.json").write_text("{not json")
+    loaded = numbers.load_results(results_dir)
+    assert set(loaded) == {"data_stats.json", "eval/scores.json", "eval/judge.json", "model_selection.json"}
 
 
 def test_every_number_gets_a_macro_even_with_no_results(tmp_path):
     tex = numbers.render_tex(resolve(tmp_path))
-    assert tex.count(r"\textbf{pending") == len(numbers.NUMBERS) + 1  # +1: empty selection table
+    assert tex.count(r"\textbf{pending}") == len(numbers.NUMBERS) + 1  # +1: empty selection table
     assert r"\multicolumn" in macro(tex, "selection-rows")
 
 
@@ -105,10 +107,11 @@ def test_missing_keys_listed_only_for_files_that_exist(results_dir):
     assert not any(w.startswith(("train_log.json", "eval/arena.json")) for w in resolved.missing_keys)
 
 
-def test_strict_needs_every_v01_number_but_not_v02(results_dir):
-    missing = resolve(results_dir).missing_now
+def test_strict_list_has_every_unmeasured_number(results_dir):
+    missing = resolve(results_dir).missing
     assert "train_log.json: steps" in missing
-    assert not any(w.startswith("eval/arena.json") for w in missing)
+    assert "eval/arena.json: votes" in missing  # early arena votes are due at v0.1
+    assert "eval/scores.json: fym1.drift_rate" not in missing
 
 
 def test_macro_names_are_letters_only_and_unique():
@@ -150,7 +153,7 @@ def test_markdown_table_inline_and_yaml_values_refreshed(results_dir):
     assert "license: pending # n:base-license-hf" in out
     assert "Winner: <!-- n:model-size -->8B<!-- /n -->." in out
     assert "| 40.0% | 5.3% |" in out
-    assert "| - | pending (v0.2) |" in out  # arena row: no base column, due in v0.2
+    assert "| - | pending |" in out  # arena row: no base column
     assert out.endswith(f"{numbers.README_END}\nafter\n")
     assert numbers.inject_readme(out, values) == out  # rerunning changes nothing
 
