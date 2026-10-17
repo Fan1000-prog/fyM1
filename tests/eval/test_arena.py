@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from fym1.eval.arena import build_pairs, tally, wilson_interval
+from fym1.eval.arena import a_is_by_pair, build_pairs, tally, wilson_interval
 
 A_IS = {"p1": "fym1", "p2": "base", "p3": "fym1"}
 START = datetime(2026, 10, 17, 12, 0, tzinfo=timezone.utc)
@@ -58,8 +58,9 @@ def test_tally_counts_wrong_flags_per_model():
     assert result["wrong_flags"] == {"base": 2, "fym1": 1}
 
 
-def test_tally_keeps_first_vote_per_session_and_pair():
-    result = tally([vote("p1", "A", at=0), vote("p1", "B", at=30)], A_IS)
+def test_tally_keeps_earliest_vote_per_session_and_pair():
+    # Listed late-first: vote files are read in name order, not time order
+    result = tally([vote("p1", "B", at=30), vote("p1", "A", at=0)], A_IS)
     assert (result["votes"], result["fym1_wins"], result["base_wins"]) == (1, 1, 0)
 
 
@@ -88,28 +89,29 @@ def test_tally_keeps_a_session_with_one_vote():
     assert tally([vote("p1", "A", "once")], A_IS)["excluded_sessions"] == 0
 
 
-def test_build_pairs_shuffles_sides_and_keeps_a_is():
+def test_build_pairs_shuffles_sides_and_keeps_the_key_apart():
     base, fym1 = answers("p1", "p2", "p3", response="base"), answers("p1", "p2", "p3", response="fym1")
-    pairs, skipped = build_pairs(base, fym1, random.Random(42))
+    pairs, key, skipped = build_pairs(base, fym1, random.Random(42))
     assert skipped == []
-    assert [p["pair_id"] for p in pairs] == ["p1", "p2", "p3"]
-    for pair in pairs:
-        other = "base" if pair["a_is"] == "fym1" else "fym1"
-        assert pair["a"] == f"{pair['a_is']} {pair['pair_id']}"
+    assert [p["pair_id"] for p in pairs] == [k["pair_id"] for k in key] == ["p1", "p2", "p3"]
+    assert all(set(pair) == {"pair_id", "prompt", "a", "b"} for pair in pairs)
+    for pair, row in zip(pairs, key):
+        other = "base" if row["a_is"] == "fym1" else "fym1"
+        assert pair["a"] == f"{row['a_is']} {pair['pair_id']}"
         assert pair["b"] == f"{other} {pair['pair_id']}"
         assert pair["prompt"] == f"q {pair['pair_id']}"
 
 
 def test_build_pairs_is_reproducible_with_a_seed():
     rows = answers(*[f"p{i}" for i in range(20)])
-    first, _ = build_pairs(rows, rows, random.Random(42))
-    again, _ = build_pairs(rows, rows, random.Random(42))
+    first = build_pairs(rows, rows, random.Random(42))
+    again = build_pairs(rows, rows, random.Random(42))
     assert first == again
-    assert {p["a_is"] for p in first} == {"base", "fym1"}
+    assert {row["a_is"] for row in first[1]} == {"base", "fym1"}
 
 
 def test_build_pairs_skips_ids_missing_from_either_side():
-    pairs, skipped = build_pairs(answers("p1", "p2"), answers("p2", "p3"), random.Random(0))
+    pairs, _, skipped = build_pairs(answers("p1", "p2"), answers("p2", "p3"), random.Random(0))
     assert [p["pair_id"] for p in pairs] == ["p2"]
     assert skipped == ["p1", "p3"]
 
@@ -117,3 +119,12 @@ def test_build_pairs_skips_ids_missing_from_either_side():
 def test_build_pairs_rejects_mismatched_prompts():
     with pytest.raises(ValueError, match="'p1'"):
         build_pairs(answers("p1"), answers("p1", prompt="other"), random.Random(0))
+
+
+def test_answer_key_maps_pairs_to_side_a_model():
+    assert a_is_by_pair([{"pair_id": "p1", "a_is": "fym1"}]) == {"p1": "fym1"}
+
+
+def test_answer_key_rejects_unknown_model():
+    with pytest.raises(ValueError, match="'p1'"):
+        a_is_by_pair([{"pair_id": "p1", "a_is": "gpt"}])

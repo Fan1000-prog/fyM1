@@ -10,7 +10,7 @@ from fym1.eval.arena import build_pairs, tally
 
 SAMPLE_PAIRS = Path(__file__).resolve().parents[2] / "spaces" / "arena" / "pairs.sample.jsonl"
 KEY = b"test-key"
-PAIR = {"pair_id": "p1", "prompt": "q", "a": "x", "b": "y", "a_is": "fym1"}
+PAIR = {"pair_id": "p1", "prompt": "q", "a": "x", "b": "y"}
 
 
 def test_no_choice_writes_no_vote():
@@ -75,9 +75,10 @@ def test_load_pairs_rejects_missing_key(tmp_path):
         load_pairs(write_pairs(tmp_path, broken))
 
 
-def test_load_pairs_rejects_unknown_model(tmp_path):
+def test_load_pairs_refuses_a_file_that_names_the_models(tmp_path):
+    # pairs.jsonl is public in the Space's Files tab; a_is there would unblind raters
     with pytest.raises(ValueError, match="a_is"):
-        load_pairs(write_pairs(tmp_path, {**PAIR, "a_is": "gpt"}))
+        load_pairs(write_pairs(tmp_path, {**PAIR, "a_is": "fym1"}))
 
 
 def test_load_pairs_rejects_duplicate_ids(tmp_path):
@@ -94,7 +95,7 @@ def test_shipped_sample_pairs_load_and_are_marked_synthetic():
 def test_built_pairs_load_in_the_space(tmp_path):
     # Contract between scripts/build_pairs.py (writer) and the Space (reader).
     rows = [{"id": "p1", "prompt": "q", "response": "r"}]
-    pairs, _ = build_pairs(rows, rows, random.Random(42))
+    pairs, _, _ = build_pairs(rows, rows, random.Random(42))
     assert load_pairs(write_pairs(tmp_path, *pairs)) == pairs
 
 

@@ -1,3 +1,3 @@
-{"pair_id": "SYNTHETIC-1", "prompt": "[SYNTHETIC SAMPLE] De aona ry zalahy?", "a": "[SYNTHETIC SAMPLE] Tsara fa ianao? 😄", "b": "[SYNTHETIC SAMPLE] Je vais bien, merci.", "a_is": "fym1"}
-{"pair_id": "SYNTHETIC-2", "prompt": "[SYNTHETIC SAMPLE] Mbola miasa ve ialahy?", "a": "[SYNTHETIC SAMPLE] Oui, je travaille encore.", "b": "[SYNTHETIC SAMPLE] Eny mbola ato am-bureau fa efa ho vita 😅", "a_is": "base"}
-{"pair_id": "SYNTHETIC-3", "prompt": "[SYNTHETIC SAMPLE] Aza adino ny rdv rahampitso", "a": "[SYNTHETIC SAMPLE] Ok tsy hadino, à demain!", "b": "[SYNTHETIC SAMPLE] Tsy hadinoko izany.", "a_is": "fym1"}
+{"pair_id": "SYNTHETIC-1", "prompt": "[SYNTHETIC SAMPLE] De aona ry zalahy?", "a": "[SYNTHETIC SAMPLE] Tsara fa ianao? 😄", "b": "[SYNTHETIC SAMPLE] Je vais bien, merci."}
+{"pair_id": "SYNTHETIC-2", "prompt": "[SYNTHETIC SAMPLE] Mbola miasa ve ialahy?", "a": "[SYNTHETIC SAMPLE] Oui, je travaille encore.", "b": "[SYNTHETIC SAMPLE] Eny mbola ato am-bureau fa efa ho vita 😅"}
+{"pair_id": "SYNTHETIC-3", "prompt": "[SYNTHETIC SAMPLE] Aza adino ny rdv rahampitso", "a": "[SYNTHETIC SAMPLE] Ok tsy hadino, à demain!", "b": "[SYNTHETIC SAMPLE] Tsy hadinoko izany."}

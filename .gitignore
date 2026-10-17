@@ -21,3 +21,6 @@ paper/*.log
 paper/*.out
 
 .DS_Store
+
+# Arena answer key (which model is A): lives only in the private votes dataset
+pairs_key*.jsonl

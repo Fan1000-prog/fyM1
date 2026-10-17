@@ -12,8 +12,9 @@ from pathlib import Path
 
 CHOICES = frozenset({"A", "B", "same"})
 SIDES = frozenset({"A", "B"})
-MODELS = frozenset({"base", "fym1"})
-PAIR_KEYS = ("pair_id", "prompt", "a", "b", "a_is")
+PAIR_KEYS = ("pair_id", "prompt", "a", "b")
+# Which model is A lives only in the private votes dataset; a public pairs file must never carry it.
+ANSWER_KEY_FIELD = "a_is"
 MAX_SESSION_ID_CHARS = 128
 
 
@@ -32,8 +33,8 @@ def load_pairs(path: Path) -> list[dict]:
         missing = [key for key in PAIR_KEYS if key not in pair]
         if missing:
             raise ValueError(f"{where}: missing keys {missing}")
-        if pair["a_is"] not in MODELS:
-            raise ValueError(f"{where}: a_is must be one of {sorted(MODELS)}, got {pair['a_is']!r}")
+        if ANSWER_KEY_FIELD in pair:
+            raise ValueError(f"{where}: has {ANSWER_KEY_FIELD!r}, which would unblind raters; rebuild with build_pairs.py")
         if pair["pair_id"] in seen_ids:
             raise ValueError(f"{where}: duplicate pair_id {pair['pair_id']!r}")
         seen_ids.add(pair["pair_id"])

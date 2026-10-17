@@ -7,20 +7,26 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 
+VOTES_REPO = "Fan1000-Prog/fyM1-votes"  # private dataset: votes under votes/, answer key at the root
+ANSWER_KEY_FILE = "pairs_key.jsonl"
 Z_95 = 1.959963984540054
 OTHER_MODEL = {"base": "fym1", "fym1": "base"}
 # Reading a prompt and two answers takes longer than this; a faster median means a script or a button masher.
 MIN_MEDIAN_SECONDS_BETWEEN_VOTES = 2.0
 
 
-def build_pairs(base_rows: Iterable[dict], fym1_rows: Iterable[dict], rng: random.Random) -> tuple[list[dict], list[str]]:
-    """Blind pairs (`{"pair_id", "prompt", "a", "b", "a_is"}`, sides shuffled) and the ids missing on one side.
+def build_pairs(
+    base_rows: Iterable[dict], fym1_rows: Iterable[dict], rng: random.Random
+) -> tuple[list[dict], list[dict], list[str]]:
+    """Blind pairs, their answer key, and the ids missing on one side.
 
-    Rows are eval answers `{"id", "prompt", "response"}`; ids are sorted so a seed always gives the same file.
+    Rows are eval answers `{"id", "prompt", "response"}`. Pairs (`{"pair_id", "prompt", "a", "b"}`, sides
+    shuffled) are public; the key (`{"pair_id", "a_is"}`) goes only to the private votes dataset.
+    Ids are sorted so a seed always gives the same files.
     """
     base = {row["id"]: row for row in base_rows}
     fym1 = {row["id"]: row for row in fym1_rows}
-    pairs = []
+    pairs, key = [], []
     for pair_id in sorted(base.keys() & fym1.keys()):
         if base[pair_id]["prompt"] != fym1[pair_id]["prompt"]:
             raise ValueError(f"id {pair_id!r} has different prompts in the two answer files")
@@ -32,10 +38,20 @@ def build_pairs(base_rows: Iterable[dict], fym1_rows: Iterable[dict], rng: rando
                 "prompt": base[pair_id]["prompt"],
                 "a": answers[a_is],
                 "b": answers[OTHER_MODEL[a_is]],
-                "a_is": a_is,
             }
         )
-    return pairs, sorted(base.keys() ^ fym1.keys())
+        key.append({"pair_id": pair_id, "a_is": a_is})
+    return pairs, key, sorted(base.keys() ^ fym1.keys())
+
+
+def a_is_by_pair(key_rows: Iterable[dict]) -> dict[str, str]:
+    """pair_id -> model on side A, from the answer key; fails on a model name it does not know."""
+    mapping = {}
+    for row in key_rows:
+        if row["a_is"] not in OTHER_MODEL:
+            raise ValueError(f"answer key row {row['pair_id']!r}: a_is must be one of {sorted(OTHER_MODEL)}")
+        mapping[row["pair_id"]] = row["a_is"]
+    return mapping
 
 
 def wilson_interval(successes: int, trials: int, z: float = Z_95) -> tuple[float, float]:
@@ -55,9 +71,9 @@ def side_models(a_is: str) -> dict[str, str]:
 
 
 def first_vote_per_session_and_pair(votes: Iterable[dict]) -> list[dict]:
-    """Drop repeat votes; the Space blocks them, but its memory resets when it restarts."""
+    """Keep each session's earliest vote per pair; the Space blocks repeats, but its memory resets on restart."""
     kept = {}
-    for vote in votes:
+    for vote in sorted(votes, key=lambda vote: datetime.fromisoformat(vote["ts"])):
         kept.setdefault((vote["session_id"], vote["pair_id"]), vote)
     return list(kept.values())
 
@@ -96,7 +112,7 @@ def tally(votes: Iterable[dict], a_is_by_pair: Mapping[str, str]) -> dict:
     sessions = defaultdict(list)
     for vote in first_vote_per_session_and_pair(votes):
         if vote["pair_id"] not in a_is_by_pair:
-            raise ValueError(f"vote for unknown pair {vote['pair_id']!r}; tally against the pairs file the arena served")
+            raise ValueError(f"vote for unknown pair {vote['pair_id']!r}; tally against the answer key of the pairs the arena served")
         sessions[vote["session_id"]].append(vote)
     flagged = []
     kept = []
