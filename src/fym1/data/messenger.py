@@ -27,6 +27,8 @@ class Thread:
     participants: list[str]
     messages: list[Message]
     nicknames: dict[str, str] = field(default_factory=dict)  # nickname -> participant
+    # nickname events we dropped but could not read (unknown wording or non-participant)
+    unharvested_nickname_events: int = 0
 
 
 def fix_meta_text(s: str) -> str:
@@ -42,10 +44,18 @@ def fix_meta_text(s: str) -> str:
 # filtered_threads hold strangers and spam, so they are left out.
 DYI_FOLDERS = ("inbox", "archived_threads", "e2ee_cutover")
 
-# "X set the nickname for Y to Z." / "X set her own nickname to Z."
-NICKNAME_SET = re.compile(
-    r"^.+? set (?:the nickname for (?P<target>.+?)|(?:his|her|their|your) own nickname) to (?P<nickname>.+?)\.?$"
+# Nickname-change events, EN and FR UI. `target` is absent when people name themselves.
+NICKNAME_EVENTS = (
+    re.compile(
+        r"^.+? set (?:the nickname for (?P<target>.+?)|(?:his|her|their|your)(?: own)? nickname)"
+        r" to (?P<nickname>.+?)\.?$"
+    ),
+    re.compile(
+        r"^.+? (?:a|avez) défini (?:le (?:surnom|pseudo) (?:de |d')(?P<target>.+?)"
+        r"|(?:son|votre) (?:propre )?(?:surnom|pseudo)) sur (?P<nickname>.+?)\.?$"
+    ),
 )
+NICKNAME_WORD = re.compile(r"\b(?:nickname|surnom|pseudo)\b", re.IGNORECASE)
 
 # Event types that are not something a person typed. Newer exports drop `type`.
 DYI_TEXT_TYPES = {"Generic", "Share"}
@@ -59,8 +69,10 @@ PLACEHOLDER = re.compile(
             liked\ a\ message|a\ aimé\ un\ message)\b.*
       | (?:.{0,80}\ )?(?:reacted|a\ réagi|avez\ réagi)\ .{1,20}\ (?:to|à)\ .{0,40}message\.?
       | .{0,80}\b(?:unsent\ a\ message|a\ retiré\ un\ message|avez\ retiré\ un\ message)\.?
-      | .{0,80}\b(?:changed\ the\ group\ photo|named\ the\ group|set\ the\ nickname|set\ (?:his|her|their|your)\ own\ nickname|set\ your\ nickname|
-            changed\ the\ theme|a\ changé\ la\ photo\ du\ groupe|a\ nommé\ le\ groupe|a\ défini\ le\ surnom)\b.*
+      | .{0,80}\b(?:changed\ the\ group\ photo|named\ the\ group|changed\ the\ theme|
+            a\ changé\ la\ photo\ du\ groupe|a\ nommé\ le\ groupe)\b.*
+      | .{0,80}\b(?:set|cleared|removed|changed)\ (?:the|your|his|her|their)(?:\ own)?\ nickname\b.*
+      | .{0,80}\b(?:a|avez)\ (?:défini|modifié|supprimé|effacé)\ (?:le|votre|son)\ (?:propre\ )?(?:surnom|pseudo)\b.*
     )$""",
     re.IGNORECASE | re.VERBOSE | re.DOTALL,
 )
@@ -78,19 +90,25 @@ def _dyi_text(raw: dict) -> str | None:
     return text
 
 
-def _nickname(raw: dict, participants: list[str]) -> tuple[str, str] | None:
-    """(nickname, participant) if this message is a nickname-change event about a participant."""
-    match = NICKNAME_SET.match(fix_meta_text(raw.get("content", "")).strip())
+def parse_nickname_event(raw: dict, participants: list[str]) -> tuple[str, str] | None:
+    """(nickname, participant) if this message is a readable nickname event about a participant."""
+    text = fix_meta_text(raw.get("content", "")).strip()
+    match = next((m for pattern in NICKNAME_EVENTS if (m := pattern.match(text))), None)
     if not match:
         return None
     sender = fix_meta_text(raw["sender_name"])
     person = match["target"] or sender
     # "you" is whoever downloaded the export: known in a 1:1 thread. In a group, pin the
     # nickname on the sender rather than drop it, so it still gets anonymised.
-    if person.lower() == "you":
+    if person.lower() in ("you", "vous"):
         others = [p for p in participants if p != sender]
         person = others[0] if len(others) == 1 else sender
     return (match["nickname"], person) if person in participants else None
+
+
+def _is_nickname_event(raw: dict) -> bool:
+    text = fix_meta_text(raw.get("content", "")).strip()
+    return bool(PLACEHOLDER.match(text) and NICKNAME_WORD.search(text))
 
 
 def _load_dyi_thread(thread_dir: Path) -> Thread:
@@ -98,6 +116,13 @@ def _load_dyi_thread(thread_dir: Path) -> Thread:
     first = pages[0]
     participants = [fix_meta_text(p["name"]) for p in first["participants"]]
     raws = [raw for page in pages for raw in page["messages"]]
+    nicknames = {}
+    unharvested = 0
+    for raw in raws:
+        if nickname := parse_nickname_event(raw, participants):
+            nicknames[nickname[0]] = nickname[1]
+        elif _is_nickname_event(raw):
+            unharvested += 1
     messages = [
         Message(sender=fix_meta_text(raw["sender_name"]), text=text, ts_ms=raw["timestamp_ms"])
         for raw in raws
@@ -107,7 +132,8 @@ def _load_dyi_thread(thread_dir: Path) -> Thread:
         title=fix_meta_text(first.get("title", "")),
         participants=participants,
         messages=sorted(messages, key=lambda m: m.ts_ms),
-        nicknames=dict(n for raw in raws if (n := _nickname(raw, participants))),
+        nicknames=nicknames,
+        unharvested_nickname_events=unharvested,
     )
 
 

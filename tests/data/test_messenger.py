@@ -1,8 +1,9 @@
+import json
 from pathlib import Path
 
 import pytest
 
-from fym1.data.messenger import PLACEHOLDER, Message, fix_meta_text, load_threads
+from fym1.data.messenger import PLACEHOLDER, Message, fix_meta_text, parse_nickname_event, load_threads
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -80,3 +81,42 @@ def test_placeholder_matches_messenger_event_text(text):
 
 def test_placeholder_keeps_typed_text():
     assert not PLACEHOLDER.match("Mety be zany, lancer-na fotsiny😂")
+
+
+@pytest.mark.parametrize(
+    "event, nickname, person",
+    [
+        ("Nirina set the nickname for Soa to Niry.", "Niry", "Soa"),
+        ("Soa set her own nickname to Niry.", "Niry", "Soa"),
+        ("You set your nickname to Niry.", "Niry", "Soa"),
+        ("Nirina a défini le surnom de Soa sur Niry.", "Niry", "Soa"),
+        ("Vous avez défini le pseudo de Soa sur Niry.", "Niry", "Soa"),
+        ("Vous avez défini votre surnom sur Niry.", "Niry", "Soa"),
+        ("Soa a défini son surnom sur Niry.", "Niry", "Soa"),
+    ],
+)
+def test_nickname_events_en_and_fr(event, nickname, person):
+    raw = {"sender_name": "Soa" if event.startswith(("Soa", "You", "Vous")) else "Nirina", "content": event}
+
+    assert parse_nickname_event(raw, ["Nirina", "Soa"]) == (nickname, person)
+    assert PLACEHOLDER.match(event)
+
+
+def test_unharvested_nickname_events_are_counted(tmp_path):
+    thread_dir = tmp_path / "messages" / "inbox" / "x_1"
+    thread_dir.mkdir(parents=True)
+    page = {
+        "participants": [{"name": "Nirina"}, {"name": "Soa"}],
+        "messages": [
+            {"sender_name": "Nirina", "timestamp_ms": 1, "content": "Nirina set the nickname for Koto to Bebe."},
+            {"sender_name": "Nirina", "timestamp_ms": 2, "content": "Nirina a modifié le surnom de Soa."},
+            {"sender_name": "Soa", "timestamp_ms": 3, "content": "Soa set her own nickname to Niry."},
+            {"sender_name": "Soa", "timestamp_ms": 4, "content": "Salama"},
+        ],
+    }
+    (thread_dir / "message_1.json").write_text(json.dumps(page))
+
+    [thread] = load_threads(tmp_path)
+
+    assert thread.nicknames == {"Niry": "Soa"}
+    assert thread.unharvested_nickname_events == 2
