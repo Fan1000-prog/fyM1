@@ -1,3 +1,5 @@
+{#- Vendored test fixture: chat_template.jinja from McGill-NLP/AfriqueQwen-8B at revision
+    c78c273dbeceab4c6c86b887f64e630d8b92fdaf (the Qwen3 chat template, Apache-2.0 upstream; model card cc-by-4.0). -#}
 {%- if tools %}
     {{- '<|im_start|>system\n' }}
     {%- if messages[0].role == 'system' %}

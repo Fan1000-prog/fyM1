@@ -47,8 +47,7 @@
       "instruct_version": {
         "exists": true,
         "note": "is the instruct model"
-      },
-      "note": "An earlier unscripted smoke at lr 2e-4 (not used here) showed the training loss diverging after its first ten steps; see loss_trend once the scripted smoke is re-measured."
+      }
     }
   ]
 }
