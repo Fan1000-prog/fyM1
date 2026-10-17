@@ -186,3 +186,27 @@ def test_cli_strict_fails_and_writes_nothing(results_dir, tmp_path):
     assert run.returncode != 0
     assert "train_log.json: steps" in run.stderr
     assert not out.exists()
+
+
+@pytest.mark.parametrize(
+    "review, problem",
+    [
+        ({"matches": 2, "approved_generic": 2, "rejected": 0}, None),
+        ({"matches": 3, "approved_generic": 2, "rejected": 0}, "!= matches"),
+        ({"matches": 2, "approved_generic": 1, "rejected": 1}, "rejected; release is blocked"),
+    ],
+)
+def test_leak_gate_needs_every_run_reviewed_and_none_rejected(review, problem):
+    problems = numbers.leak_gate_problems({numbers.LEAK_FILE: review})
+    assert problems == [] if problem is None else any(problem in p for p in problems)
+
+
+def test_leak_gate_without_review_is_left_to_missing_values():
+    assert numbers.leak_gate_problems({}) == []
+
+
+def test_cli_strict_fails_on_rejected_leak_run(results_dir, tmp_path):
+    (results_dir / "eval" / "leak_review.json").write_text(json.dumps({"matches": 1, "approved_generic": 0, "rejected": 1}))
+    run = run_cli("--results", str(results_dir), "--out", str(tmp_path / "n.tex"), "--strict")
+    assert run.returncode != 0
+    assert "release is blocked" in run.stderr
