@@ -18,8 +18,7 @@ import gradio as gr
 from huggingface_hub import CommitScheduler, HfApi
 from votes import VoteBook, is_valid_session_id, load_pairs, new_session_id, pick_pair
 
-# OWNER REVIEW: Malagasy below is a draft by the builder; the native-speaker owner fixes the wording.
-# Pending: the owner's edits are not applied yet; replace INSTRUCTIONS and UI_TEXT when they arrive.
+# Malagasy below is the owner's approved wording (2026-10-17); change it only with the owner.
 INSTRUCTIONS = """\
 ## Iza no mamaly tsara kokoa?
 
@@ -119,7 +118,7 @@ def vote_for(choice: str):
     return handle
 
 
-with gr.Blocks(title="fyM1 arena") as demo:
+with gr.Blocks(title="fy-m-1 arena") as demo:
     # Kept in the browser so a page refresh keeps the same id (and cannot re-vote the same pair).
     # The id is signed by the server; ARENA_KEY as the storage secret lets it survive Space restarts.
     session_id = gr.BrowserState(None, storage_key="fym1-arena-session", secret=ARENA_KEY)
