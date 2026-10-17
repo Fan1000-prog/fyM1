@@ -21,7 +21,7 @@ Expected files (keys are dotted paths below):
   eval/scores.json       n_prompts, {base,fym1}.{drift_rate, leak_rate, perplexity,
                          belebele_acc, chrf_plt_eng, chrf_eng_plt}
   eval/judge.json        judge, {base,fym1}.{naturalness, correctness}
-  eval/leak_review.json  matches, approved_generic, rejected (owner's review of matched 8-word runs)
+  eval/leak_review.json  matches, approved_generic, rejected (counts of distinct matched 8-word runs)
   eval/arena.json        votes, raters, fym1_win_rate, ci_low, ci_high (early votes at v0.1)
   shrink.json            gates_passed, vocab_before, vocab_after, params_before, params_after,
                          gguf_bytes_before, gguf_bytes_after, tokens_per_sec_before, tokens_per_sec_after

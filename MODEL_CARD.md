@@ -97,8 +97,8 @@ All numbers are written by scripts in the GitHub repo.
 
 Leak gate: any answer that shares a run of 8 words with the training chats blocks release.
 The owner sees only the matched 8 words, never the chat, and it ships only if every match is a generic phrase.
-At release: <!-- n:leak-matches -->pending<!-- /n --> matches, <!-- n:leak-generic -->pending<!-- /n --> approved as generic,
-<!-- n:leak-rejected -->pending<!-- /n --> rejected (`results/eval/leak_review.json`).
+At release: <!-- n:leak-matches -->pending<!-- /n --> distinct matched 8-word runs, of which
+<!-- n:leak-generic -->pending<!-- /n --> approved as generic and <!-- n:leak-rejected -->pending<!-- /n --> rejected (`results/eval/leak_review.json`).
 
 ## Example chats
 
