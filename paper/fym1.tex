@@ -165,6 +165,11 @@ an 8-word sequence with the training chats. The release gate was at most 1\%.
 \fyArenaVotes{} votes from \fyArenaRaters{} raters; fyM1 win rate \fyArenaWinRate{} (95\% Wilson
 interval \fyArenaCiLow{}--\fyArenaCiHigh{}; \citealp{wilson1927}).
 
+\paragraph{Reproducibility.} The test prompts, rubric, code and notebooks are public. Version 0.1 releases
+only aggregate scores; the per-prompt answers of both models are released in v0.2, after the human
+comparison closes, so that raters cannot tell which model wrote which answer. The training chats stay
+private, so training can be rerun only on other data.
+
 \section{Limitations}
 % TODO(final): add anything the results show (weak categories, judge/human disagreement).
 \begin{itemize}

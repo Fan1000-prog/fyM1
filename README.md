@@ -148,6 +148,10 @@ Then, in order:
 The training chats are private, so you cannot retrain on the same data. You can rerun everything else,
 and you can train on your own chats with `scripts/build_chats.py`.
 
+v0.1 publishes only the total scores, not each model's answer to each prompt. Those answers come out in
+v0.2, after the arena closes, so raters cannot see which answer came from which model. Until then you can
+make your own answers with `notebooks/02_eval_export.ipynb`.
+
 ## License
 
 Code: [Apache-2.0](LICENSE). The model follows the base model's license (see [MODEL_CARD.md](MODEL_CARD.md)).
