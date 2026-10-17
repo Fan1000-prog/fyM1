@@ -37,7 +37,8 @@ def leaks(answers, chats, matches, review) -> subprocess.CompletedProcess:
 
 
 def gate(review: Path) -> subprocess.CompletedProcess:
-    return run("leak-gate", "--review", str(review))
+    return run("leak-gate", "--matches", str(review.parent / "leak_matches.jsonl"),
+               "--review", str(review))
 
 
 def test_no_leak_passes_the_gate(tmp_path):
@@ -85,6 +86,25 @@ def test_a_run_shared_by_two_answers_is_reviewed_once(tmp_path):
     assert json.loads(review.read_text())["matches"] == 1
 
 
+def test_gate_fails_when_review_counts_are_stale(tmp_path):
+    answers, chats, matches, review = setup_leak(tmp_path, LEAKED)
+    leaks(answers, chats, matches, review)
+    # Owner marks the match generic but forgets to rerun leak-review.
+    write_jsonl(matches, [{"ngram": LEAKED, "ids": ["p1"], "verdict": "generic"}])
+    result = gate(review)
+    assert result.returncode != 0
+    assert "out of date" in result.stderr
+
+
+def test_gate_fails_when_review_is_edited_by_hand(tmp_path):
+    answers, chats, matches, review = setup_leak(tmp_path, LEAKED)
+    leaks(answers, chats, matches, review)
+    review.write_text(json.dumps({"matches": 1, "approved_generic": 1, "rejected": 0}))
+    result = gate(review)
+    assert result.returncode != 0
+    assert "out of date" in result.stderr
+
+
 def test_leaks_never_overwrites_owner_verdicts(tmp_path):
     answers, chats, matches, review = setup_leak(tmp_path, LEAKED)
     leaks(answers, chats, matches, review)
@@ -106,6 +126,13 @@ def test_blind_writes_the_judge_batch_apart_from_the_key(tmp_path):
     result = blind(tmp_path, out, tmp_path / "judge_key.json")
     assert result.returncode == 0
     assert sorted(p.name for p in out.parent.iterdir()) == ["judge_input.jsonl"]
+
+
+def test_blind_refuses_a_key_in_a_subdir_of_the_judge_batch_dir(tmp_path):
+    out = tmp_path / "judge_batch" / "judge_input.jsonl"
+    result = blind(tmp_path, out, out.parent / "keys" / "judge_key.json")
+    assert result.returncode != 0
+    assert not out.exists()
 
 
 def test_blind_refuses_a_key_inside_the_judge_batch_dir(tmp_path):
