@@ -28,6 +28,11 @@ def test_leak_rate_ignores_case_and_punctuation():
     assert leak_rate(["A, b! c d e f g h."], ["a b c d e f g h"]) == 1.0
 
 
+def test_leak_rate_normalises_accents():
+    decomposed = "be\u0301 a b c d e f g"
+    assert leak_rate([decomposed], ["bé a b c d e f g"]) == 1.0
+
+
 def test_leak_rate_share_of_responses():
     responses = ["a b c d e f g h", "z y x w v u t s"]
     assert leak_rate(responses, ["a b c d e f g h"]) == 0.5
