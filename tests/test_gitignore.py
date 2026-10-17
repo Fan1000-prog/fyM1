@@ -18,14 +18,15 @@ def is_ignored(path: str) -> bool:
 
 
 @pytest.mark.parametrize(
-    "path", ["data/raw/x.json", "data/private/x.jsonl", "foo.zip", ".env"]
+    "path",
+    ["data/raw/x.json", "data/private/x.jsonl", "foo.zip", ".env", "pairs_key.jsonl", "spaces/arena/pairs_key.jsonl"],
 )
 def test_private_paths_are_ignored(path):
     assert is_ignored(path)
 
 
 @pytest.mark.parametrize(
-    "path", ["src/fym1/data/new_module.py", "tests/data/fixtures/x.json"]
+    "path", ["src/fym1/data/new_module.py", "tests/data/fixtures/x.json", "spaces/arena/pairs.jsonl"]
 )
 def test_code_and_fixtures_are_tracked(path):
     assert not is_ignored(path)

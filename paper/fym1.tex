@@ -1,0 +1,212 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{url}
+
+% Every measured number below is a macro written by paper/make_numbers.py from results/.
+% Rebuild with: uv run python paper/make_numbers.py && tectonic paper/fym1.tex
+\input{numbers}
+
+\title{fyM1: Teaching an Open Model to Chat in Everyday Malagasy\\[0.3em]
+  \large Version 0.1 --- full human ratings in v0.2}
+\author{Fan's lab}
+\date{October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+% TODO(final): add one sentence on the main result once results/eval/ is in.
+Open language models that cover Malagasy tend to answer like an official letter: formal, stiff, and often
+half-translated from French or English. People in Madagascar do not text like that. We fine-tune an open
+model, \fyBaseModel{}, with QLoRA on a single free GPU so that it replies the way a friend would: short,
+friendly, mixing in French, and using everyday spelling. We describe how we chose the base model, how we
+built and anonymised the training data, how we trained and trimmed the model, and what we measured. On
+\fyEvalPrompts{} fresh everyday prompts, we report the share of replies that drift into full French or
+English (base: \fyDriftBase{}; fyM1: \fyDriftFymOne{}), LLM-judge scores, and regression checks on
+reading and translation. A blind human comparison reports early votes here; the full panel's result
+comes in v0.2.
+\end{abstract}
+
+\section{Motivation: the formal-versus-everyday gap}
+% TODO(final): one short paragraph with an example pair from eval/prompts.jsonl (public prompts only).
+Malagasy is the national language of Madagascar, but most Malagasy text online is formal: news,
+Wikipedia, religious and government writing. Models trained on that text learn that register. When a
+user writes a short, casual message, they get back a polished paragraph that no one would send to a friend.
+
+Everyday Malagasy looks different. French words are mixed in freely, including French verbs used with
+Malagasy grammar. Spelling is phonetic and shortened. Replies are short, with humour and emoji. For this
+project, that mixed style is the target, not an error. A reply only counts as drifting if it is entirely
+French or English with no Malagasy in it.
+
+Our goal is modest and measurable: a model that is clearly better than its base model at everyday
+Malagasy chat, without losing much general Malagasy ability, trained and served at zero cost.
+
+\section{Choosing the base model}
+\label{sec:selection}
+We shortlisted recent open-weight instruction models between 7B and 12B parameters that fit QLoRA
+training on a 16\,GB T4 GPU. Each candidate was loaded in 4-bit and scored on:
+reading comprehension (Belebele, \texttt{plt\_Latn}; \citealp{bandarkar-etal-2024-belebele});
+translation in both directions with English (FLORES+ devtest, chrF++;
+\citealp{goyal-etal-2022-flores,nllb2022,maillard-etal-2024-findings,popovic-2017-chrf});
+tokenizer efficiency (tokens per Malagasy word on Wikipedia sentences);
+and a short everyday-chat sniff test rated by a native speaker (1--5).
+License was a tie-breaker: we prefer permissive licenses when quality is close.
+Table~\ref{tab:selection} shows the numbers. We chose \fyBaseModel{} (license: \fyBaseLicense{}).
+% TODO(final): one or two sentences on why it won, taken from results/model_selection.md.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{llrrrrr}
+\toprule
+Model & License & Belebele & chrF++ mg$\to$en & chrF++ en$\to$mg & Tokens/word & Natural (1--5) \\
+\midrule
+\fySelectionRows
+\bottomrule
+\end{tabular}
+\caption{Base-model candidates, all loaded in 4-bit. Higher is better except tokens per word.}
+\label{tab:selection}
+\end{table}
+
+\section{Data}
+\label{sec:data}
+We describe the data but do not share it. It contains private conversations.
+
+\paragraph{Real chats.} The main source is one native speaker's Messenger export, using both sides of each
+conversation. We parsed \fyDataThreads{} threads into \fyDataConversations{} short multi-turn
+conversations, splitting on long gaps and merging back-to-back messages from the same side of the
+conversation. We kept conversations where at least half of the turns are Malagasy or Malagasy--French (language ID with GlotLID; \citealp{kargaran-etal-2023-glotlid}).
+A native speaker reviewed samples and approved \fyDataApproved{} conversations.
+
+\paragraph{Formal slice.} \fyDataFormal{} short single-turn examples built from Malagasy Wikipedia, so
+facts and standard spelling survive. We keep this slice small so it does not pull the style back to formal.
+
+\paragraph{Identity and refusals.} \fyDataIdentity{} short exchanges, written by the native speaker,
+that answer ``who are you?'' consistently and politely refuse harmful requests.
+
+\paragraph{Synthetic chats.} \fyDataSynthetic{} synthetic conversations. We only planned to add them if
+there were too few real chats; any synthetic chats come from an open-weight model run by us, never a
+closed API, and a native speaker checks a sample.
+
+In total the model trained on \fyDataTrainExamples{} examples.
+
+\paragraph{Privacy process.} Raw exports never left the owner's laptop. A local script replaced names
+and nicknames (also inside message text), phone numbers, emails, links and account handles before
+anything was uploaded. Only the cleaned, approved data went to a private dataset repository, used by
+the training notebook and never made public. Test prompts were written fresh, so the test set contains
+no private text and is public.
+
+\section{Method}
+\label{sec:method}
+We train with QLoRA \citep{dettmers2023qlora}: the base model is frozen in 4-bit NF4 and we learn LoRA
+adapters \citep{hu2022lora} on all linear layers, with rank \fyLoraR{} and alpha \fyLoraAlpha{}. We use
+Unsloth \citep{unsloth} on a free Google Colab GPU (\fyTrainGpu{}). Settings: learning rate
+\fyLearningRate{} with a \fyLrScheduler{} schedule, sequence length \fyMaxSeqLen{}, effective batch size
+\fyEffectiveBatch{}, \fyTrainEpochs{} epochs (\fyTrainSteps{} steps, \fyTrainTime{} of training).
+Loss is computed on assistant turns only, in the base model's own chat template, with a fixed system
+prompt in Malagasy. Free sessions disconnect, so checkpoints are pushed to a private repository during
+training and a new session resumes from the latest one. Final training loss was \fyTrainLoss{}; best
+held-out loss was \fyEvalLoss{}.
+
+\section{Making the model smaller: vocabulary trimming}
+\label{sec:trim}
+Much of a multilingual model's vocabulary is for scripts and languages fyM1 never uses. Following
+\citet{ushio-etal-2023-efficient}, we keep only the tokens seen in Malagasy, French and English text,
+plus all special and byte-fallback tokens, and drop the matching embedding and output rows.
+The trim ships only if it passes three gates: held-out Malagasy text round-trips through the new
+tokenizer unchanged; greedy answers are unchanged for at least 95\% of the test prompts; and
+Belebele stays within one point. Result: gates \fyTrimGates{}. Vocabulary \fyVocabBefore{} $\to$
+\fyVocabAfter{} tokens; parameters \fyParamsBefore{} $\to$ \fyParamsAfter{}; download \fyGgufBefore{}
+$\to$ \fyGgufAfter{}; speed on the demo CPU \fyTpsBefore{} $\to$ \fyTpsAfter{} tokens/s.
+
+Removing whole layers \citep{gromov2024deeper} would save more, but needs healing with extra training
+that free GPU time cannot pay for. We leave it for v0.2.
+
+\section{Results}
+\label{sec:results}
+We generated answers from the base model and fyM1 to \fyEvalPrompts{} fresh everyday prompts with the
+same system prompt and sampling settings (Table~\ref{tab:results}).
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+Measure & Base & fyM1 \\
+\midrule
+Drift to full French/English ($\downarrow$) & \fyDriftBase & \fyDriftFymOne \\
+Naturalness, LLM judge, 1--5 ($\uparrow$) & \fyNaturalBase & \fyNaturalFymOne \\
+Correctness, LLM judge, 1--5 ($\uparrow$) & \fyCorrectBase & \fyCorrectFymOne \\
+Held-out chat perplexity ($\downarrow$) & \fyPplBase & \fyPplFymOne \\
+Belebele accuracy ($\uparrow$) & \fyBelebeleBase & \fyBelebeleFymOne \\
+FLORES+ chrF++ mg$\to$en ($\uparrow$) & \fyChrfMgEnBase & \fyChrfMgEnFymOne \\
+FLORES+ chrF++ en$\to$mg ($\uparrow$) & \fyChrfEnMgBase & \fyChrfEnMgFymOne \\
+\bottomrule
+\end{tabular}
+\caption{Base model versus fyM1. Belebele and FLORES+ are regression checks: they should not fall much.}
+\label{tab:results}
+\end{table}
+
+\paragraph{Automatic judge.} An LLM judge scored both answer sets blind, with labels hidden and order
+shuffled, on a published 1--5 rubric for naturalness and correctness
+\citep{zheng2023judging}. Judge: \fyJudgeModel{}. Judge scores are a cheap signal, not a substitute for native speakers.
+
+\paragraph{Leak check.} Any fyM1 answer that shares a run of 8 words with the training chats blocks
+release. \fyLeakFymOne{} of answers had such a run; across all answers there were \fyLeakMatches{} distinct
+matched 8-word runs. The owner reviewed each run on its own, seeing only those 8 words and never the chat
+around them, and release required every run to be a generic phrase. Of those runs, \fyLeakGeneric{} were
+judged generic and \fyLeakRejected{} were rejected.
+
+\paragraph{Blind human comparison (early votes).} Native speakers rate pairs of answers in a public
+``arena'': same prompt, two unlabelled answers in random order, pick the more natural one. These are the
+early votes in at release: \fyArenaVotes{} votes from \fyArenaRaters{} raters; fyM1 win rate
+\fyArenaWinRate{} (95\% Wilson interval \fyArenaCiLow{}--\fyArenaCiHigh{}; \citealp{wilson1927}).
+With so few raters this is a first signal, not a result. The full panel's numbers come in v0.2.
+
+\paragraph{Reproducibility.} The test prompts, rubric, code and notebooks are public. Version 0.1 releases
+only aggregate scores; the per-prompt answers of both models are released in v0.2, after the human
+comparison closes, so that raters cannot tell which model wrote which answer. The training chats stay
+private, so training can be rerun only on other data.
+
+\section{Limitations}
+% TODO(final): add anything the results show (weak categories, judge/human disagreement).
+\begin{itemize}
+  \item The style comes mostly from one person's chats and their contacts. It reflects
+        Antananarivo-style everyday speech, not other regions or dialects.
+  \item The human comparison has only early votes from \fyArenaRaters{} raters. Until the full panel is
+        in, the main evidence is automatic.
+  \item The drift metric can be a little low. A reply counts as Malagasy if GlotLID says so, or if at
+        least 10\% of its words are common Malagasy words. English that contains a Malagasy name or a
+        quoted Malagasy word (e.g.\ ``Hi Vola, how are you?'') can therefore pass. Fully French or
+        English replies with no Malagasy words are counted as drift.
+  \item An LLM judge may not understand Malagasy slang well; its scores can be wrong in either direction.
+  \item The model is small and runs on a free CPU. It can be slow, get facts wrong, and invent things.
+  \item We train only once or twice on free hardware, so settings are not carefully tuned.
+\end{itemize}
+
+\section{Ethics, consent and privacy}
+The data owner confirmed that everyone in the conversations consented to their messages being used.
+Raw data never left the owner's machine; only anonymised, approved data was used for training, and it is
+not released. We check that the model does not repeat training text before release (Section~\ref{sec:results}).
+The model was trained with a small set of polite refusals and gets a basic safety check before release,
+but it is not a safety-tested product. No closed-API model outputs are in the training data.
+
+\section{What comes next (v0.2)}
+\begin{itemize}
+  \item The full panel's blind human comparison, with confidence intervals.
+  \item Each model's answer to each test prompt.
+  \item The layer-pruning experiment.
+  \item Longer training and more everyday data.
+\end{itemize}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}

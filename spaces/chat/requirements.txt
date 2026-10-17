@@ -1,0 +1,4 @@
+# Prebuilt CPU wheel: PyPI only has the source tarball, which takes many minutes to compile on a Space.
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+llama-cpp-python==0.3.36
+huggingface_hub==2.1.1
