@@ -1,0 +1,76 @@
+"""After anonymising: capitalised words that survived, so the owner can spot missed names.
+
+The owner sees only tokens and counts (never sentences), ticks the real names, and the
+saved blocklist.txt is fed back to build_chats.py, which then replaces them everywhere.
+"""
+
+import re
+from collections import Counter
+from collections.abc import Iterable
+from html import escape
+from pathlib import Path
+
+from fym1.data.anonymize import compare_key, is_everyday_word
+
+LETTERS = re.compile(r"(?<![<\w])[^\W\d_]+(?![\w>])")  # whole letter-only words, not <TEL>
+MIN_LETTERS = 2
+
+
+def leftover_names(texts: Iterable[str], fake_names: Iterable[str]) -> Counter:
+    """Capitalised words in `texts` that are not common Malagasy words or our fake names."""
+    fake_words = {compare_key(w) for name in fake_names for w in name.split()}
+    return Counter(
+        word
+        for text in texts
+        for word in LETTERS.findall(text)
+        if word[0].isupper()
+        and len(word) >= MIN_LETTERS
+        and not is_everyday_word(word)
+        and compare_key(word) not in fake_words
+    )
+
+
+def read_blocklist(path: Path) -> list[str]:
+    """Names the owner ticked on the leftover sheet, one per line."""
+    return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+PAGE = """<!doctype html>
+<html lang="mg">
+<head>
+<meta charset="utf-8">
+<title>fyM1 leftover names</title>
+<style>
+body {{ font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }}
+td {{ padding: .2rem .6rem; }} td.n {{ text-align: right; color: #666; }}
+#export {{ position: sticky; bottom: 1rem; font-size: 1.1rem; padding: .5rem 1rem; }}
+</style>
+</head>
+<body>
+<h1>fyM1 — {count} capitalised words left after anonymising</h1>
+<p>Tick every word that is a real person's name or nickname. Then save <code>blocklist.txt</code>
+and run <code>build_chats.py</code> again with <code>--blocklist</code>.</p>
+<table>
+{rows}
+</table>
+<button id="export">Save blocklist.txt</button>
+<script>
+document.getElementById("export").onclick = () => {{
+  const names = [...document.querySelectorAll("input[type=checkbox]:checked")].map(b => b.value);
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([names.join("\\n") + "\\n"], {{type: "text/plain"}}));
+  link.download = "blocklist.txt";
+  link.click();
+}};
+</script>
+</body>
+</html>
+"""
+
+ROW = '<tr><td><label><input type="checkbox" value="{word}"> {word}</label></td><td class="n">{n}</td></tr>'
+
+
+def render_leftover_sheet(counts: Counter) -> str:
+    """The tick-the-real-names page: one row per word with its count, most common first."""
+    rows = "\n".join(ROW.format(word=escape(word), n=n) for word, n in counts.most_common())
+    return PAGE.format(count=len(counts), rows=rows)

@@ -135,5 +135,5 @@ Owner will recruit a few other native speakers. They need **one easy link**: a s
 ### 7.6 Calls made by the designer after the builder check
 - Data volume unknown until the export arrives; the mix adapts — the fewer real chats, the more checked synthetic chats.
 - Test prompts are written fresh (owner-approved), not taken from private chats, so the test set is public and rerunnable.
-- **Leak gate:** before release, any answer that shares a run of 8 words with the real chats blocks release. The owner sees only the matched 8 words (never the chat) and release goes ahead only if every match is a generic phrase. Counts go to `results/eval/leak_review.json` `{matches, approved_generic, rejected}`.
+- **Leak gate:** before release, any fyM1 answer that shares a run of 8 words with the real chats blocks release. The owner sees only the matched 8 words (never the chat) and release goes ahead only if every match is a generic phrase. Counts go to `results/eval/leak_review.json` `{matches, approved_generic, rejected}`.
 - **Safety:** small set of polite refusals + identity answers in training; a basic safety check before release; limits stated in the model card.

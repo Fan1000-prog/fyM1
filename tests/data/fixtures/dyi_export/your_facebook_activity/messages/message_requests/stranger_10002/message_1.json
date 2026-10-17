@@ -1,0 +1,18 @@
+{
+  "participants": [
+    {
+      "name": "Olona Tsy Fantatra"
+    },
+    {
+      "name": "Tojo Randria"
+    }
+  ],
+  "title": "Olona Tsy Fantatra",
+  "messages": [
+    {
+      "sender_name": "Olona Tsy Fantatra",
+      "timestamp_ms": 1760000000000,
+      "content": "Salama, mivarotra aho"
+    }
+  ]
+}

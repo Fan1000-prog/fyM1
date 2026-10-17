@@ -159,7 +159,7 @@ shuffled, on a published 1--5 rubric for naturalness and correctness
 \citep{zheng2023judging}. Judge: \fyJudgeModel{}. Judge scores are a cheap signal, not a substitute for native speakers.
 
 \paragraph{Leak check.} Any fyM1 answer that shares a run of 8 words with the training chats blocks
-release. \fyLeakFymOne{} of answers had such a run; across all answers there were \fyLeakMatches{} distinct
+release. \fyLeakFymOne{} of fyM1 answers had such a run; across all fyM1 answers there were \fyLeakMatches{} distinct
 matched 8-word runs. The owner reviewed each run on its own, seeing only those 8 words and never the chat
 around them, and release required every run to be a generic phrase. Of those runs, \fyLeakGeneric{} were
 judged generic and \fyLeakRejected{} were rejected.

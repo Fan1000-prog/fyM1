@@ -6,7 +6,7 @@ written as <!-- n:NAME -->value<!-- /n -->, and YAML front-matter lines ending i
 A value not measured yet renders as "pending", so the paper always builds and no number is ever
 typed by hand. Only the files listed below are read (never judge_key.json or judge_raw.json, which
 would unblind the judge). A key missing from a file that exists is printed as a warning.
---strict (used at release) fails if any value is missing.
+--strict (used at release) fails if any value is missing or the leak gate is not passed.
 
 Usage: uv run python paper/make_numbers.py [--results results] [--out paper/numbers.tex]
                                            [--markdown README.md MODEL_CARD.md] [--strict]
@@ -41,6 +41,7 @@ PENDING = "pending"
 MACRO_PREFIX = "fy"
 README_START = "<!-- numbers:start -->"
 README_END = "<!-- numbers:end -->"
+LEAK_FILE = "eval/leak_review.json"
 INLINE = re.compile(r"<!-- n:([\w-]+) -->.*?<!-- /n -->")
 YAML_LINE = re.compile(r"^(?P<head>\s*[\w-]+:[ \t]*)(?P<value>.*?)(?P<tail>[ \t]+#[ \t]*n:(?P<name>[\w-]+))$", re.M)
 
@@ -156,9 +157,9 @@ NUMBERS: list[Number] = [
     Number("drift-base", "eval/scores.json", "base.drift_rate", percent),
     Number("drift-fym1", "eval/scores.json", "fym1.drift_rate", percent),
     Number("leak-fym1", "eval/scores.json", "fym1.leak_rate", percent),
-    Number("leak-matches", "eval/leak_review.json", "matches", count),
-    Number("leak-generic", "eval/leak_review.json", "approved_generic", count),
-    Number("leak-rejected", "eval/leak_review.json", "rejected", count),
+    Number("leak-matches", LEAK_FILE, "matches", count),
+    Number("leak-generic", LEAK_FILE, "approved_generic", count),
+    Number("leak-rejected", LEAK_FILE, "rejected", count),
     Number("ppl-base", "eval/scores.json", "base.perplexity", fixed(2)),
     Number("ppl-fym1", "eval/scores.json", "fym1.perplexity", fixed(2)),
     Number("belebele-base", "eval/scores.json", "base.belebele_acc", percent),
@@ -221,6 +222,21 @@ class Resolved:
     rows: list[list[str | None]]  # model-selection table
     missing_keys: list[str]  # "file: key" for keys absent from a file that exists
     missing: list[str]  # "file: key" for every value not measured (what --strict fails on)
+
+
+def leak_gate_problems(results: dict[str, Any]) -> list[str]:
+    """Why the leak review blocks release: every matched run must be reviewed, and none rejected."""
+    review = results.get(LEAK_FILE)
+    counts = {key: lookup(review, key) for key in ("matches", "approved_generic", "rejected")}
+    if any(v is None for v in counts.values()):
+        return []  # not measured yet; reported as missing values
+    matches, generic, rejected = (_number(counts[k]) for k in ("matches", "approved_generic", "rejected"))
+    problems = []
+    if generic + rejected != matches:
+        problems.append(f"{LEAK_FILE}: approved_generic + rejected ({generic + rejected:g}) != matches ({matches:g})")
+    if rejected != 0:
+        problems.append(f"{LEAK_FILE}: {rejected:g} matched run(s) rejected; release is blocked")
+    return problems
 
 
 def latex_name(name: str) -> str:
@@ -337,14 +353,17 @@ def main() -> None:
     parser.add_argument("--results", type=Path, default=here.parent / "results")
     parser.add_argument("--out", type=Path, default=here / "numbers.tex")
     parser.add_argument("--markdown", type=Path, nargs="*", default=[], help="also refresh these files")
-    parser.add_argument("--strict", action="store_true", help="fail if any number is missing (release)")
+    parser.add_argument("--strict", action="store_true", help="fail if any number is missing or the leak gate fails (release)")
     args = parser.parse_args()
 
-    resolved = resolve(load_results(args.results))
+    results = load_results(args.results)
+    resolved = resolve(results)
     for where in resolved.missing_keys:
         print(f"warning: missing key {where}", file=sys.stderr)
-    if args.strict and resolved.missing:
-        sys.exit("--strict: not measured yet:\n  " + "\n  ".join(resolved.missing))
+    if args.strict:
+        problems = [f"not measured yet: {where}" for where in resolved.missing] + leak_gate_problems(results)
+        if problems:
+            sys.exit("--strict failed:\n  " + "\n  ".join(problems))
 
     args.out.write_text(render_tex(resolved), encoding="utf-8")
     for path in args.markdown:
