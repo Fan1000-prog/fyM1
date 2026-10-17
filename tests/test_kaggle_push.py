@@ -24,15 +24,42 @@ def test_unknown_notebook_is_refused():
         push.kernel_metadata("someone", "99_nope")
 
 
-def test_username_is_read_without_the_key(tmp_path):
-    cfg = tmp_path / "kaggle.json"
-    cfg.write_text(json.dumps({"username": "someone", "key": "fake-key"}))
-    assert push.kaggle_username(cfg) == "someone"
-
-
 def test_build_folder_holds_notebook_and_metadata(tmp_path):
     notebook = tmp_path / "00_baseline.ipynb"
     notebook.write_text("{}")
     folder = push.build_folder(tmp_path / "out", push.kernel_metadata("someone", "00_baseline"), notebook)
     assert sorted(p.name for p in folder.iterdir()) == ["00_baseline.ipynb", "kernel-metadata.json"]
     assert json.loads((folder / "kernel-metadata.json").read_text())["id"] == "someone/fym1-00-baseline"
+
+
+def test_main_pushes_one_folder_with_notebook_and_metadata_only(tmp_path, monkeypatch):
+    (tmp_path / "notebooks").mkdir()
+    (tmp_path / "notebooks" / "01_train.ipynb").write_text('{"cells": []}')
+    monkeypatch.setattr(push, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("KAGGLE_API_TOKEN", "fake-kaggle-key")  # must never end up in the pushed folder
+    seen = {}
+
+    def fake_run(cmd, check):
+        folder = Path(cmd[-1])
+        seen["cmd"] = cmd
+        seen["files"] = {p.name: p.read_text() for p in folder.iterdir()}
+        return None
+
+    monkeypatch.setattr(push.subprocess, "run", fake_run)
+    push.main(["01_train", "--user", "someone"])
+    assert seen["cmd"][:4] == ["uvx", "--from", "kaggle==2.2.4", "kaggle"]
+    assert seen["cmd"][4:7] == ["kernels", "push", "-p"]
+    assert sorted(seen["files"]) == ["01_train.ipynb", "kernel-metadata.json"]
+    assert json.loads(seen["files"]["kernel-metadata.json"])["id"] == "someone/fym1-01-train"
+    assert not any("fake-kaggle-key" in text for text in seen["files"].values())
+
+
+def test_main_needs_a_username(monkeypatch):
+    monkeypatch.delenv("KAGGLE_USERNAME", raising=False)
+    with pytest.raises(SystemExit):
+        push.main(["00_baseline"])
+
+
+def test_main_refuses_unknown_notebook():
+    with pytest.raises(SystemExit):
+        push.main(["99_nope", "--user", "someone"])
