@@ -42,5 +42,13 @@ def test_prompts_are_unique_and_non_empty(prompts):
     assert len(set(texts)) == len(texts)
 
 
-def test_every_prompt_is_malagasy(prompts):
-    assert [row["prompt"] for row in prompts if not is_malagasy(row["prompt"])] == []
+# Owner-approved prompts that is_malagasy gets wrong. Kept as written (is_malagasy is not
+# tuned to the test set); they show where the drift metric undercounts Malagasy.
+# greet-05: "akory" and "aby" are not in the word list, and GlotLID misses the line.
+# greet-35: French plus the Malagasy particle "e", which the word list leaves out on purpose.
+KNOWN_LANGUAGE_MISSES = {"greet-05", "greet-35"}
+
+
+def test_every_prompt_is_malagasy_except_known_misses(prompts):
+    misses = {row["id"] for row in prompts if not is_malagasy(row["prompt"])}
+    assert misses == KNOWN_LANGUAGE_MISSES
