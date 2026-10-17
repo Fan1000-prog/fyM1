@@ -84,8 +84,18 @@ def spm_dir(tmp_path_factory):
     return directory
 
 
+@pytest.fixture(scope="session")
+def make_tokenizer(spm_dir):
+    """Build a fixture tokenizer by kind: byte_level, byte_level_ignore_merges or sentencepiece."""
+
+    def make(kind: str):
+        if kind == "sentencepiece":
+            return AutoTokenizer.from_pretrained(spm_dir)
+        return _byte_level_tokenizer(ignore_merges=kind.endswith("ignore_merges"))
+
+    return make
+
+
 @pytest.fixture(scope="session", params=["byte_level", "byte_level_ignore_merges", "sentencepiece"])
-def tokenizer(request, spm_dir):
-    if request.param == "sentencepiece":
-        return AutoTokenizer.from_pretrained(spm_dir)
-    return _byte_level_tokenizer(ignore_merges=request.param.endswith("ignore_merges"))
+def tokenizer(request, make_tokenizer):
+    return make_tokenizer(request.param)
