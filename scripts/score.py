@@ -11,7 +11,11 @@ of {"id", "naturalness", "correctness", "note"} to results/eval/judge_raw.json.
 Step 2, unblind the judge scores:
   uv run python scripts/score.py judge \
       --raw results/eval/judge_raw.json --key results/eval/judge_key.json \
-      --label "<who judged>" --out results/eval/judge.json
+      --label "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code; rubric in src/fym1/eval/judge_rubric.md" \
+      --out results/eval/judge.json
+
+  --label is the methods disclosure the paper cites for who judged; the value above is the one
+  used for v0.1.
 
 Step 3, automatic scores:
   uv run python scripts/score.py scores \
