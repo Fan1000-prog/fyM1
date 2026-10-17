@@ -1,0 +1,23 @@
+# Private data never enters git (raw Messenger exports, cleaned chats, votes)
+data/
+*.zip
+.env
+*.token
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# Models and build outputs
+*.gguf
+*.safetensors
+checkpoints/
+outputs/
+paper/*.aux
+paper/*.log
+paper/*.out
+
+.DS_Store
