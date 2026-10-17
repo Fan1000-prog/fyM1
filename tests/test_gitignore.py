@@ -18,7 +18,8 @@ def is_ignored(path: str) -> bool:
 
 
 @pytest.mark.parametrize(
-    "path", ["data/raw/x.json", "data/private/x.jsonl", "foo.zip", ".env"]
+    "path",
+    ["data/raw/x.json", "data/private/x.jsonl", "foo.zip", ".env", ".playwright-mcp/page-1.yml"],
 )
 def test_private_paths_are_ignored(path):
     assert is_ignored(path)

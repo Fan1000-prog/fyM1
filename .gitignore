@@ -20,4 +20,7 @@ paper/*.aux
 paper/*.log
 paper/*.out
 
+# Browser automation output (snapshots, screenshots, console logs)
+.playwright-mcp/
+
 .DS_Store
