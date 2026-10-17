@@ -39,13 +39,13 @@ def main() -> None:
     votes_dir = args.votes_dir or Path(snapshot_download(VOTES_REPO, repo_type="dataset"))
     pairs = load_pairs(args.pairs)
     result = {
-        "votes_source": str(args.votes_dir) if args.votes_dir else VOTES_REPO,
+        "votes_source": "local files" if args.votes_dir else VOTES_REPO,  # no local paths in public results
         "pairs_file": args.pairs.name,
         **tally(read_votes(votes_dir), {pair["pair_id"]: pair["a_is"] for pair in pairs}),
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    print(f"wrote {args.out}: {result['n_votes']} votes, fym1 win rate {result['fym1_win_rate_excl_ties']}")
+    print(f"wrote {args.out}: {result['votes']} votes, fym1 win rate {result['fym1_win_rate']}")
 
 
 if __name__ == "__main__":

@@ -32,7 +32,11 @@ def first_vote_per_session_and_pair(votes: Iterable[dict]) -> list[dict]:
 
 
 def tally(votes: Iterable[dict], a_is_by_pair: Mapping[str, str]) -> dict:
-    """Win counts, win rate (ties excluded) with 95% CI, and wrong-answer flags per model."""
+    """The results/eval/arena.json record (keys read by paper/numbers.py).
+
+    `fym1_win_rate` leaves ties ("same") out: fym1 wins / (fym1 wins + base wins), with its 95% Wilson
+    interval in `ci_low`/`ci_high`. All three are None until there is a decisive vote.
+    """
     unique_votes = first_vote_per_session_and_pair(votes)
     wins = {"base": 0, "fym1": 0}
     wrong_flags = {"base": 0, "fym1": 0}
@@ -48,13 +52,15 @@ def tally(votes: Iterable[dict], a_is_by_pair: Mapping[str, str]) -> dict:
         for side in vote["wrong"]:
             wrong_flags[models[side]] += 1
     decisive = wins["fym1"] + wins["base"]
+    ci_low, ci_high = wilson_interval(wins["fym1"], decisive) if decisive else (None, None)
     return {
-        "n_votes": len(unique_votes),
-        "n_sessions": len({vote["session_id"] for vote in unique_votes}),
+        "votes": len(unique_votes),
+        "raters": len({vote["session_id"] for vote in unique_votes}),
+        "fym1_win_rate": wins["fym1"] / decisive if decisive else None,
+        "ci_low": ci_low,
+        "ci_high": ci_high,
         "fym1_wins": wins["fym1"],
         "base_wins": wins["base"],
         "same": same,
-        "fym1_win_rate_excl_ties": wins["fym1"] / decisive if decisive else None,
-        "ci95": list(wilson_interval(wins["fym1"], decisive)) if decisive else None,
         "wrong_flags": wrong_flags,
     }

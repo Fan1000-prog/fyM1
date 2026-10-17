@@ -36,10 +36,10 @@ def test_tally_maps_sides_to_models():
     assert result["fym1_wins"] == 2
     assert result["base_wins"] == 1
     assert result["same"] == 1
-    assert result["n_votes"] == 4
-    assert result["n_sessions"] == 2
-    assert result["fym1_win_rate_excl_ties"] == pytest.approx(2 / 3)
-    assert result["ci95"] == pytest.approx(list(wilson_interval(2, 3)))
+    assert result["votes"] == 4
+    assert result["raters"] == 2
+    assert result["fym1_win_rate"] == pytest.approx(2 / 3)
+    assert (result["ci_low"], result["ci_high"]) == pytest.approx(wilson_interval(2, 3))
 
 
 def test_tally_counts_wrong_flags_per_model():
@@ -49,13 +49,12 @@ def test_tally_counts_wrong_flags_per_model():
 
 def test_tally_keeps_first_vote_per_session_and_pair():
     result = tally([vote("p1", "A"), vote("p1", "B")], A_IS)
-    assert (result["n_votes"], result["fym1_wins"], result["base_wins"]) == (1, 1, 0)
+    assert (result["votes"], result["fym1_wins"], result["base_wins"]) == (1, 1, 0)
 
 
 def test_tally_without_decisive_votes_has_no_rate():
     result = tally([vote("p1", "same")], A_IS)
-    assert result["fym1_win_rate_excl_ties"] is None
-    assert result["ci95"] is None
+    assert (result["fym1_win_rate"], result["ci_low"], result["ci_high"]) == (None, None, None)
 
 
 def test_tally_rejects_votes_for_unknown_pairs():
