@@ -33,7 +33,7 @@ from a new browser or a private window. What limits it:
 
 - The server signs each session id with `ARENA_KEY`; ids it did not sign (or over 128 characters) are
   rejected, so a script cannot invent ids. Vote events are not exposed in the public API.
-- One vote per session per pair, and at most as many votes per session as there are pairs.
+- One vote per session per pair, so one session casts at most as many votes as there are pairs.
 - The tally drops repeat (session, pair) votes and leaves out sessions whose median time between votes is
   under 2 seconds; `arena.json` reports how many sessions and votes were left out, and votes per session.
 
@@ -50,5 +50,7 @@ Space settings:
 
 Run locally: `ARENA_KEY=dev PAIRS_FILE=pairs.sample.jsonl VOTES_REPO= python app.py`.
 Build pairs: `uv run python scripts/build_pairs.py --base results/eval/answers_base.jsonl --fym1 results/eval/answers_fym1.jsonl --out spaces/arena/pairs.jsonl --seed 42 --upload-key`.
+Deploy (from the repo root; the exclude is a second guard, the key is never written under `spaces/`):
+`hf upload Fan1000-Prog/fyM1-arena spaces/arena . --repo-type space --exclude "pairs_key*"`.
 Tally: `uv run python scripts/tally_votes.py` → `results/eval/arena.json` (win rate, ties excluded, with a
 95% Wilson interval). Code: https://github.com/Fan1000-prog/fyM1

@@ -113,7 +113,7 @@ def test_minted_session_id_is_valid():
 
 @pytest.mark.parametrize(
     "session_id",
-    [None, 7, {"x": 1}, "", "abc", "abc.def", "." + "0" * 64, "a" * 200],
+    [None, 7, {"x": 1}, "", "abc", "abc.def", "." + "0" * 64, "a" * 200, "nonce.é", "nonce.\ud800", "é.0"],
 )
 def test_junk_session_ids_are_rejected(session_id):
     assert not is_valid_session_id(session_id, KEY)
@@ -129,26 +129,19 @@ def test_overlong_session_id_is_rejected_even_if_signed():
 
 
 def test_vote_book_saves_once_per_pair():
-    book = VoteBook(KEY, max_votes_per_session=10)
+    book = VoteBook(KEY)
     session_id = new_session_id(KEY)
     assert book.record("p1", "A", session_id) is not None
     assert book.record("p1", "B", session_id) is None
-    assert book.votes_cast[session_id] == 1
+    assert book.seen == {(session_id, "p1")}
 
 
 def test_vote_book_rejects_forged_session():
-    assert VoteBook(KEY, max_votes_per_session=10).record("p1", "A", "made-up.id") is None
-
-
-def test_vote_book_caps_votes_per_session():
-    book = VoteBook(KEY, max_votes_per_session=2)
-    session_id = new_session_id(KEY)
-    saved = [book.record(f"p{i}", "A", session_id) for i in range(3)]
-    assert [vote is not None for vote in saved] == [True, True, False]
+    assert VoteBook(KEY).record("p1", "A", "made-up.id") is None
 
 
 def test_vote_book_ignores_empty_choice():
-    book = VoteBook(KEY, max_votes_per_session=10)
+    book = VoteBook(KEY)
     session_id = new_session_id(KEY)
     assert book.record("p1", None, session_id) is None
-    assert book.votes_cast[session_id] == 0
+    assert book.seen == set()

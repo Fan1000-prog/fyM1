@@ -5,7 +5,6 @@ import hmac
 import json
 import random
 import secrets
-from collections import Counter
 from collections.abc import Collection
 from datetime import datetime, timezone
 from pathlib import Path
@@ -87,7 +86,8 @@ def new_session_id(key: bytes) -> str:
 
 def is_valid_session_id(session_id, key: bytes) -> bool:
     """True only for an id this server minted (any type may arrive: the browser sends it)."""
-    if not isinstance(session_id, str) or len(session_id) > MAX_SESSION_ID_CHARS:
+    # compare_digest raises on non-ASCII str, and minted ids are always ASCII
+    if not isinstance(session_id, str) or len(session_id) > MAX_SESSION_ID_CHARS or not session_id.isascii():
         return False
     nonce, _, signature = session_id.partition(".")
     return bool(nonce) and hmac.compare_digest(signature, sign(nonce, key))
@@ -99,22 +99,20 @@ class VoteBook:
     Not thread-safe: the caller holds the write lock around `record`.
     """
 
-    def __init__(self, key: bytes, max_votes_per_session: int):
+    def __init__(self, key: bytes):
         self.key = key
-        self.max_votes_per_session = max_votes_per_session
         self.seen: set[tuple[str, str]] = set()
-        self.votes_cast: Counter[str] = Counter()
 
     def record(
         self, pair_id: str, choice: str | None, session_id, wrong: Collection[str] = (), now: datetime | None = None
     ) -> dict | None:
-        """The vote to save and remember, or None for a forged id, a session at its cap, or what make_vote rejects."""
+        """The vote to save and remember, or None for a forged id or anything make_vote rejects.
+
+        One vote per session per pair is also the per-session cap: at most len(pairs) votes.
+        """
         if not is_valid_session_id(session_id, self.key):
-            return None
-        if self.votes_cast[session_id] >= self.max_votes_per_session:
             return None
         vote = make_vote(pair_id, choice, session_id, self.seen, wrong=wrong, now=now)
         if vote is not None:
             self.seen.add((session_id, pair_id))
-            self.votes_cast[session_id] += 1
         return vote
