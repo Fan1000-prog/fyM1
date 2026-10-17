@@ -192,3 +192,176 @@ KNOWN_LIMITS = [
 def test_known_limits(text):
     out = run(text)
     assert out != text and not leaked_parts(out)
+
+
+# --- final review (PR #3 round 3) -------------------------------------------------------
+
+FINAL_PEOPLE = ["Nirina Rakotomalala", "Fara Randria", "Tojo Rasolofonirina", "Mialy Razafindrakoto",
+                "Hery Andriamanana", "Fan Rabearison"]  # fmt: skip
+FINAL_NAMES = assign_fake_names(FINAL_PEOPLE)
+
+EVERYDAY_LINES = """De aona ry zalahy?
+Mety be zany, lancer-na fotsiny😂
+Mbola miasa ve ialahy?
+Ok fa aza adino ny rdv rahampitso
+Hoatrinona ilay kiraro? 15 000 Ar ve?
+2 500 Ar ny mofo gasy androany
+Ho avy aho amin'ny 3h
+Amin'ny 14h30 ny fivoriana, ny 12/10/2026
+Ny 17 oktobra 2026 no hanao fety
+Mila trano, t.s.a fa ataovy haingana
+Mividy voatabia, tongolo, sakay, etc.
+Tsara be ny volana farany
+Efa vita ve ny devoir-nao?
+Lafo be ny vary, 3 000 Ar ny kapoaka
+Mandeha any Antsirabe izahay rahampitso maraina
+Taiza ianao omaly hariva?
+Misaotra betsaka tompoko 🙏
+Tsy haiko loatra fa andramo ihany
+Aiza ny lakile? Tadiavo ao ambony latabatra
+Ny bus 194 dia mandalo eo Analakely
+Rdv @15h eo Ankorondrano
+1 000 000 000 Fmg taloha io
+Ny score dia 3-0, faly be aho!
+Nahazo 18/20 aho tamin'ny maths
+Mila 2 kg sy 500 g aho
+Ny laharana 5, 6, 7, 8, 9 no tafita
+01/02/2026 03/04 no daty roa
+Mety tsara.Be ny fitiavako anao
+Hitako tao amin'ny fb 2 andro lasa
+Ig: tsy mampiasa aho
+Alefaso amin'ny whatsapp 5mn aloha
+Andao hijery film amin'ny 20h
+Ny famerenana amin'ny 1er novembre
+Efa nandoa 50.000 Ar aho tamin'ny MVola
+Tel aloha fa tsy afaka manoratra aho
+Mandehana mody ianareo fa efa alina
+Ok fa aza adino, A.S.A.P azafady
+Ny pp no tsy mety
+Mahafinaritra ny fety, misaotra!
+Haha tena mampihomehy ilay video
+Vao 7h ny ora dia efa tonga aho
+Ny RN7 dia mbola tapaka
+Nisy 3 olona no maty, mampalahelo
+Tsy afaka aho fa marary ny zanako
+Andao isika hiara-hisakafo
+lol mety be, à demain
+1 000 000 000 Ar
+5 000 000 000 Ar
+Ar 1 000 000 000
+10 000 000 000
+Mety.Be
+mety.be ny
+ok.Me
+farany""".splitlines()
+
+
+@pytest.mark.parametrize("text", EVERYDAY_LINES)
+def test_everyday_lines_are_not_redacted(text):
+    assert Anonymizer(FINAL_NAMES)(text) == text
+
+
+@pytest.mark.parametrize(
+    "text, kept",
+    [
+        ("Tonga ve ny colis? Lot 3 no nalefa", "<ADDRESS>"),  # leans private: Lot + number
+        ("Ref: 123456789 ilay transaction", "<TEL>"),  # leans private: long number
+        ("Sambatra ianao ry Mialy", None),
+        ("Nirina sy Fara no tonga voalohany", None),
+    ],
+)
+def test_lines_with_private_bits(text, kept):
+    out = Anonymizer(FINAL_NAMES)(text)
+    real = {compare_key(w) for name in FINAL_PEOPLE for w in name.split()}
+
+    assert not real & {compare_key(w) for w in out.split()}
+    assert kept is None or kept in out
+
+
+def fake_first(person):
+    return FINAL_NAMES[person].split()[0]
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("@Nirina Rakotomalala Aiza ianao?", FINAL_NAMES["Nirina Rakotomalala"] + " Aiza ianao?"),
+        ("@Nirina Mbola tsy vita", fake_first("Nirina Rakotomalala") + " Mbola tsy vita"),
+        ("@Nirina mbola tsy vita", fake_first("Nirina Rakotomalala") + " mbola tsy vita"),
+        ("@Nirina Rakotomalala", FINAL_NAMES["Nirina Rakotomalala"]),
+        ("@Fara Ok ve?", fake_first("Fara Randria") + " Ok ve?"),
+    ],
+)
+def test_mention_takes_only_the_known_name(text, expected):
+    assert Anonymizer(FINAL_NAMES)(text) == expected
+
+
+PRIV_NAMES = assign_fake_names(["Nirina Rakotomalala", "Fara Randria", "Jean-Pierre Rakoto"])
+
+
+@pytest.mark.parametrize(
+    "text, leaked, rest",
+    [
+        ("@Jean-Pierre Rakoto salut", {"jean", "pierre", "rakoto"}, " salut"),
+        ("@Marie-Claire Rasoanaivo salut", {"marie", "claire", "rasoanaivo"}, " salut"),
+        ("@Hery-Zo Andriamanana", {"hery", "zo", "andriamanana"}, ""),
+        ("@haja rabe ok", {"haja", "rabe"}, " ok"),
+    ],
+)
+def test_hyphenated_and_lowercase_mentions(text, leaked, rest):
+    out = Anonymizer(PRIV_NAMES)(text)
+
+    assert not leaked & {compare_key(p) for w in out.split() for p in w.split("-")}
+    assert out.endswith(rest)
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("(034) 12 345 67", "<TEL>"),
+        ("(034)12 345 67", "<TEL>"),
+        ("Antsoy aho (034 12 345 67)", "Antsoy aho (<TEL>)"),
+        ("Tel(034 12 345 67)", "Tel(<TEL>)"),
+        ("[034 12 345 67]", "[<TEL>]"),
+        ("num:0341234567", "num:<TEL>"),
+        ("laharana0341234567", "laharana<TEL>"),
+        ("0341234567📞", "<TEL>📞"),
+        ("034,12,345,67", "<TEL>"),
+        ("034_12_345_67", "<TEL>"),
+        ("+261 34 12 345 67", "<TEL>"),
+    ],
+)
+def test_phones_in_brackets_and_glued(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text, leaked",
+    [
+        ("Nirina-nao", "nirina"), ("Nirinantsika", "nirinantsika"), ("NIRINAKO", "nirinako"),
+        ("ry Nirinaaa ô", "nirina"), ("Fara a!", "fara"), ("Faraaa", "fara"), ("Faralahy", "faralahy"),
+    ],
+)  # fmt: skip
+def test_name_forms_do_not_leak(text, leaked):
+    out = Anonymizer(PRIV_NAMES)(text)
+
+    assert leaked not in {compare_key(p) for w in out.split() for p in w.split("-")}
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Marie-Claire.Rasoanaivo@gmail.com", "<EMAIL>"),
+        ("https://www.facebook.com/profile.php?id=100012345678", "<URL>"),
+    ],
+)
+def test_email_and_profile_link(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+def test_hashed_fake_avoids_real_names():
+    from fym1.data.anonymize import FIRST_NAMES
+
+    names = assign_fake_names([f"{first} Rakotobe" for first in FIRST_NAMES[1:]])
+
+    assert Anonymizer(names)("@Zafindraibe") == FIRST_NAMES[0]
