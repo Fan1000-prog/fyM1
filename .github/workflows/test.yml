@@ -9,5 +9,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
+      # GlotLID (~1.7 GB) for fym1.eval.lang; key matches GLOTLID_REVISION.
+      # Cache the whole hub dir: huggingface_hub 2.x keeps file contents in the shared
+      # hub/blobs/, and the per-model dir only holds links to them.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: glotlid-v2-85cd6716494360367b75f642b5bc78667605d0b4
       - run: uv sync --all-groups
       - run: uv run pytest -q
