@@ -53,4 +53,4 @@ Build pairs: `uv run python scripts/build_pairs.py --base results/eval/answers_b
 Deploy (from the repo root; the exclude is a second guard, the key is never written under `spaces/`):
 `hf upload Fan1000-Prog/fy-m-1-arena spaces/arena . --repo-type space --exclude "pairs_key*"`.
 Tally: `uv run python scripts/tally_votes.py` → `results/eval/arena.json` (win rate, ties excluded, with a
-95% Wilson interval). Code: https://github.com/Fan1000-prog/fyM1
+95% Wilson interval). Code: https://github.com/Fan1000-prog/fy-m-1

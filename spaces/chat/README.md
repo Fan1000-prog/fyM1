@@ -27,4 +27,4 @@ Space settings:
 | `HF_TOKEN` | secret | read token; only while the model repo is private |
 
 The app refuses to start if a variable is missing. Sampling matches the eval run (temperature 0.7, top_p 0.9,
-256 new tokens). Code: https://github.com/Fan1000-prog/fyM1
+256 new tokens). Code: https://github.com/Fan1000-prog/fy-m-1

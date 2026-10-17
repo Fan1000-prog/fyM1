@@ -11,7 +11,7 @@ from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 from prompt import MessageTooLong, build_messages
 
-GITHUB_URL = "https://github.com/Fan1000-prog/fyM1"
+GITHUB_URL = "https://github.com/Fan1000-prog/fy-m-1"
 FOOTER = f"[Code]({GITHUB_URL}) · [Paper]({GITHUB_URL}/tree/main/paper) · [Arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m-1-arena)"
 # Same sampling as the eval run, so the demo shows the model that was measured.
 SAMPLING = {"temperature": 0.7, "top_p": 0.9, "max_tokens": 256}
