@@ -2,6 +2,7 @@ import pytest
 
 from fym1.eval.baseline import (
     accuracy,
+    belebele_completion_prompt,
     belebele_prompt,
     chrf_pp,
     first_line,
@@ -84,3 +85,10 @@ def test_selection_row_maps_baseline_json_to_paper_schema():
 def test_selection_row_leaves_missing_sections_none():
     row = selection_row({"model": {"slug": "m", "hub_id": "org/m"}, "skipped": "403"}, "x")
     assert row["belebele_acc"] is None and row["chrf_plt_eng"] is None and row["qlora_fits"] is None
+
+
+def test_belebele_completion_prompt_is_plain_text_ending_in_answer():
+    p = belebele_completion_prompt(ROW)
+    assert p.startswith("P: Ny alika dia mihinana.\nQ: Inona no ataon'ny alika?\n")
+    assert "\nA: Matory\nB: Mihinana\nC: Milomano\nD: Mihira\n" in p
+    assert p.endswith("Answer:")

@@ -2,7 +2,7 @@
 
 Colab notebooks import `fym1` from there, so they run merged code only. Run from a clean checkout of
 origin/main, e.g. `git worktree add --detach ../fyM1-sync origin/main`. Refuses otherwise.
-Uploads `src/**/*.py` and `eval/prompts.jsonl`; it never deletes files on the Hub.
+Uploads `src/**/*.py`, `eval/prompts.jsonl` and `code/SHA` (the commit); it never deletes files on the Hub.
 """
 
 import subprocess
@@ -33,8 +33,12 @@ def main() -> None:
     if reason:
         sys.exit(f"refusing to sync: {reason}")
     commit = git("rev-parse", "--short", "HEAD")
-    HfApi().upload_folder(folder_path=".", path_in_repo="code", repo_id=REPO, allow_patterns=PATTERNS,
-                          commit_message=f"code: sync from origin/main {commit}")
+    api = HfApi()
+    api.upload_folder(folder_path=".", path_in_repo="code", repo_id=REPO, allow_patterns=PATTERNS,
+                      commit_message=f"code: sync from origin/main {commit}")
+    # Notebooks record this in their results, so every number traces back to the code that made it.
+    api.upload_file(path_or_fileobj=commit.encode(), path_in_repo="code/SHA", repo_id=REPO,
+                    commit_message=f"code: SHA {commit}")
     print(f"synced origin/main {commit} to {REPO}/code")
 
 

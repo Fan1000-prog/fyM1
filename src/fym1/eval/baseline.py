@@ -81,3 +81,9 @@ def selection_row(result: dict, license: str) -> dict:
         "sec_per_step": smoke.get("sec_per_step"),
         "qlora_fits": smoke.get("ok"),
     }
+
+
+def belebele_completion_prompt(row: dict) -> str:
+    """Plain-text 0-shot prompt for base models (no chat template); score the next token over " A"-" D"."""
+    options = "\n".join(f"{letter}: {row[f'mc_answer{i}']}" for i, letter in enumerate("ABCD", start=1))
+    return f"P: {row['flores_passage']}\nQ: {row['question']}\n{options}\nAnswer:"
