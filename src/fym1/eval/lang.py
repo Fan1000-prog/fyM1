@@ -50,8 +50,11 @@ _WORD = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)*")
 
 
 @lru_cache(maxsize=1)
-def glotlid() -> fasttext.FastText._FastText:
-    """Load the GlotLID fastText model once (downloaded and cached by huggingface_hub)."""
+def glotlid():
+    """Load the GlotLID fastText model once (downloaded and cached by huggingface_hub).
+
+    Returns fasttext's model object; its class is private, so it is not annotated.
+    """
     path = hf_hub_download(GLOTLID_REPO, "model.bin", revision=GLOTLID_REVISION)
     return fasttext.load_model(path)
 
