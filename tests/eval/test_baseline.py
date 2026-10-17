@@ -7,6 +7,7 @@ from fym1.eval.baseline import (
     chrf_pp,
     missing_sections,
     first_line,
+    loss_trend,
     sample_sentences,
     selection_row,
     tokens_per_word,
@@ -82,6 +83,7 @@ def test_selection_row_maps_baseline_json_to_paper_schema():
         "belebele_chat_acc": 0.5,
         "chrf_plt_eng": 50.0, "chrf_eng_plt": 40.0, "flores": "measured", "tokens_per_word": 2.1,
         "sniff_natural": None, "peak_vram_gb": 12.0, "sec_per_step": 30.0, "qlora_fits": True,
+        "loss_trend": None,
     }
 
 
@@ -115,3 +117,10 @@ def test_missing_sections_completion_for_all_chat_for_instruct_only():
 
 def test_missing_sections_skipped_model_is_complete():
     assert missing_sections({"skipped": "403"}, base_model=False) == []
+
+
+def test_loss_trend_from_curve_or_first_last():
+    assert loss_trend({"loss_curve": [6.0, 3.0, 4.0, 5.0]}) == {
+        "first": 6.0, "min": 3.0, "min_step": 2, "last": 5.0, "rising_at_end": True}
+    assert loss_trend({"loss_first": 1.1, "loss_last": 0.7}) == {"first": 1.1, "last": 0.7}
+    assert loss_trend({}) is None

@@ -123,6 +123,5 @@
     "nan_loss": false,
     "lora": "r16 a16 all linear (language only)",
     "compute_dtype": "torch.float16"
-  },
-  "done": true
+  }
 }

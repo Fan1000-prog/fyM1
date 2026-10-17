@@ -35,10 +35,18 @@ INSTRUCT_VERSION = {
 }
 
 
+NOTES = {
+    "google/gemma-4-12B-it": "An earlier unscripted smoke at lr 2e-4 (not used here) showed the training loss "
+    "diverging after its first ten steps; see loss_trend once the scripted smoke is re-measured.",
+}
+
+
 def candidate(result: dict) -> dict:
     hub_id = result["model"]["hub_id"]
     row = selection_row(result, LICENSES[hub_id], base_model=hub_id in BASE_MODELS)
     row["instruct_version"] = INSTRUCT_VERSION.get(hub_id, {"exists": True, "note": "is the instruct model"})
+    if hub_id in NOTES:
+        row["note"] = NOTES[hub_id]
     return row
 
 

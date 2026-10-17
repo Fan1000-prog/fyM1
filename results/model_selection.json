@@ -18,6 +18,10 @@
       "peak_vram_gb": 7.79,
       "sec_per_step": 74.3,
       "qlora_fits": true,
+      "loss_trend": {
+        "first": 1.1323297023773193,
+        "last": 0.7007304430007935
+      },
       "instruct_version": {
         "exists": false,
         "nearest": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
@@ -36,13 +40,15 @@
       "flores": "pending",
       "tokens_per_word": 2.792,
       "sniff_natural": null,
-      "peak_vram_gb": 9.18,
-      "sec_per_step": 126.3,
-      "qlora_fits": true,
+      "peak_vram_gb": null,
+      "sec_per_step": null,
+      "qlora_fits": null,
+      "loss_trend": null,
       "instruct_version": {
         "exists": true,
         "note": "is the instruct model"
-      }
+      },
+      "note": "An earlier unscripted smoke at lr 2e-4 (not used here) showed the training loss diverging after its first ten steps; see loss_trend once the scripted smoke is re-measured."
     }
   ]
 }

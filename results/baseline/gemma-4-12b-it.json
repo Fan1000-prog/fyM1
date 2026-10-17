@@ -109,44 +109,5 @@
         "answer": "Miarahaba anao! Voninana aho fa afaka manampy anao.\n\nInona no azoko atao ho anao? Azonao atao ny:\n\n1.  **Mametraka fanontanana** (momba ny tantara, siansa,i zava-misy manodidina, sns).\n2.  **Mangataka fanampiana amin'ny asa soratra** (manoratra taratasy, tononkina, tantara, na fandikan-teny).\n3.  **Miresaka fotsiny** (misy zav"
       }
     ]
-  },
-  "done": true,
-  "qlora_smoke": {
-    "ok": true,
-    "stopped_early": "lead: sec/step clear, T4 time saved for other candidates",
-    "steps": 20,
-    "steps_planned": 30,
-    "seq_len": 2048,
-    "batch": "1 x grad-accum 8",
-    "tokens_per_step": 16384,
-    "lr": 0.0002,
-    "peak_vram_gb": 9.18,
-    "peak_vram_allocated_gb": 9.0,
-    "sec_per_step": 126.3,
-    "seconds": 2656,
-    "loss_curve": [
-      6.720305919647217,
-      7.609475135803223,
-      6.321691989898682,
-      4.78739070892334,
-      3.6102542877197266,
-      3.349930763244629,
-      3.142928123474121,
-      3.219165802001953,
-      3.011533498764038,
-      3.3012518882751465,
-      3.9447410106658936,
-      3.9715192317962646,
-      4.36309814453125,
-      4.343080997467041,
-      4.360405921936035,
-      4.473965167999268,
-      5.3231916427612305,
-      5.656369209289551,
-      6.4423322677612305,
-      6.958861351013184
-    ],
-    "compute_dtype": "float32 (Unsloth: Switching to float32 training since model cannot work with float16)",
-    "lora": "r16 a16 all linear (language only)"
   }
 }

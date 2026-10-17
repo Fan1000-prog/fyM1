@@ -86,7 +86,20 @@ def selection_row(result: dict, license: str, base_model: bool = False) -> dict:
         "peak_vram_gb": smoke.get("peak_vram_gb"),
         "sec_per_step": smoke.get("sec_per_step"),
         "qlora_fits": smoke.get("ok"),
+        "loss_trend": loss_trend(smoke),
     }
+
+
+def loss_trend(smoke: dict) -> dict | None:
+    """Training-loss shape of a QLoRA smoke (steps are 1-based); older records only have first/last."""
+    curve = smoke.get("loss_curve")
+    if curve:
+        low = min(range(len(curve)), key=curve.__getitem__)
+        return {"first": curve[0], "min": curve[low], "min_step": low + 1, "last": curve[-1],
+                "rising_at_end": curve[-1] > curve[low]}
+    if "loss_first" in smoke:
+        return {"first": smoke["loss_first"], "last": smoke["loss_last"]}
+    return None
 
 
 def belebele_completion_prompt(row: dict) -> str:
