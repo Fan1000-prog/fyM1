@@ -120,3 +120,21 @@ def test_unharvested_nickname_events_are_counted(tmp_path):
 
     assert thread.nicknames == {"Niry": "Soa"}
     assert thread.unharvested_nickname_events == 2
+
+
+@pytest.mark.parametrize(
+    "event, sender, person",
+    [
+        ("Nirina set your nickname to Fanfan.", "Nirina", "Soa"),  # "your" = the reader
+        ("Nirina a défini votre surnom sur Fanfan.", "Nirina", "Soa"),
+        ("You set your nickname to Fanfan.", "Soa", "Soa"),
+        ("Vous avez défini votre surnom sur Fanfan.", "Soa", "Soa"),
+        ("Nirina a défini son propre pseudo sur Fanfan.", "Nirina", "Nirina"),
+        ("Nirina set the nickname for you to Fanfan.", "Nirina", "Soa"),
+        ("Soa a défini le pseudo de Nirina sur Fanfan.", "Soa", "Nirina"),
+    ],
+)
+def test_nickname_events_attribute_your_to_the_reader(event, sender, person):
+    raw = {"sender_name": sender, "content": event}
+
+    assert parse_nickname_event(raw, ["Nirina", "Soa"]) == ("Fanfan", person)

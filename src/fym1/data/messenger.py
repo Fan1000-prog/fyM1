@@ -44,15 +44,17 @@ def fix_meta_text(s: str) -> str:
 # filtered_threads hold strangers and spam, so they are left out.
 DYI_FOLDERS = ("inbox", "archived_threads", "e2ee_cutover")
 
-# Nickname-change events, EN and FR UI. `target` is absent when people name themselves.
+# Nickname-change events, EN and FR UI. `target` names the person; `own` means the
+# sender named themselves; `reader` ("your"/"votre") means whoever downloaded the export.
 NICKNAME_EVENTS = (
     re.compile(
-        r"^.+? set (?:the nickname for (?P<target>.+?)|(?:his|her|their|your)(?: own)? nickname)"
-        r" to (?P<nickname>.+?)\.?$"
+        r"^.+? set (?:the nickname for (?P<target>.+?)|(?P<own>his|her|their) own nickname"
+        r"|(?P<reader>your)(?: own)? nickname) to (?P<nickname>.+?)\.?$"
     ),
     re.compile(
         r"^.+? (?:a|avez) défini (?:le (?:surnom|pseudo) (?:de |d')(?P<target>.+?)"
-        r"|(?:son|votre) (?:propre )?(?:surnom|pseudo)) sur (?P<nickname>.+?)\.?$"
+        r"|(?P<own>son) (?:propre )?(?:surnom|pseudo)|(?P<reader>votre) (?:propre )?(?:surnom|pseudo))"
+        r" sur (?P<nickname>.+?)\.?$"
     ),
 )
 NICKNAME_WORD = re.compile(r"\b(?:nickname|surnom|pseudo)\b", re.IGNORECASE)
@@ -97,13 +99,23 @@ def parse_nickname_event(raw: dict, participants: list[str]) -> tuple[str, str] 
     if not match:
         return None
     sender = fix_meta_text(raw["sender_name"])
-    person = match["target"] or sender
-    # "you" is whoever downloaded the export: known in a 1:1 thread. In a group, pin the
-    # nickname on the sender rather than drop it, so it still gets anonymised.
-    if person.lower() in ("you", "vous"):
-        others = [p for p in participants if p != sender]
-        person = others[0] if len(others) == 1 else sender
+    if match["own"]:
+        person = sender
+    elif match["reader"] or match["target"].lower() in ("you", "vous"):
+        person = _reader(text, sender, participants)
+    else:
+        person = match["target"]
     return (match["nickname"], person) if person in participants else None
+
+
+def _reader(text: str, sender: str, participants: list[str]) -> str:
+    """Whoever downloaded the export: the sender of a "You …" event, else the other side of
+    a 1:1 thread. In a group it is unknown; pin it on the sender so the nickname is still
+    anonymised."""
+    if text.startswith(("You ", "Vous ")):
+        return sender
+    others = [p for p in participants if p != sender]
+    return others[0] if len(others) == 1 else sender
 
 
 def _is_nickname_event(raw: dict) -> bool:
