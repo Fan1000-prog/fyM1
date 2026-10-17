@@ -7,6 +7,7 @@ Malagasy when GlotLID says so OR enough of its words are common Malagasy words.
 """
 
 import re
+import unicodedata
 from functools import lru_cache
 
 import fasttext
@@ -19,23 +20,23 @@ GLOTLID_REVISION = "85cd6716494360367b75f642b5bc78667605d0b4"  # pinned for reru
 MALAGASY_LABELS = frozenset({"plt_Latn", "xmv_Latn", "tdx_Latn", "skg_Latn"})
 
 # Common Malagasy words, including texting forms ("zany", "aona", "ahn", "zah").
-# Words that are also common English/French words are left out on purpose
-# ("be", "no", "any", "sa", "lay", "marina", "e", "eh"), so a French or English
-# sentence never passes on a look-alike word.
+# Words that are also English/French words or common names are left out on purpose
+# ("be", "no", "any", "sa", "lay", "marina", "e", "eh", "na", "ho", "mba", "aloha",
+# "tonga", "tia", "ko", "vita", "mila", "koa"), so a French or English sentence never
+# passes on a look-alike word.
 MALAGASY_WORDS = frozenset(
     """
-    ny ilay ve fa dia ka ary sy amin amina aminy amin'ny tamin'ny an'ny ho koa kosa
-    satria raha rehefa nefa kanefa sady na fotsiny ihany avy eto ety ao eo izao zao
-    izany zany ireo io ity iny iry ireto inona iza aiza oviana ahoana aona nahoana firy
-    ohatrinona tsy tsia eny ia mbola efa tena loatra kely tsara ratsy mety tokony afaka
-    mila tia tiako fantatro haiko hoy aho ahy ianao anao ianareo anareo izy azy izahay
-    izaho zah isika antsika ialahy ry zalahy ahn aloha rahampitso omaly anio androany
-    rahariva alina maraina hariva misaotra betsaka veloma salama manao mandeha miasa
-    mipetraka mahita mihinana misotro matory mody miverina tonga mankany avia andao
-    andeha vita vao vaovao mihitsy sahady foana tsotra olona namana trano sakafo vola
-    fotoana zavatra resaka ndray indray angamba toa hafa rehetra daholo misy tsisy mba
-    aza adino ko nao bé maintsy manana hisakafo azafady tompoko manahoana mandria
-    fahizay
+    ny ilay ve fa dia ka ary sy amin amina aminy amin'ny tamin'ny an'ny kosa satria raha
+    rehefa nefa kanefa sady fotsiny ihany avy eto ety ao eo izao zao izany zany ireo io
+    ity iny iry ireto inona iza aiza oviana ahoana aona nahoana firy ohatrinona tsy tsia
+    eny ia mbola efa tena loatra kely tsara ratsy mety tokony afaka tiako fantatro haiko
+    hoy aho ahy ianao anao ianareo anareo izy azy izahay izaho zah isika antsika ialahy
+    ry zalahy ahn rahampitso omaly anio androany rahariva alina maraina hariva misaotra
+    betsaka veloma salama manao mandeha miasa mipetraka mahita mihinana misotro matory
+    mody miverina mankany avia andao andeha vao vaovao mihitsy sahady foana tsotra olona
+    namana trano sakafo vola fotoana zavatra resaka ndray indray angamba toa hafa
+    rehetra daholo misy tsisy aza adino nao bé maintsy manana hisakafo azafady tompoko
+    manahoana mandria fahizay
     """.split()
 )
 
@@ -60,8 +61,18 @@ def _glotlid_label(text: str) -> str:
     return labels[0].removeprefix("__label__")
 
 
+# All-caps words this short are acronyms ("NY", "IO", "IA"), not Malagasy words.
+_MAX_ACRONYM_LEN = 3
+
+
+def _counts_as_malagasy(word: str) -> bool:
+    if word.isupper() and len(word) <= _MAX_ACRONYM_LEN:
+        return False
+    return word.lower() in MALAGASY_WORDS
+
+
 def _malagasy_word_share(words: list[str]) -> float:
-    return sum(word in MALAGASY_WORDS for word in words) / len(words)
+    return sum(_counts_as_malagasy(word) for word in words) / len(words)
 
 
 def is_malagasy(text: str) -> bool:
@@ -69,7 +80,8 @@ def is_malagasy(text: str) -> bool:
 
     Text with no words at all (empty, emoji only) is not Malagasy.
     """
-    words = _WORD.findall(text.lower().replace("\u2019", "'"))
+    text = unicodedata.normalize("NFC", text).replace("\u2019", "'")
+    words = _WORD.findall(text)
     if not words:
         return False
     if _glotlid_label(text) in MALAGASY_LABELS:

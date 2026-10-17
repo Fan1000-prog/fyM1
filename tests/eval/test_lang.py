@@ -55,10 +55,30 @@ def test_everyday_malagasy_is_malagasy(text):
         "",
         "   ",
         "😂😂😂",
+        # English sentences whose words look like Malagasy words or names.
+        "Na, I'm good thanks",
+        "Ho, that's funny",
+        "I live in NY now",
+        "I'm doing an MBA next year",
+        "Aloha, how are you?",
+        "My tia lives in Tonga",
+        "Mila is my friend",
+        "Koa wood is expensive",
+        "The IO board is broken",
     ],
 )
 def test_french_english_or_empty_is_not_malagasy(text):
     assert is_malagasy(text) is False
+
+
+def test_sentence_initial_ny_still_counts():
+    assert is_malagasy("Ny alahady no tiako indrindra") is True
+
+
+def test_decomposed_accents_are_normalised():
+    composed = "Merci bé"
+    decomposed = "Merci be\u0301"
+    assert is_malagasy(decomposed) is is_malagasy(composed) is True
 
 
 def test_malagasy_labels_exist_in_model():
