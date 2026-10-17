@@ -4,6 +4,15 @@
 .env
 *.token
 
+# Raw eval answers and the blind judge files name the model behind each answer; private
+# (fyM1-ckpt results/) until the arena closes in v0.2. Only aggregates are committed.
+/results/eval/answers_*.jsonl
+/results/eval/judge_batch/
+/results/eval/judge_key.json
+/results/eval/judge_raw.json
+# Leak-check matches are 8-grams copied from real chats; only counts (leak_review.json) are public.
+/results/eval/leak_matches.jsonl
+
 # Python
 __pycache__/
 *.pyc
@@ -24,3 +33,6 @@ paper/*.out
 .playwright-mcp/
 
 .DS_Store
+
+# Arena answer key (which model is A): lives only in the private votes dataset
+pairs_key*.jsonl

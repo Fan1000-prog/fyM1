@@ -1,0 +1,47 @@
+{
+  "participants": [
+    {
+      "name": "Nirina Rakoto"
+    },
+    {
+      "name": "Tojo Randria"
+    }
+  ],
+  "messages": [
+    {
+      "sender_name": "Tojo Randria",
+      "timestamp_ms": 1760000540000,
+      "content": "Ok fa aza adino ny rdv \u00c3\u00a0 18h \u00c3\u00a9"
+    },
+    {
+      "sender_name": "Nirina Rakoto",
+      "timestamp_ms": 1760000480000,
+      "content": "Nirina called you.",
+      "call_duration": 42
+    },
+    {
+      "sender_name": "Tojo Randria",
+      "timestamp_ms": 1760000420000,
+      "content": "You sent an attachment."
+    },
+    {
+      "sender_name": "Nirina Rakoto",
+      "timestamp_ms": 1760000360000,
+      "content": "Mety be zany, lancer-na fotsiny\u00f0\u009f\u0098\u0082",
+      "reactions": [
+        {
+          "reaction": "\u00f0\u009f\u0098\u0082",
+          "actor": "Tojo Randria"
+        }
+      ]
+    },
+    {
+      "sender_name": "Tojo Randria",
+      "timestamp_ms": 1760000300000,
+      "content": "Reacted \u00f0\u009f\u0098\u0082 to your message"
+    }
+  ],
+  "title": "Nirina Rakoto",
+  "is_still_participant": true,
+  "thread_path": "inbox/nirinarakoto_10001"
+}

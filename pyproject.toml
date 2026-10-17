@@ -16,6 +16,15 @@ dependencies = [
 
 [dependency-groups]
 dev = ["pytest>=8", "nbformat>=5.10"]
+# Vocabulary trimming (src/fym1/shrink). Kept out of `dev` so other work does not pull torch.
+shrink = [
+    "torch>=2.4",
+    "transformers>=4.46",
+    "tokenizers>=0.20",
+    "safetensors>=0.4",
+    "sentencepiece>=0.2",
+    "protobuf>=5",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -26,3 +35,12 @@ packages = ["src/fym1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# CPU-only torch on Linux (CI); macOS wheels from PyPI are CPU already.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
