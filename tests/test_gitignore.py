@@ -29,3 +29,27 @@ def test_private_paths_are_ignored(path):
 )
 def test_code_and_fixtures_are_tracked(path):
     assert not is_ignored(path)
+
+
+# Raw answers and the blind key name which model wrote each answer. They stay private
+# until the arena closes (v0.2), so raters cannot unblind their votes.
+@pytest.mark.parametrize(
+    "path",
+    [
+        "results/eval/answers_base.jsonl",
+        "results/eval/answers_fym1.jsonl",
+        "results/eval/judge_input.jsonl",
+        "results/eval/judge_key.json",
+        "results/eval/judge_raw.json",
+    ],
+)
+def test_unblinding_eval_files_are_ignored(path):
+    assert is_ignored(path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["results/eval/scores.json", "results/eval/judge.json", "results/eval/arena.json"],
+)
+def test_aggregate_eval_results_are_tracked(path):
+    assert not is_ignored(path)

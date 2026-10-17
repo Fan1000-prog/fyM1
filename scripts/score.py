@@ -1,5 +1,10 @@
 """Build the blind judge batch, then results/eval/judge.json and results/eval/scores.json.
 
+Privacy: answers_*.jsonl, judge_input.jsonl, judge_key.json and judge_raw.json show which
+model wrote each answer. They are git-ignored, live in the private fyM1-ckpt repo under
+results/, and stay private until the arena closes (v0.2). Download them into results/eval/
+to run the steps below. Only judge.json and scores.json (aggregates) are committed.
+
 Step 1, before judging:
   uv run python scripts/score.py blind \
       --answers results/eval/answers_base.jsonl results/eval/answers_fym1.jsonl \
