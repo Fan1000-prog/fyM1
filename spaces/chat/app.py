@@ -12,15 +12,14 @@ from llama_cpp import Llama
 from prompt import MessageTooLong, build_messages
 
 GITHUB_URL = "https://github.com/Fan1000-prog/fyM1"
-FOOTER = f"[Code]({GITHUB_URL}) · [Paper]({GITHUB_URL}/tree/main/paper) · [Arena](https://huggingface.co/spaces/Fan1000-Prog/fyM1-arena)"
+FOOTER = f"[Code]({GITHUB_URL}) · [Paper]({GITHUB_URL}/tree/main/paper) · [Arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m-1-arena)"
 # Same sampling as the eval run, so the demo shows the model that was measured.
 SAMPLING = {"temperature": 0.7, "top_p": 0.9, "max_tokens": 256}
 CONTEXT_TOKENS = 4096
 # Room for the prompt: the window minus the reply, minus slack for template tokens the estimate misses.
 PROMPT_TOKEN_BUDGET = CONTEXT_TOKENS - SAMPLING["max_tokens"] - 64
 CPU_THREADS = 2  # free CPU Space has 2 vCPU; os.cpu_count() reports the host's cores
-# OWNER REVIEW: Malagasy below is a draft by the builder; the native-speaker owner fixes the wording.
-# Pending: the owner's edit is not applied yet; replace TOO_LONG when it arrives.
+# Malagasy below is the owner's approved wording (2026-10-17); change it only with the owner.
 TOO_LONG = "Lava loatra ilay hafatra. Fohezo kely azafady."
 
 
@@ -56,10 +55,10 @@ def respond(message: str, history: list[dict]):
         yield reply
 
 
-with gr.Blocks(title="fyM1") as demo:
+with gr.Blocks(title="fy-m-1") as demo:
     gr.ChatInterface(
         respond,
-        title="fyM1",
+        title="fy-m-1",
         examples=["Sali ahn", "De ahoana?"],
         cache_examples=False,
         concurrency_limit=1,  # one Llama instance: generations run one at a time, others wait in the queue

@@ -1,5 +1,5 @@
 ---
-title: fyM1 arena
+title: fy-m-1 arena
 emoji: ⚖️
 colorFrom: green
 colorTo: red
@@ -12,9 +12,9 @@ license: apache-2.0
 short_description: Blind A/B rating of Malagasy chat answers
 ---
 
-# fyM1 arena
+# fy-m-1 arena
 
-Raters see a prompt and two unlabelled answers (base model vs fyM1, order shuffled) and pick the more
+Raters see a prompt and two unlabelled answers (base model vs fy-m-1, order shuffled) and pick the more
 natural one: **A**, **B** or **Mitovy** (same). They can also flag an answer as **Diso** (wrong). No login.
 
 - `pairs.jsonl`: one `{"pair_id", "prompt", "a", "b"}` per line, sides shuffled. It is public (Files tab),
@@ -51,6 +51,6 @@ Space settings:
 Run locally: `ARENA_KEY=dev PAIRS_FILE=pairs.sample.jsonl VOTES_REPO= python app.py`.
 Build pairs: `uv run python scripts/build_pairs.py --base results/eval/answers_base.jsonl --fym1 results/eval/answers_fym1.jsonl --out spaces/arena/pairs.jsonl --seed 42 --upload-key`.
 Deploy (from the repo root; the exclude is a second guard, the key is never written under `spaces/`):
-`hf upload Fan1000-Prog/fyM1-arena spaces/arena . --repo-type space --exclude "pairs_key*"`.
+`hf upload Fan1000-Prog/fy-m-1-arena spaces/arena . --repo-type space --exclude "pairs_key*"`.
 Tally: `uv run python scripts/tally_votes.py` → `results/eval/arena.json` (win rate, ties excluded, with a
 95% Wilson interval). Code: https://github.com/Fan1000-prog/fyM1

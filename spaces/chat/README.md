@@ -1,5 +1,5 @@
 ---
-title: fyM1 chat
+title: fy-m-1 chat
 emoji: 💬
 colorFrom: green
 colorTo: red
@@ -9,12 +9,12 @@ python_version: "3.11"
 app_file: app.py
 pinned: false
 license: apache-2.0
-short_description: Chat in everyday Malagasy with fyM1 (free CPU, slow)
+short_description: Chat in everyday Malagasy with fy-m-1 (free CPU, slow)
 ---
 
-# fyM1 chat
+# fy-m-1 chat
 
-Demo of fyM1, an everyday-Malagasy chat model, running its GGUF (Q4_K_M) with llama.cpp on the free
+Demo of fy-m-1, an everyday-Malagasy chat model, running its GGUF (Q4_K_M) with llama.cpp on the free
 2-vCPU Space. Replies stream token by token; expect it to be slow.
 
 Space settings:
