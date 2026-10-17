@@ -20,8 +20,8 @@ def test_leak_rate_finds_shared_8gram():
     assert leak_rate(["a b c d e f g h"], ["x a b c d e f g h y"]) == 1.0
 
 
-def test_leak_rate_too_short_for_n():
-    assert leak_rate(["a b c"], ["a b c"]) == 0.0
+def test_leak_rate_response_too_short_for_n():
+    assert leak_rate(["a b c"], ["a b c d e f g h"]) == 0.0
 
 
 def test_leak_rate_ignores_case_and_punctuation():
@@ -40,6 +40,13 @@ def test_leak_rate_custom_n():
 def test_leak_rate_rejects_empty_list():
     with pytest.raises(ValueError):
         leak_rate([], ["a b c d e f g h"])
+
+
+@pytest.mark.parametrize("train_texts", [[], ["a b c"]])
+def test_leak_rate_rejects_training_texts_without_ngrams(train_texts):
+    # A silent 0.0 here would pass the release gate without checking anything.
+    with pytest.raises(ValueError, match="no word 8-grams"):
+        leak_rate(["a b c d e f g h"], train_texts)
 
 
 def test_leak_rate_rejects_bad_n():

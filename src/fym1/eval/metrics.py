@@ -30,4 +30,7 @@ def leak_rate(responses: list[str], train_texts: Iterable[str], n: int = 8) -> f
     if n < 1:
         raise ValueError(f"n must be >= 1, got {n}")
     train_ngrams = set().union(*(_ngrams(text, n) for text in train_texts))
+    if not train_ngrams:
+        # Release gate: a 0.0 from nothing to compare against would pass it unchecked.
+        raise ValueError(f"training texts have no word {n}-grams; nothing to check leaks against")
     return sum(not _ngrams(r, n).isdisjoint(train_ngrams) for r in responses) / len(responses)
