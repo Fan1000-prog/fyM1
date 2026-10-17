@@ -38,7 +38,8 @@ def _fake_names(threads: list[Thread]) -> dict[str, str]:
     # nicknames go into the pool check too, so no fake name equals a real nickname
     names = assign_fake_names(people | set(nicknames))
     for nickname, person in nicknames.items():
-        names[nickname] = names[person].split()[0]
+        if person in names:
+            names[nickname] = names[person].split()[0]
     return names
 
 

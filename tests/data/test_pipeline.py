@@ -99,3 +99,16 @@ def test_merge_data_stats_fills_build_counts_and_keeps_later_ones():
 def test_merge_data_stats_rejects_unknown_keys():
     with pytest.raises(ValueError, match="texts"):
         merge_data_stats({}, texts=1)
+
+
+@pytest.mark.parametrize("deleted", ["Facebook User", "Utilisateur Facebook", "facebook user"])
+def test_deleted_account_display_names_are_not_treated_as_names(deleted):
+    thread = Thread(
+        title="t",
+        participants=[deleted, "Tojo Randria"],
+        messages=[Message(deleted, "Iza ilay user?", 0), Message("Tojo Randria", "Facebook ve", MIN)],
+    )
+
+    records, _ = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+
+    assert all_text(records) == "Iza ilay user? Facebook ve"
