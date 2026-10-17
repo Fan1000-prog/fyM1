@@ -10,6 +10,11 @@
   "messages": [
     {
       "sender_name": "Nirina Rakoto",
+      "timestamp_ms": 1760000270000,
+      "content": "Nirina Rakoto set the nickname for Tojo Randria to Bebe."
+    },
+    {
+      "sender_name": "Nirina Rakoto",
       "timestamp_ms": 1760000240000,
       "content": "tsy tokony ho hita ity",
       "is_unsent": true
