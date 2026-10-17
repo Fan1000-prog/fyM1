@@ -38,7 +38,7 @@ These are **bad**:
 | 5 | Sounds like a real friend texting. Casual, fitting length, mixing and spelling feel normal. |
 | 4 | Natural with one small stiff or odd phrase. |
 | 3 | Understandable Malagasy but clearly "written" or formal, or a bit too long for a chat. |
-| 2 | Stiff, translated-sounding, or mostly French/English with a few Malagasy words. |
+| 2 | Stiff or translated-sounding, or full French/English with a token Malagasy word. |
 | 1 | Not Malagasy (full French/English), broken, or nonsense. |
 
 ## Correctness (is the content right and does it answer?)
