@@ -17,6 +17,7 @@ from huggingface_hub import HfApi
 from fym1.eval.arena import ANSWER_KEY_FILE, VOTES_REPO, build_pairs
 
 REPO = Path(__file__).resolve().parents[1]
+SPACES = REPO / "spaces"  # uploaded to public Spaces: the key must never be written here
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -50,6 +51,8 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--upload-key", action="store_true", help=f"also upload the key to {VOTES_REPO}")
     args = parser.parse_args()
+    if args.key_out.resolve().is_relative_to(SPACES):
+        raise SystemExit(f"--key-out {args.key_out} is inside {SPACES}, which is published; write the key elsewhere")
 
     pairs, key, skipped = build_pairs(read_jsonl(args.base), read_jsonl(args.fym1), random.Random(args.seed))
     if not pairs:

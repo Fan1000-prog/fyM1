@@ -20,6 +20,7 @@ CONTEXT_TOKENS = 4096
 PROMPT_TOKEN_BUDGET = CONTEXT_TOKENS - SAMPLING["max_tokens"] - 64
 CPU_THREADS = 2  # free CPU Space has 2 vCPU; os.cpu_count() reports the host's cores
 # OWNER REVIEW: Malagasy below is a draft by the builder; the native-speaker owner fixes the wording.
+# Pending: the owner's edit is not applied yet; replace TOO_LONG when it arrives.
 TOO_LONG = "Lava loatra ilay hafatra. Fohezo kely azafady."
 
 

@@ -19,6 +19,7 @@ from huggingface_hub import CommitScheduler, HfApi
 from votes import VoteBook, is_valid_session_id, load_pairs, new_session_id, pick_pair
 
 # OWNER REVIEW: Malagasy below is a draft by the builder; the native-speaker owner fixes the wording.
+# Pending: the owner's edits are not applied yet; replace INSTRUCTIONS and UI_TEXT when they arrive.
 INSTRUCTIONS = """\
 ## Iza no mamaly tsara kokoa?
 
@@ -77,7 +78,7 @@ def start_vote_upload() -> threading.Lock:
 
 write_lock = start_vote_upload()
 # Remembers votes since this process started; a session can vote at most once per pair.
-vote_book = VoteBook(ARENA_KEY.encode(), max_votes_per_session=len(PAIRS))
+vote_book = VoteBook(ARENA_KEY.encode())
 rng = random.Random()
 
 
