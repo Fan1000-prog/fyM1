@@ -41,12 +41,30 @@ def test_byte_fallback_kept(tokenizer):
     keep = set(tokens_to_keep(tokenizer, ["a"], always_keep=set()))
     vocab = tokenizer.get_vocab()
     if "<0x00>" in vocab:
-        byte_tokens = {vocab[f"<0x{b:02X}>"] for b in range(256)}
+        # Gemma's converter stores some ASCII byte pieces as the character itself ("\t" for <0x09>).
+        byte_tokens = {vocab.get(f"<0x{b:02X}>", vocab.get(chr(b))) for b in range(256)}
     else:
         from tokenizers.pre_tokenizers import ByteLevel
 
         byte_tokens = {vocab[c] for c in ByteLevel.alphabet()}
+    assert None not in byte_tokens
     assert byte_tokens <= keep
+
+
+def test_byte_piece_stored_as_character_kept(spm_dir):
+    """A tab stays encodable when the vocabulary spells byte piece <0x09> as a literal tab."""
+    from tokenizers import Tokenizer
+    from transformers import AutoTokenizer, PreTrainedTokenizerFast
+
+    tok_json = json.loads(AutoTokenizer.from_pretrained(spm_dir).backend_tokenizer.to_str())
+    vocab = tok_json["model"]["vocab"]
+    if "<0x09>" in vocab:
+        vocab["\t"] = vocab.pop("<0x09>")
+    tokenizer = PreTrainedTokenizerFast(tokenizer_object=Tokenizer.from_str(json.dumps(tok_json)), unk_token="<unk>")
+    keep = tokens_to_keep(tokenizer, KEEP_CORPUS, always_keep=set())
+    assert tokenizer.convert_tokens_to_ids("\t") in keep
+    new = trim_tokenizer(tokenizer, keep)
+    assert new.decode(_encode(new, "Mety\tbe")) == tokenizer.decode(_encode(tokenizer, "Mety\tbe"))
 
 
 def test_trims_something(tokenizer):

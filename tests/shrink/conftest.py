@@ -45,7 +45,6 @@ def _byte_level_tokenizer(ignore_merges: bool) -> PreTrainedTokenizerFast:
         bos_token="<|begin_of_text|>",
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",
-        extra_special_tokens=["<|im_start|>", "<|im_end|>"],
     )
 
 

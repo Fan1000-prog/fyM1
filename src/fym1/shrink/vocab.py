@@ -75,6 +75,10 @@ def trim_sentencepiece(model_proto: bytes, keep_ids: list[int]) -> bytes:
     proto.ParseFromString(model_proto)
     kept = [i for i in keep_ids if i < len(proto.pieces)]
     new_id = {old: new for new, old in enumerate(kept)}
+    byte_type = sentencepiece_model_pb2.ModelProto.SentencePiece.BYTE
+    dropped_bytes = [p.piece for i, p in enumerate(proto.pieces) if p.type == byte_type and i not in new_id]
+    if dropped_bytes:
+        raise ValueError(f"keep_ids drops SentencePiece byte pieces {dropped_bytes[:10]}")
 
     pieces = []
     for old in kept:
@@ -136,6 +140,8 @@ def _required_ids(tokenizer, tok_json: dict) -> set[int]:
 
     if model.get("byte_fallback"):
         required |= {i for t, i in vocab.items() if _BYTE_FALLBACK_TOKEN.match(t)}
+        # Some converters (Gemma) store an ASCII byte piece as the character itself, e.g. "\t" for <0x09>.
+        required |= {vocab[chr(b)] for b in range(128) if f"<0x{b:02X}>" not in vocab and chr(b) in vocab}
     elif _uses_byte_level(tok_json.get("pre_tokenizer")):
         from tokenizers.pre_tokenizers import ByteLevel
 
