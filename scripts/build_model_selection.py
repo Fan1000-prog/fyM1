@@ -21,6 +21,7 @@ LICENSES = {
     "google/gemma-4-12B-it": "Apache-2.0",
     "McGill-NLP/AfriqueQwen-8B": "CC-BY-4.0",
     "unsloth/gemma-3-12b-it-unsloth-bnb-4bit": "Gemma Terms of Use",
+    "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1": "CC-BY-4.0",
 }
 BASE_MODELS = {"McGill-NLP/AfriqueQwen-8B"}  # not instruction-tuned: no chat-template Belebele column
 # Base -> chat with little data is a risk, so record whether an instruct sibling exists (checked 2026-10-17).
