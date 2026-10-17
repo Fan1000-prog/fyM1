@@ -58,7 +58,7 @@ Recorded in the spec (§8) and plan ("Changes from the plan") as well.
 - One Belebele protocol for all: plain-text 0-shot, no chat template. The chat-template score is a second
   column, empty for base models. (AfriqueQwen-8B's chat-format score, 0.236, is not valid for a base model.)
 - Smoke training tests cut to 15 steps for the remaining models to save GPU time.
-- Baseline runs may use the trainer's branch code (each result records its code sha). Real training runs only on
+- (In PR #13.) Baseline runs may use the trainer's branch code (each result records its code sha). Real training runs only on
   code synced from clean `origin/main` (`scripts/sync_code_to_hub.py` refuses otherwise).
 - No paid compute. **Training moves to Kaggle** (owner suggested, lead decided): ~30 free GPU h/week and 12 h
   sessions fit slow float32 training; driven from the terminal with Kaggle's own CLI, no browser clicking. The owner
@@ -87,18 +87,19 @@ Recorded in the spec (§8) and plan ("Changes from the plan") as well.
 | Tokens per Malagasy word | 2.79 | 2.95 | pending | pending |
 | Seconds per training step (8×2048 tokens)* | 126 (float32) | 74 | pending | pending |
 | Peak GPU memory* | 9.18 GB | 7.79 GB | pending | pending |
-| Smoke loss | best at step 9, then rising | smooth, 1.13 → 0.70 | pending | pending |
+| Smoke loss* | best at step 9, then rising | smooth, 1.13 → 0.70 | pending | pending |
 | 20 greetings | fluent, formal "AI assistant" | unusable (no chat tuning) | pending | pending |
 
-\* PR #13's review found the Gemma 4 speed and memory figures were not yet written by a script in the repo; they are
-re-measured when Gemma 4 runs again.
+\* Gemma 4's speed, memory and smoke-loss figures come from an earlier unscripted run. PR #13 removed them from the
+results files; Gemma 4's 15-step smoke test runs again on the next GPU.
 
 The 9B instruct model (`McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1`, cc-by-4.0) passed the no-GPU checks:
 Unsloth support, text-only load, ~6.5 GB in 4-bit. Run order once a GPU is free: Gemma 3 → 9B instruct → Gemma 4
 (FLORES+, plain-text Belebele) → AfriqueQwen-8B (same).
 
-Source: `results/baseline/*.json` and `results/model_selection.json` on the `baseline` branch (PR #13), for Gemma 4
-and AfriqueQwen-8B. The 9B checks come from the trainer's report.
+Source: `results/baseline/*.json` and `results/model_selection.json` on the `baseline` branch (PR #13), for
+AfriqueQwen-8B and Gemma 4's Belebele and tokens-per-word. Starred rows and the 9B checks come from the trainer's
+reports.
 
 ## 5. Open now
 
@@ -107,7 +108,7 @@ and AfriqueQwen-8B. The 9B checks come from the trainer's report.
 | PR #16 anonymiser leak fix | main | blocked after 2 fix rounds (glued rule eats words ending in "o" before a price; bracketed non-Malagasy area codes; doubled-letter split handles); owner decides on one more round |
 | PR #13 baseline + 01_train notebook | trainer | open; fix round 1 of 2 (number sources, safe lr-change resume, training time across disconnects, code version label) |
 | Messenger export | owner | not on the laptop |
-| 20-greeting ratings per model | owner | after all three models have answers |
+| 20-greeting ratings per model | owner | after every candidate has answers |
 | Kaggle setup | owner | phone-verified account, API token in `~/.kaggle/kaggle.json`, then HF_TOKEN in Kaggle Secrets |
 | Release check `git log -p | grep \+261` matches synthetic test/doc examples | lead | reworded in the plan to skip `tests/` and `docs/` |
 | Old `data-pipeline` branch + `~/fyM1-data` | main | delete after #16 merges (owner OK) |
@@ -116,8 +117,8 @@ and AfriqueQwen-8B. The 9B checks come from the trainer's report.
 
 1. **Merge PR #16**, then delete `data-pipeline` (remote, local, `~/fyM1-data`) and `leak-fix`. `data` re-runs
    its dry run on the new `main`.
-2. **Set up Kaggle** (owner, ~10 min once), then **finish the baseline** on Kaggle: Gemma 3 in full; plain-text
-   Belebele and FLORES+ for all three. Owner rates the 20 greetings per model.
+2. **Set up Kaggle** (owner, ~10 min once), then **finish the baseline** on Kaggle: Gemma 3 and the 9B instruct in full;
+   plain-text Belebele, FLORES+ and (Gemma 4) the 15-step smoke for Gemma 4 and AfriqueQwen-8B. Owner rates the 20 greetings per model.
 3. **Lead picks the base model** and sends the owner the table and the reason. Merge PR #13.
 4. **Messenger export lands** in `~/malagasy-data/raw/`. `data` runs `build_chats.py` locally, then the post-run
    checks; counts only go to lead.
