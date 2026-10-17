@@ -1,4 +1,4 @@
-"""Build the blind judge batch, then assemble results/eval/scores.json.
+"""Build the blind judge batch, then results/eval/judge.json and results/eval/scores.json.
 
 Step 1, before judging:
   uv run python scripts/score.py blind \
@@ -6,24 +6,35 @@ Step 1, before judging:
       --out results/eval/judge_input.jsonl --key results/eval/judge_key.json
 
 Judge agents score judge_input.jsonl with src/fym1/eval/judge_rubric.md and write a JSON list
-of {"id", "naturalness", "correctness", "note"} to results/eval/judge.json.
+of {"id", "naturalness", "correctness", "note"} to results/eval/judge_raw.json.
 
-Step 2, after judging:
-  uv run python scripts/score.py assemble \
+Step 2, unblind the judge scores:
+  uv run python scripts/score.py judge \
+      --raw results/eval/judge_raw.json --key results/eval/judge_key.json \
+      --label "<who judged>" --out results/eval/judge.json
+
+Step 3, automatic scores:
+  uv run python scripts/score.py scores \
       --answers results/eval/answers_base.jsonl results/eval/answers_fym1.jsonl \
-      --metrics results/eval/notebook_metrics.json \
-      --judge results/eval/judge.json --key results/eval/judge_key.json \
-      --out results/eval/scores.json
+      --metrics results/eval/notebook_metrics.json --out results/eval/scores.json
 
-notebook_metrics.json is {"<model>": {"leak_rate": ..., "perplexity": ..., ...}} from
-notebooks/02_eval_export.ipynb. --metrics and --judge are optional; missing parts are left out.
+notebook_metrics.json is {"<model>": {"leak_rate", "perplexity", "belebele_acc", "chrf_plt_eng",
+"chrf_eng_plt"}} from notebooks/02_eval_export.ipynb. --metrics is optional; missing metrics stay
+out of scores.json and the paper shows them as pending.
 """
 
 import argparse
 import json
 from pathlib import Path
 
-from fym1.eval.scoring import assemble_scores, blind_batch, judge_means, model_name, read_jsonl
+from fym1.eval.scoring import (
+    assemble_scores,
+    blind_batch,
+    judge_means,
+    judge_summary,
+    model_name,
+    read_jsonl,
+)
 
 BLIND_SEED = 42
 
@@ -53,18 +64,22 @@ def cmd_blind(args: argparse.Namespace) -> None:
     print(f"wrote {len(items)} blind items to {args.out}")
 
 
-def cmd_assemble(args: argparse.Namespace) -> None:
-    if args.judge and not args.key:
-        raise SystemExit("--judge needs --key (the judge_key.json written by `blind`)")
+def cmd_judge(args: argparse.Namespace) -> None:
+    means = judge_means(read_json(args.raw), read_json(args.key))
+    write_json(args.out, judge_summary(means, judge=args.label))
+    print(f"wrote {args.out}")
+
+
+def cmd_scores(args: argparse.Namespace) -> None:
     metrics = read_json(args.metrics) if args.metrics else {}
-    judge = judge_means(read_json(args.judge), read_json(args.key)) if args.judge else {}
-    scores = assemble_scores(load_answers(args.answers), metrics=metrics, judge=judge)
-    write_json(args.out, scores)
+    write_json(args.out, assemble_scores(load_answers(args.answers), metrics=metrics))
     print(f"wrote {args.out}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawTextHelpFormatter
+    )
     sub = parser.add_subparsers(required=True)
 
     blind = sub.add_parser("blind", help="shuffle answers into a blind batch for the judge")
@@ -73,13 +88,18 @@ def main() -> None:
     blind.add_argument("--key", type=Path, required=True)
     blind.set_defaults(run=cmd_blind)
 
-    assemble = sub.add_parser("assemble", help="write scores.json")
-    assemble.add_argument("--answers", type=Path, nargs="+", required=True)
-    assemble.add_argument("--metrics", type=Path)
-    assemble.add_argument("--judge", type=Path)
-    assemble.add_argument("--key", type=Path)
-    assemble.add_argument("--out", type=Path, required=True)
-    assemble.set_defaults(run=cmd_assemble)
+    judge = sub.add_parser("judge", help="unblind judge scores into judge.json")
+    judge.add_argument("--raw", type=Path, required=True)
+    judge.add_argument("--key", type=Path, required=True)
+    judge.add_argument("--label", required=True, help="who judged, as cited in the paper")
+    judge.add_argument("--out", type=Path, required=True)
+    judge.set_defaults(run=cmd_judge)
+
+    scores = sub.add_parser("scores", help="write scores.json")
+    scores.add_argument("--answers", type=Path, nargs="+", required=True)
+    scores.add_argument("--metrics", type=Path)
+    scores.add_argument("--out", type=Path, required=True)
+    scores.set_defaults(run=cmd_scores)
 
     args = parser.parse_args()
     args.run(args)

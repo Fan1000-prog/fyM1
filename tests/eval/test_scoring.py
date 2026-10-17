@@ -2,7 +2,14 @@ import json
 
 import pytest
 
-from fym1.eval.scoring import assemble_scores, blind_batch, judge_means, model_name, read_jsonl
+from fym1.eval.scoring import (
+    assemble_scores,
+    blind_batch,
+    judge_means,
+    judge_summary,
+    model_name,
+    read_jsonl,
+)
 
 
 def rows(*responses):
@@ -78,18 +85,30 @@ def test_judge_means_rejects_duplicate_judgement():
         judge_means([row, row], key)
 
 
-def test_assemble_scores_combines_drift_metrics_and_judge():
-    scores = assemble_scores(
-        ANSWERS,
-        metrics={"fym1": {"leak_rate": 0.0}},
-        judge={"fym1": {"naturalness": 4.5, "correctness": 4.0, "n": 2}},
-    )
-    assert scores["n_prompts"] == 2
-    assert scores["models"]["base"] == {"drift_rate": 0.5}
-    assert scores["models"]["fym1"] == {
-        "drift_rate": 0.0,
-        "leak_rate": 0.0,
-        "judge": {"naturalness": 4.5, "correctness": 4.0, "n": 2},
+def test_judge_summary_labels_the_judge():
+    means = {"base": {"naturalness": 2.0, "correctness": 4.0, "n": 2}}
+    assert judge_summary(means, judge="in-session agents") == {
+        "judge": "in-session agents",
+        "base": {"naturalness": 2.0, "correctness": 4.0, "n": 2},
+    }
+
+
+def test_judge_summary_requires_a_label():
+    with pytest.raises(ValueError, match="judge"):
+        judge_summary({}, judge=" ")
+
+
+def test_judge_summary_rejects_reserved_model_name():
+    with pytest.raises(ValueError, match="reserved"):
+        judge_summary({"judge": {"naturalness": 3.0, "correctness": 3.0, "n": 1}}, judge="x")
+
+
+def test_assemble_scores_flat_per_model_with_drift_and_metrics():
+    scores = assemble_scores(ANSWERS, metrics={"fym1": {"leak_rate": 0.0, "belebele_acc": 0.61}})
+    assert scores == {
+        "n_prompts": 2,
+        "base": {"drift_rate": 0.5},
+        "fym1": {"drift_rate": 0.0, "leak_rate": 0.0, "belebele_acc": 0.61},
     }
     json.dumps(scores)  # must be writable as-is
 
@@ -97,9 +116,19 @@ def test_assemble_scores_combines_drift_metrics_and_judge():
 def test_assemble_scores_requires_same_prompts_for_every_model():
     answers = {"base": rows("Salama!"), "fym1": rows("Salama!", "De aona?")}
     with pytest.raises(ValueError, match="same prompt ids"):
-        assemble_scores(answers, metrics={}, judge={})
+        assemble_scores(answers, metrics={})
 
 
 def test_assemble_scores_rejects_metrics_for_unknown_model():
     with pytest.raises(ValueError, match="unknown model"):
-        assemble_scores(ANSWERS, metrics={"gpt": {"leak_rate": 0.0}}, judge={})
+        assemble_scores(ANSWERS, metrics={"gpt": {"leak_rate": 0.0}})
+
+
+def test_assemble_scores_rejects_unknown_metric_name():
+    with pytest.raises(ValueError, match="unknown metric"):
+        assemble_scores(ANSWERS, metrics={"fym1": {"belebele": 0.6}})
+
+
+def test_assemble_scores_rejects_reserved_model_name():
+    with pytest.raises(ValueError, match="n_prompts"):
+        assemble_scores({"n_prompts": rows("Salama!")}, metrics={})
