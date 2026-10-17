@@ -1,8 +1,7 @@
-"""Slice a causal LM's embedding and output rows down to a trimmed vocabulary.
+"""Slice a saved causal LM checkpoint's embedding and output rows down to a trimmed vocabulary.
 
-`trim_model` works on a loaded model (used for the quality gates; bitsandbytes 4-bit loading keeps
-both embedding matrices in 16-bit, so it works there too). `trim_checkpoint` works shard by shard on
-a saved 16-bit checkpoint, so a 7-12B model can be trimmed in Colab RAM before GGUF export.
+Works shard by shard on a 16-bit safetensors checkpoint, so a 7-12B model can be trimmed in Colab RAM
+before the quality gates and GGUF export.
 """
 
 import json
@@ -17,40 +16,6 @@ from fym1.shrink.vocab import trim_sentencepiece, trim_tokenizer
 _VOCAB_TENSOR_SUFFIXES = ("embed_tokens.weight", "lm_head.weight", "lm_head.bias")
 # Tokenizer files written by trim_tokenizer; never copied from the untrimmed source.
 _TOKENIZER_FILE_PREFIXES = ("tokenizer", "added_tokens", "special_tokens_map", "vocab.json", "merges.txt")
-
-
-def trim_model(model, tokenizer, keep_ids: list[int]):
-    """Trim `model` in place and `tokenizer` to `keep_ids`; return (model, new tokenizer).
-
-    Row `n` of the new embedding and output matrices is old row `keep_ids[n]`. The embedding
-    module is kept (only its weight is replaced), so subclasses such as Gemma's scaled embedding
-    keep working, and tied input/output weights stay tied.
-    """
-    new_tokenizer = trim_tokenizer(tokenizer, keep_ids)
-    embeddings = model.get_input_embeddings()
-    output = model.get_output_embeddings()
-    rows = embeddings.weight.shape[0]
-    if keep_ids[-1] >= rows:
-        raise ValueError(f"keep_ids reaches id {keep_ids[-1]} but the model has {rows} embedding rows")
-    tied = output is not None and output.weight is embeddings.weight
-    new_id = {old: new for new, old in enumerate(keep_ids)}
-
-    embeddings.weight = _select_rows(embeddings.weight, keep_ids)
-    embeddings.num_embeddings = len(keep_ids)
-    if embeddings.padding_idx is not None:
-        embeddings.padding_idx = new_id.get(embeddings.padding_idx)
-    if output is not None:
-        if output.weight.shape[0] != rows:
-            raise NotImplementedError("output layer and input embeddings have different row counts")
-        output.weight = embeddings.weight if tied else _select_rows(output.weight, keep_ids)
-        if output.bias is not None:
-            output.bias = _select_rows(output.bias, keep_ids)
-        output.out_features = len(keep_ids)
-
-    _update_config(model.config, new_id)
-    if getattr(model, "generation_config", None) is not None:
-        _remap_token_ids(model.generation_config, new_id)
-    return model, new_tokenizer
 
 
 def trim_checkpoint(src: str | Path, dst: str | Path, keep_ids: list[int]) -> None:
@@ -84,13 +49,6 @@ def trim_checkpoint(src: str | Path, dst: str | Path, keep_ids: list[int]) -> No
     for path in src.iterdir():
         if path.is_file() and not (dst / path.name).exists() and not path.name.startswith(_TOKENIZER_FILE_PREFIXES):
             shutil.copy2(path, dst / path.name)
-
-
-def _select_rows(weight: torch.Tensor, keep_ids: list[int]) -> torch.nn.Parameter:
-    if not weight.is_floating_point() or type(weight) not in (torch.Tensor, torch.nn.Parameter):
-        raise NotImplementedError(f"cannot slice a {type(weight).__name__} of {weight.dtype}; load it in 16-bit")
-    index = torch.tensor(keep_ids, device=weight.device)
-    return torch.nn.Parameter(weight.detach().index_select(0, index).clone(), requires_grad=weight.requires_grad)
 
 
 def _update_config(config, new_id: dict[int, int]) -> None:

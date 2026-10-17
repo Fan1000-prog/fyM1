@@ -1,4 +1,3 @@
-import copy
 import json
 
 import pytest
@@ -16,7 +15,7 @@ from transformers import (  # noqa: E402
     LlamaForCausalLM,
 )
 
-from fym1.shrink.model import trim_checkpoint, trim_model  # noqa: E402
+from fym1.shrink.model import trim_checkpoint  # noqa: E402
 from fym1.shrink.vocab import tokens_to_keep  # noqa: E402
 
 # (architecture, tokenizer kind). Gemma 3 covers tied + scaled embeddings with a SentencePiece vocab.
@@ -50,16 +49,6 @@ def _tiny_model(arch, tokenizer):
     return model.eval()
 
 
-@pytest.fixture(scope="module", params=CASES, ids=[c[0] for c in CASES])
-def case(request, make_tokenizer):
-    arch, kind = request.param
-    tokenizer = make_tokenizer(kind)
-    original = _tiny_model(arch, tokenizer)
-    keep = tokens_to_keep(tokenizer, KEEP_CORPUS, always_keep=set())
-    model, new_tokenizer = trim_model(copy.deepcopy(original), tokenizer, keep)
-    return arch, tokenizer, original, keep, model, new_tokenizer
-
-
 def _logits(model, ids):
     with torch.no_grad():
         return model(torch.tensor([ids])).logits[0]
@@ -72,49 +61,6 @@ def _assert_same_predictions(original, tokenizer, trimmed, new_tokenizer, keep):
         new_ids = new_tokenizer.encode(line)
         assert [keep[i] for i in new_ids] == old_ids
         torch.testing.assert_close(_logits(trimmed, new_ids), _logits(original, old_ids)[:, keep])
-
-
-def test_logits_match_on_kept_tokens(case):
-    _, tokenizer, original, keep, model, new_tokenizer = case
-    _assert_same_predictions(original, tokenizer, model, new_tokenizer, keep)
-
-
-def test_rows_and_config_shrunk(case):
-    _, _, _, keep, model, _ = case
-    assert model.get_input_embeddings().weight.shape[0] == len(keep)
-    assert model.get_output_embeddings().weight.shape[0] == len(keep)
-    assert model.get_output_embeddings().out_features == len(keep)
-    assert model.config.vocab_size == len(keep)
-
-
-def test_tied_weights_stay_tied(case):
-    arch, _, original, _, model, _ = case
-    tied = arch != "llama_untied"
-    assert (original.get_output_embeddings().weight is original.get_input_embeddings().weight) == tied
-    assert (model.get_output_embeddings().weight is model.get_input_embeddings().weight) == tied
-
-
-def test_embedding_class_kept(case):
-    """Gemma scales embeddings inside its own Embedding subclass; swapping the module would drop that."""
-    _, _, original, _, model, _ = case
-    assert type(model.get_input_embeddings()) is type(original.get_input_embeddings())
-
-
-def test_special_token_ids_remapped(case):
-    _, _, _, _, model, new_tokenizer = case
-    assert model.config.bos_token_id == new_tokenizer.bos_token_id
-    assert model.config.eos_token_id == new_tokenizer.eos_token_id
-    assert model.config.pad_token_id == new_tokenizer.pad_token_id
-    assert model.generation_config.eos_token_id == [new_tokenizer.eos_token_id, new_tokenizer.pad_token_id]
-
-
-def test_rejects_ids_past_embedding_rows(make_tokenizer):
-    tokenizer = make_tokenizer("byte_level")
-    model = _tiny_model("llama_untied", tokenizer)
-    keep = tokens_to_keep(tokenizer, KEEP_CORPUS, always_keep=set())
-    model.resize_token_embeddings(keep[-1])
-    with pytest.raises(ValueError, match="embedding rows"):
-        trim_model(model, tokenizer, keep)
 
 
 @pytest.fixture(scope="module", params=CASES, ids=[c[0] for c in CASES])
@@ -143,6 +89,18 @@ def test_checkpoint_reloads_with_same_predictions(checkpoint):
         assert new_tokenizer.decode(new_tokenizer.encode(line, add_special_tokens=False)) == tokenizer.decode(
             tokenizer.encode(line, add_special_tokens=False)
         )
+
+
+def test_checkpoint_shrinks_rows_and_keeps_tying(checkpoint):
+    """Rows match the trimmed vocabulary; tied models (Gemma, Llama tied) stay tied after reload."""
+    _, _, dst, _, original, keep = checkpoint
+    model = AutoModelForCausalLM.from_pretrained(dst)
+    assert model.config.vocab_size == len(keep)
+    assert model.get_input_embeddings().weight.shape[0] == len(keep)
+    assert model.get_output_embeddings().weight.shape[0] == len(keep)
+    tied = original.get_output_embeddings().weight is original.get_input_embeddings().weight
+    assert (model.get_output_embeddings().weight is model.get_input_embeddings().weight) == tied
+    assert type(model.get_input_embeddings()) is type(original.get_input_embeddings())
 
 
 def test_checkpoint_index_and_generation_config(checkpoint):
