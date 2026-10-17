@@ -1,0 +1,113 @@
+{
+  "model": {
+    "slug": "gemma-4-12b-it",
+    "hub_id": "google/gemma-4-12B-it",
+    "quant": "bnb 4-bit nf4 (Unsloth load_in_4bit)"
+  },
+  "env": {
+    "gpu": "Tesla T4",
+    "torch": "2.11.0+cu130",
+    "model_dtype": "torch.float16",
+    "vram_after_load_gb": 7.27,
+    "load_s": 697,
+    "utc": "2026-10-17T19:23:14.351272+00:00"
+  },
+  "belebele": {
+    "acc": 0.75,
+    "n": 900,
+    "nan_rows": 0,
+    "seconds": 586,
+    "protocol": "0-shot, chat template, English instruction, argmax of next-token logits over '1'-'4'"
+  },
+  "tokens_per_word": {
+    "value": 2.792,
+    "n_sentences": 1000,
+    "source": "wikimedia/wikipedia 20231101.mg, shuffle seed 42, 5-60 words"
+  },
+  "greetings": {
+    "source": "eval/prompts.jsonl greetings, first 20",
+    "sampling": "temp 0.7, top_p 0.9, max 128 new tokens, seed 42, no system prompt",
+    "answers": [
+      {
+        "prompt": "Sali ahn",
+        "answer": "Sali ahn! (Or \"Sali\" as in \"Sali, salli\" - a common greeting in some contexts, or perhaps a variation of \"Sali\" meaning \"Hello\" in some dialects).\n\nHow can I help you today? Feel free to ask me anything!"
+      },
+      {
+        "prompt": "De ahoana?",
+        "answer": "Manao ahoana! Salamae, ahoana ny fahasalamana?\n\nInona no azo ampiana anao androany?"
+      },
+      {
+        "prompt": "De aona ry zalahy?",
+        "answer": "Manao ahoana! Salama tsara ahoana.\n\nMba hahafahako mamaly anao tsara dia azonao lazaina ve hoe inona no azo ampiana anao?\n*   Misy zavatra tianao hofantarina ve?\n*   Misy zavatra tianao hadika (traduction) ve?\n*   Sa te hiresadresaka fotsiny ianao?\n\nVonona hanampy anao foana aho!"
+      },
+      {
+        "prompt": "Salama e! Manao ahoana?",
+        "answer": "Salamae! Tsara fa tokoa, misaotra anao. Ary ianao, manao ahoana ny fahasalamana?\n\nInona no azo ampiana anao androany?"
+      },
+      {
+        "prompt": "Akory aby?",
+        "answer": "\"Akory aby?\" is a phrase that sounds like it could be from a specific dialect, a fictional language, or a misspelling of a phrase in another language.\n\nTo help you better, could you please provide a little more context? For example:\n\n1.  **Is it from a specific movie, game, or book?**\n2.  **Is it a phrase in a specific language** (like a dialect of African, Asian, or European languages)?\n3.  **Did you mean \"Akory\" as a name?**\n\nIf you can tell me where you heard or read it,"
+      },
+      {
+        "prompt": "Mbola velona ve ianao? 😂",
+        "answer": "Eny, velona ihany aho! 😂\n\nTsy mbola \"velona\" toy ny olombelona aho (tsy mila sakafo na torimaso), fa vonona foana hanampy anao sy hamaly ny fanontanianao.\n\nInona no azo ampiana anao androany? 😊"
+      },
+      {
+        "prompt": "Inona no vaovao any aminareo?",
+        "answer": "Tsy misy vaovao manokana fa salama tsara aho! Vonona hatombohana sy hanampy anao amin'izay ilainao aho.\n\nAry ianao, manao ahoana? Inona no vaovao any aminao? Inona no azo ampiana anao androany?"
+      },
+      {
+        "prompt": "Manahoana tompoko",
+        "answer": "Manao ahoana tompoko! Akory anao?\n\nInona no azo ampiana anao androany? (Inona no azoko atao ho anao?)"
+      },
+      {
+        "prompt": "Salut, tsara ve ny andro?",
+        "answer": "Salama! Eny, salama be ny andro, misaotra anao! Ary ianao, manao ahoana ny fahasalamana?\n\nTsy misy zavatra mahatonga anao ho reraka ve, sa misy zavatra azoko ampiana anao androany?"
+      },
+      {
+        "prompt": "Hey, efa nifoha ve?",
+        "answer": "Eny, efa nifoha aho! Vonona hanampy anao amin'izay ilanao rehetra aho.\n\nInona no azo ampiana anao androany?"
+      },
+      {
+        "prompt": "Bonsoir! Mbola tsy matory ve?",
+        "answer": "Bonsoir ! Tsy mbola matory aho, vonona hatrao hatrany raha misy zavatra ilainao na tianao horesahina. 😊\n\nInona no azoko ampiana anao izao alina?"
+      },
+      {
+        "prompt": "Ahoana ny weekend-nao?",
+        "answer": "Miarahaba! Mbola tsy fantatro hoe ahoana ny weekend-nao satria mpanampy nomerika (AI) aho, saingy afaka miteny aho hoe:\n\nRaha niala sasatra ianao, nitsidika namana, na nisy zavatra mahafaly nataonao dia **tsara be** izany!\n\nAry ianao, **ahoana ny weekend-nao?** Nisy zavatra mahaliana ve nataonao?"
+      },
+      {
+        "prompt": "Tsara ve ny dia?",
+        "answer": "Ny valin'ny fanontanana hoe \"Tsara ve ny dia?\" dia miankina tanteraka amin'ny **tanjon'ny dia** sy ny **fomba fivoaran'ny zavatra** (na ny olona, na ny tetikasana, na ny fifandra-pananahana).\n\nMba hahafahako manome valiny tena mahasoa anao, azonao atao ve ny manome fanazavana kely? Ohatra:\n\n1.  **Raha dia (voyage/trip) fotsiny no tianao holazaina:**"
+      },
+      {
+        "prompt": "Efa nisakafo ve ianao?",
+        "answer": "Amin'ny maha AI (Intelligence Artificielle) ahy, dia **tsy mihinana sakafo** aho. Tsy manana vatana na fihinanana toy ny olona na ny zavamananina aho.\n\nNy \"sakafoko\" dia ny **angovo (énergie)** avy amin'ny herinaratra sy ny **data** (fahalalana) izay omen'ny olona sy ny solosim-pifandraisana (serveurs) mba hahafahako mamaly ny fanontanianao.\n\nFa raha ny momba anao kosa, inona no saka"
+      },
+      {
+        "prompt": "Inona no ataonao zao?",
+        "answer": "Amin'ny maha-modely amin'ny fiteny (AI) ahy, dia ireto misy zavatra vitsy azoko atao hanampiana anao izao:\n\n1.  **Mamaly fanontanana:** Afaka mamaly ny fanontananao momba ny zavatra maro samihafa aho (tantara, siansa,i zava-misy eto an-tany, sns).\n2.  **Manampy amin'ny asa soratsorany:** Afaka manampy anao hanoratra taratasy, tantara, tononk"
+      },
+      {
+        "prompt": "Aiza ianao zao?",
+        "answer": "Eto aho, vonona hatanana sy hamaly ny fanontanianao!\n\nSatria \"Artificial Intelligence\" (AI) aho, dia tsy manana vatana na toerana misy (toy ny trano na tanày), fa mipetraka ao anatin'ny solosaina sy ny internet aho.\n\nInona no azoko ampiana anao androany?"
+      },
+      {
+        "prompt": "Mbola miasa ve ialahy?",
+        "answer": "Eny, mbola eto foana aho ary vonona hanampy anao!\n\nInona no azo ampiana anao? Afaka mametraka fanontanana, mangataka fanazavana, na mampiresaka fotsiny ianao."
+      },
+      {
+        "prompt": "Reraka be aho androany 😩",
+        "answer": "Misy antony maro mety mahatonga ny olona iray hahatsapa ho \"reraka\" na \"be hery tsy mahazo azy\" (fatigued) androany. Mba hanampiana anao hitady vahaolana, azonao jerena ireto zavatra ireto:\n\n**1. Ny antony mety mahatonga izany (Raha tsy fantatrao hoe nahoana):**\n*   **Tsy fahampian'ny torimaso:** Na tsy natory tsara ianao, na tsy natory lalina (deep"
+      },
+      {
+        "prompt": "Sady mafana no feno be ny taxi-be androany",
+        "answer": "Misy antony maromaro mety mahatonga ny taxi-be ho feno na sarotra hita androany, arakarakak'ny toerana misy anao. Ireto ny antony mahatonga izany matetika:\n\n1. **Ny andro sy ny andro fiasana:** Raha andro fiasana (alatsinainy hatramin'ny zava-badoa) dia be ny olona mivoaka ho any amin'ny asa na mianatra.\n2. **Ny ora fivoahana (Heures de pointe):** Raha vao"
+      },
+      {
+        "prompt": "Faly mahita anao indray!",
+        "answer": "Miarahaba anao! Voninana aho fa afaka manampy anao.\n\nInona no azoko atao ho anao? Azonao atao ny:\n\n1.  **Mametraka fanontanana** (momba ny tantara, siansa,i zava-misy manodidina, sns).\n2.  **Mangataka fanampiana amin'ny asa soratra** (manoratra taratasy, tononkina, tantara, na fandikan-teny).\n3.  **Miresaka fotsiny** (misy zav"
+      }
+    ]
+  }
+}
