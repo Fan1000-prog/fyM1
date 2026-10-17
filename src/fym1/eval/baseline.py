@@ -96,3 +96,12 @@ def belebele_completion_prompt(row: dict) -> str:
     """Plain-text 0-shot prompt for base models (no chat template); score the next token over " A"-" D"."""
     options = "\n".join(f"{letter}: {row[f'mc_answer{i}']}" for i, letter in enumerate("ABCD", start=1))
     return f"P: {row['flores_passage']}\nQ: {row['question']}\n{options}\nAnswer:"
+
+
+def missing_sections(result: dict, base_model: bool) -> list[str]:
+    """Sections a baseline run still has to produce; empty once complete or if the model was skipped."""
+    if "skipped" in result:
+        return []
+    belebele = "belebele_completion" if base_model else "belebele"
+    required = [belebele, "flores", "tokens_per_word", "greetings", "qlora_smoke"]
+    return [s for s in required if s not in result]

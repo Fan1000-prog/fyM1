@@ -5,6 +5,7 @@ from fym1.eval.baseline import (
     belebele_completion_prompt,
     belebele_prompt,
     chrf_pp,
+    missing_sections,
     first_line,
     sample_sentences,
     selection_row,
@@ -102,3 +103,14 @@ def test_belebele_completion_prompt_is_plain_text_ending_in_answer():
     assert p.startswith("P: Ny alika dia mihinana.\nQ: Inona no ataon'ny alika?\n")
     assert "\nA: Matory\nB: Mihinana\nC: Milomano\nD: Mihira\n" in p
     assert p.endswith("Answer:")
+
+
+def test_missing_sections_instruct_vs_base():
+    full = {"belebele": {}, "flores": {}, "tokens_per_word": {}, "greetings": {}, "qlora_smoke": {}}
+    assert missing_sections(full, base_model=False) == []
+    assert missing_sections(full, base_model=True) == ["belebele_completion"]
+    assert missing_sections({"belebele": {}}, base_model=False) == ["flores", "tokens_per_word", "greetings", "qlora_smoke"]
+
+
+def test_missing_sections_skipped_model_is_complete():
+    assert missing_sections({"skipped": "403"}, base_model=False) == []
