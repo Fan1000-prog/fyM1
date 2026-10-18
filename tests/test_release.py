@@ -633,6 +633,53 @@ def test_is_archive_reads_every_suffix_of_the_file_name(path, archive):
     assert release.is_archive(path) == archive
 
 
+def _tar_header() -> bytes:
+    return b"\0" * 257 + b"ustar\x0000" + b"\0" * 242
+
+
+ARCHIVE_BYTES = {  # synthetic: just the magic, then filler
+    "zip": b"PK\x03\x04 filler", "empty-zip": b"PK\x05\x06 filler", "gzip": b"\x1f\x8b filler",
+    "bzip2": b"BZh91 filler", "xz": b"\xfd7zXZ\x00 filler", "7z": b"7z\xbc\xaf\x27\x1c filler",
+    "rar": b"Rar!\x1a\x07\x00 filler", "zstd": b"\x28\xb5\x2f\xfd filler", "tar": _tar_header(),
+    "zip-after-text": b"# notes\nplain text\nPK\x03\x04 filler", "zip-end-after-text": b"plain\nPK\x05\x06\0\0",
+}
+
+
+@pytest.mark.parametrize("kind", sorted(ARCHIVE_BYTES))
+@pytest.mark.parametrize("name", ["docs/notes.md", "data/words.txt"])
+def test_an_archive_under_a_text_name_fails_before_anything_is_written(tmp_path, capsys, kind, name):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, name: ARCHIVE_BYTES[kind]})
+    out = tmp_path / "public"
+    with pytest.raises(RefusedError, match="1 archive files") as error:
+        snap(repo, out, make_export(tmp_path))
+    assert name not in str(error.value) and PurePath(name).name not in str(error.value)
+    assert not out.exists() and not _leftovers(tmp_path)
+    assert name not in capsys.readouterr().out
+
+
+def test_a_pdf_with_an_appended_zip_fails_before_anything_is_written(tmp_path):
+    pdf = _pdf("<< /Title (notes) >>") + b"PK\x03\x04 filler PK\x05\x06\0\0"
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "paper/x.pdf": pdf})
+    out = tmp_path / "public"
+    with pytest.raises(RefusedError, match="1 archive files") as error:
+        snap(repo, out, make_export(tmp_path))
+    assert "x.pdf" not in str(error.value)
+    assert not out.exists() and not _leftovers(tmp_path)
+
+
+@pytest.mark.parametrize(("data", "archive"), [
+    (b"# notes\nplain text, PK and zip as words\n", False),
+    (b"\x89PNG\r\n\x1a\n", False),
+    (b"x" * 300, False),
+    (b"x" * 257 + b"ustar", True),
+    (b"x" * 256 + b"ustar", False),  # ustar only counts at offset 257
+    (b"text BZh later", False),  # bzip2 magic only counts at the start
+    (b"text PK\x05\x06 later", True),  # a zip record counts anywhere
+])
+def test_has_archive_magic(data, archive):
+    assert release.has_archive_magic(data) == archive
+
+
 def test_unscannable_files_fail_end_to_end(tmp_path):
     repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/old.md": "caf\u00e9 Zafy".encode("latin-1"),
                                 "assets/logo.png": b"\x89PNG\r\n"})

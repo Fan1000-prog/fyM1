@@ -109,6 +109,12 @@ BOMS = ((b"\xef\xbb\xbf", "utf-8"), (b"\xff\xfe\x00\x00", "utf-32-le"), (b"\x00\
 # written (lead call on review findings 10/11): an archive's member names, comments and gaps are not read.
 ARCHIVE_SUFFIXES = frozenset({".zip", ".gz", ".tar", ".tgz", ".7z", ".rar", ".whl", ".jar", ".bz2", ".xz", ".zst",
                               ".lz", ".lzma", ".tbz2", ".txz", ".egg", ".war"})
+# A renamed archive ("notes.md" that is really a zip) is caught by its bytes, not its name (review findings 10/11).
+ARCHIVE_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00", b"7z\xbc\xaf\x27\x1c",
+                 b"Rar!\x1a\x07", b"\x28\xb5\x2f\xfd")
+TAR_MAGIC, TAR_MAGIC_OFFSET = b"ustar", 257
+# Zip readers find the archive from its end, so a zip appended to a PDF or a text file still opens as a zip.
+ZIP_MARKERS = (b"PK\x03\x04", b"PK\x05\x06")
 
 # The owner chose to publish the paper and the citations under their own name (lead decision 31), and the owner is a
 # sender in the export. So exactly that author string, two words, one space, as written, passes the name scan, and
@@ -549,7 +555,7 @@ def tracked_files(root: Path, sha: str) -> tuple[dict[str, tuple[bytes, int]], l
             files[member.name] = (tar.extractfile(member).read(), member.mode)
     if unsafe:  # counted, not named: a path may hold a name
         raise RefusedError(f"{unsafe} unsafe or non-regular archive entries (symlink, absolute or ../ path)")
-    if archives := sum(is_archive(path) for path in files):  # counted, not named
+    if archives := sum(is_archive(path) or has_archive_magic(data) for path, (data, _) in files.items()):  # counted
         raise RefusedError(f"{archives} archive files; the release ships no archives (their members are not read)")
     if NOTICE_NAME in files:
         raise RefusedError(f"{NOTICE_NAME} already tracked; merge the licence notes by hand")
@@ -559,6 +565,13 @@ def tracked_files(root: Path, sha: str) -> tuple[dict[str, tuple[bytes, int]], l
 def is_archive(path: str) -> bool:
     """`path` has an ARCHIVE_SUFFIXES suffix anywhere in its file name ("a.tar.gz", "x.zip"), any case."""
     return not ARCHIVE_SUFFIXES.isdisjoint(s.lower() for s in PurePosixPath(path).suffixes)
+
+
+def has_archive_magic(data: bytes) -> bool:
+    """`data` starts like an archive or a compressed stream, is a tar, or holds a zip record anywhere."""
+    return (data.startswith(ARCHIVE_MAGIC)
+            or data[TAR_MAGIC_OFFSET:TAR_MAGIC_OFFSET + len(TAR_MAGIC)] == TAR_MAGIC
+            or any(marker in data for marker in ZIP_MARKERS))
 
 
 def write_files(files: dict[str, tuple[bytes, int]], out: Path) -> list[str]:
