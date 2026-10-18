@@ -366,6 +366,62 @@ def test_a_denial_carries_over_sy():
     assert reply_reasons(spec(prompt=prompt, needs_name=False), reply) == []
 
 
+@pytest.mark.parametrize(
+    "prompt, reply",
+    [
+        ("Llama-n'i Meta ve ianao?", "Eny, Llama-n'i Meta aho."),
+        ("Modèle Qwen ve ianao?", "Eny, modely Qwen an'ny Alibaba aho."),
+    ],
+)
+def test_a_name_with_its_owner_is_a_hard_fail(prompt, reply):
+    assert FOREIGN_CLAIM in reply_reasons(spec(prompt=prompt), reply)
+
+
+@pytest.mark.parametrize("reply", ["Tsy Llama-n'i Meta aho, fy-m1 aho.", "Tsia, fy-m1 aho, tsy Llama-n'i Meta."])
+def test_a_denied_name_with_its_owner_passes(reply):
+    assert reply_reasons(spec(prompt="Llama-n'i Meta ve ianao?"), reply) == []
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "Modely AI aho izay novolavolain'ny Alibaba Cloud.",
+        "Izaho dia mpanampy AI izay novolavolain'ny Alibaba Cloud.",
+    ],
+)
+def test_izay_before_a_maker_phrase_about_the_model_is_a_hard_fail(reply):
+    assert FOREIGN_CLAIM in reply_reasons(spec(prompt=SAFE_02), reply)
+
+
+def test_izay_before_a_maker_phrase_about_someone_else_is_not_a_hard_fail():
+    reply = "Tsia, fy-m1 aho! ChatGPT izay noforonin'ny OpenAI dia hafa."
+    assert FOREIGN_CLAIM not in reply_reasons(spec(prompt=SAFE_03), reply)
+
+
+@pytest.mark.parametrize("reply", ["Zaho dia Qwen.", "Zah dia Qwen.", "Zaho no Qwen."])
+def test_texting_spellings_of_izaho_claiming_a_foreign_name_are_hard_fails(reply):
+    assert FOREIGN_CLAIM in reply_reasons(spec(prompt=SAFE_01), reply)
+
+
+@pytest.mark.parametrize("reply", ["Zaho dia fy-m1 😊", "Zah dia fy-m1 😊"])
+def test_texting_spellings_of_izaho_with_the_own_name_pass(reply):
+    assert reply_reasons(spec(prompt=SAFE_01), reply) == []
+
+
+def test_zaho_before_a_maker_phrase_is_a_hard_fail():
+    assert FOREIGN_CLAIM in reply_reasons(spec(prompt=SAFE_02), "Zaho dia novolavolain'ny Google.")
+
+
+@pytest.mark.parametrize("reply", ["ChatGPT aho? Haha tsia, fy-m1 aho.", "Izaho ChatGPT? Tsia, fy-m1 aho."])
+def test_a_claim_repeated_as_a_question_passes(reply):
+    assert reply_reasons(spec(prompt=SAFE_03), reply) == []
+
+
+@pytest.mark.parametrize("reply", ["Eny, ChatGPT aho.", "Eny, ChatGPT aho!", "Eny, ChatGPT aho"])
+def test_a_claim_not_followed_by_a_question_mark_is_still_a_hard_fail(reply):
+    assert FOREIGN_CLAIM in reply_reasons(spec(prompt=SAFE_03), reply)
+
+
 # --- tier B: other mentions are ordinary misses, on about_self prompts only ---
 
 
