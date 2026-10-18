@@ -732,7 +732,8 @@ def test_a_one_file_export_field_of_the_wrong_shape_is_refused(tmp_path, capsys,
     (None, {"users": [{"name": "Userfake Person"}]}, "Userfake"),
     ({"owner_name": "Ownerfake Person"}, None, "Ownerfake"),
     ({"participants": ["Zafy Test", "Listedfake Person"]}, None, "Listedfake"),
-    ({"notes": "export of the chat with Notefake"}, None, "Notefake"),
+    ({"notes": "export of the chat with Mialy"}, None, "Mialy"),  # a listed given name in the notes
+    ({"platform": "Mialy app"}, None, "Mialy"),
     ({"title": "Titlefake birthday"}, None, "Titlefake"),
 ])
 def test_every_name_field_of_a_one_file_export_is_read(tmp_path, conversation, message, hidden):
@@ -741,6 +742,13 @@ def test_every_name_field_of_a_one_file_export_is_read(tmp_path, conversation, m
     loaded = {p for t in load_threads(tmp_path / "raw") for p in [*t.participants, *(m.sender for m in t.messages)]}
     if conversation is None or "participants" not in conversation:
         assert not any(hidden in p for p in loaded)  # the conversation loader alone misses it
+
+
+def test_only_listed_given_names_in_notes_join_the_name_list(tmp_path):
+    """Notes describe the export: their unlisted words ("timestamps", a made-up "Notefake") name nobody."""
+    names = name_tokens(export_names(_flat_file(tmp_path, {"notes": "Notefake timestamps URLs kept for Mialy"})))[0]
+    assert release.compare_key("Mialy") in names
+    assert not {release.compare_key(w) for w in ("Notefake", "timestamps", "URLs")} & names
 
 
 def test_a_nickname_from_a_nickname_event_is_a_name(tmp_path):
@@ -810,10 +818,10 @@ def chat_words_of(text: str) -> list[str]:
 def test_common_label_words_are_counted_in_the_report(tmp_path):
     export = _flat_file(tmp_path, {"title": "famille tsara Titlefake", "notes": "the family chat"})
     scan = release.scan_export(export)
-    assert scan.label_words_common == 5
+    assert scan.label_words_common == 2  # title words only: "famille", "tsara"
     repo = make_repo(tmp_path, CLEAN_FILES)
     report = build_snapshot(repo, "HEAD", tmp_path / "public", export, make_ids(tmp_path), make_chats(tmp_path))
-    assert report.as_dict()["names"]["label_words_left_out_as_common"] == 5
+    assert report.as_dict()["names"]["label_words_left_out_as_common"] == 2
 
 
 def test_json_nested_too_deep_is_refused(tmp_path, capsys):

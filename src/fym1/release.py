@@ -32,7 +32,7 @@ from pathlib import Path, PurePosixPath
 from fym1.data.anonymize import MIN_NAME_PREFIX, NAME_SUFFIXES, compare_key, fold, is_everyday_word, normalise
 from fym1.data.gate import PERSON_MARKER_WORDS, is_hidden_char
 from fym1.data.gate import tokens as gate_tokens
-from fym1.data.known_words import KNOWN_WORDS, known_by
+from fym1.data.known_words import FIRST_NAME_WORDS, KNOWN_WORDS, MG_FIRST_NAMES, known_by
 from fym1.data.messenger import Thread, fix_meta_text, load_dyi_threads, load_flat_threads
 
 
@@ -392,8 +392,11 @@ FLAT_SUFFIX = ".json"  # any other JSON file, at any depth: must be a one-file e
 # a name used as a key) would never reach the name list. A schema is an object (`{key: schema}`), a list of one
 # schema (`[schema]`, every item matches it) or one of these leaves:
 NAME = "name"  # a person's name (text): joins the name list
-LABEL = "label"  # free text that may name someone (a title, notes): the chat-text check reads it, and its
-# distinctive words (`label_words`) join the name list
+LABEL = "label"  # a conversation title, which may name someone ("Hanta's 30th"): the chat-text check reads it, and
+# its distinctive words (`label_words`) join the name list
+NOTE = "note"  # free text about the export (notes, platform): the chat-text check reads it, and its words that are
+# listed given names (`note_names`) join the name list. Not LABEL: it describes the data ("timestamps", "URLs"), so
+# its distinctive words name nobody and failed 22 shipped files on the real export (lead call, review round 2).
 TEXT = "text"  # free text someone typed (a message): the chat-text check reads it
 DATA = "data"  # ids, timestamps, counts, flags, links, emoji: a number, true/false, null or text; no object or list
 Schema = str | dict[str, "Schema"] | list["Schema"]
@@ -418,8 +421,8 @@ DYI_SCHEMA: Schema = {
 # A one-file export (`fym1.data.messenger.load_flat_threads`).
 FLAT_SCHEMA: Schema = {
     "conversation": {
-        "title": LABEL, "participants": [NAME], "owner_name": NAME, "timezone": DATA, "platform": LABEL,
-        "notes": LABEL, "date_range": {"start": DATA, "end": DATA}, "message_count": DATA,
+        "title": LABEL, "participants": [NAME], "owner_name": NAME, "timezone": DATA, "platform": NOTE,
+        "notes": NOTE, "date_range": {"start": DATA, "end": DATA}, "message_count": DATA,
     },
     "messages": [{
         "id": DATA, "sender": NAME, "text": TEXT, "timestamp": DATA,
@@ -473,7 +476,7 @@ def read_export(export: Path) -> list[Thread]:
 @dataclass
 class _Fields:
     """What the schema walk read, by leaf kind, plus the distinct schema keys seen and the unknown keys counted."""
-    values: dict[str, list[str]] = field(default_factory=lambda: {NAME: [], LABEL: [], TEXT: []})
+    values: dict[str, list[str]] = field(default_factory=lambda: {NAME: [], LABEL: [], NOTE: [], TEXT: []})
     keys: set[str] = field(default_factory=set)
     unknown_keys: int = 0
 
@@ -509,8 +512,8 @@ def _walk(node: object, schema: Schema, found: _Fields, fix: Callable[[str], str
 @dataclass(frozen=True)
 class ExportScan:
     threads: list[Thread]  # `read_export`
-    names: list[str]  # every NAME field, nickname and distinctive LABEL word
-    free_texts: list[str]  # every LABEL and TEXT field, for the chat-text check
+    names: list[str]  # every NAME field, nickname, distinctive LABEL word and given name in a NOTE
+    free_texts: list[str]  # every LABEL, NOTE and TEXT field, for the chat-text check
     label_words_common: int  # LABEL words left out of the names as common (`label_words`)
     keys: int  # distinct schema keys the export uses
 
@@ -540,15 +543,23 @@ def scan_export(export: Path) -> ExportScan:
     nicknames = [nickname for thread in threads for nickname in thread.nicknames]
     return ExportScan(
         threads=threads,
-        names=[*found.values[NAME], *nicknames, *(word for kept, _ in labels for word in kept)],
-        free_texts=[*found.values[LABEL], *found.values[TEXT]],
+        names=[*found.values[NAME], *nicknames, *(word for kept, _ in labels for word in kept),
+               *(name for note in found.values[NOTE] for name in note_names(note))],
+        free_texts=[*found.values[LABEL], *found.values[NOTE], *found.values[TEXT]],
         label_words_common=sum(common for _, common in labels),
         keys=len(found.keys),
     )
 
 
+def note_names(note: str) -> list[str]:
+    """The words of a NOTE that are listed given names (`first_names.txt`, `mg_first_names.txt`), case and accents
+    folded. A name in no list is not found: notes describe the export, the conversation's own names come from its
+    NAME fields."""
+    return [word for word in _LETTERS.findall(fold(note)) if word in FIRST_NAME_WORDS or word in MG_FIRST_NAMES]
+
+
 def label_words(label: str) -> tuple[list[str], int]:
-    """The `is_distinctive` words of a LABEL (a conversation title, notes), and how many words were left out as
+    """The `is_distinctive` words of a LABEL (a conversation title), and how many words were left out as
     common: a group title may hold a person's name ("Hanta's 30th"), while its everyday words ("famille", "tsara")
     name nobody and would fail every file that uses them."""
     # Checked as typed (case and accents folded), before `compare_key` collapses letters: "famille" is a common
