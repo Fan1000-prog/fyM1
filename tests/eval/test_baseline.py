@@ -124,3 +124,10 @@ def test_loss_trend_from_curve_or_first_last():
         "first": 6.0, "min": 3.0, "min_step": 2, "last": 5.0, "rising_at_end": True}
     assert loss_trend({"loss_first": 1.1, "loss_last": 0.7}) == {"first": 1.1, "last": 0.7}
     assert loss_trend({}) is None
+
+
+def test_selection_row_marks_out_of_memory_sections_not_as_numbers():
+    result = {"model": {"slug": "m", "hub_id": "org/m"}, "belebele_completion": {"oom": True}, "flores": {"oom": True}}
+    row = selection_row(result, "x")
+    assert row["belebele_acc"] is None and row["belebele_protocol"] == "completion 0-shot (oom)"
+    assert row["chrf_plt_eng"] is None and row["flores"] == "oom"

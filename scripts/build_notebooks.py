@@ -66,7 +66,9 @@ code("""CANDIDATES = {
     # slug: (hub id, QLoRA smoke steps, push 4-bit weights to fyM1-ckpt base-4bit/<slug>/, base model?)
     # Order = run order. 4-bit push off: on T4 Unsloth keeps gemma4 in fp32 and save_pretrained stalled at
     # ~11.5/12.7 GB CPU RAM. Belebele: plain-text completion for all; chat-template score only for instruct models.
-    "gemma-3-12b-it": ("unsloth/gemma-3-12b-it-unsloth-bnb-4bit", 15, False, False),
+    # Gemma 3 is quantized on load like Gemma 4: Unsloth's pre-quantized bnb-4bit checkpoint keeps many layers
+    # unquantized and used 11.9 GB of the T4 right after loading (OOM at the first Belebele batch).
+    "gemma-3-12b-it": ("google/gemma-3-12b-it", 15, False, False),
     "afriqueqwen3.5-9b-instruct": ("McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1", 15, False, False),
     "gemma-4-12b-it": ("google/gemma-4-12B-it", 15, False, False),
     "afriqueqwen-8b": ("McGill-NLP/AfriqueQwen-8B", 15, False, True),
@@ -87,6 +89,7 @@ sys.path.insert(0, f"{code_dir}/code/src")
 sha_file = f"{code_dir}/code/SHA"
 CODE_SHA = open(sha_file).read().strip() if os.path.exists(sha_file) else "unknown"  # git commit of the synced code
 from fym1.eval import baseline as bl
+from fym1.eval.batching import StillOutOfMemory, run_batched
 from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS
 from fym1.runtime import output_dir, scratch_dir
 
@@ -101,9 +104,10 @@ def load_results(slug):
 
 
 def save_results(slug, results):
-    for name, section_result in results.items():  # each section records the code that produced it
+    for name, section_result in results.items():  # each section records the code and FORCE of its run
         if name not in ("model", "env") and isinstance(section_result, dict):
             section_result.setdefault("code_sha", CODE_SHA)
+            section_result.setdefault("force", FORCE)
     path = f"{OUTPUT}/{slug}.json"
     with open(path, "w") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
@@ -116,9 +120,10 @@ assert SLUG, "all candidates complete"
 HUB_ID, SMOKE_STEPS, PUSH_4BIT, BASE = CANDIDATES[SLUG]
 R = load_results(SLUG)
 R.pop("done", None)  # completeness is missing_sections(), not a stored flag
-for name, section_result in R.items():  # sections saved before code SHAs were recorded
+for name, section_result in R.items():  # sections saved before code SHA / FORCE were recorded
     if name not in ("model", "env") and isinstance(section_result, dict):
         section_result.setdefault("code_sha", "unrecorded")
+        section_result.setdefault("force", "unrecorded")
 R.setdefault("model", {"slug": SLUG, "hub_id": HUB_ID, "quant": "bnb 4-bit nf4 (Unsloth load_in_4bit)"})
 print("CANDIDATE", SLUG, "| missing:", bl.missing_sections(R, BASE))"""),
 code("""import torch
@@ -149,19 +154,26 @@ def chat(prompt):
                                    add_generation_prompt=True, **CHAT_TEMPLATE_KWARGS)
 
 
-def encode(texts):
-    return tok(texts, return_tensors="pt", padding=True, add_special_tokens=False).to("cuda")
+def encode(texts, special_tokens=False):
+    return tok(texts, return_tensors="pt", padding=True, add_special_tokens=special_tokens).to("cuda")
+
+
+def batched(items, batch_size, run):
+    \"\"\"On CUDA OOM: empty the cache and retry that batch one item at a time; StillOutOfMemory if that fails.\"\"\"
+    return run_batched(items, batch_size, run, is_oom=lambda e: isinstance(e, torch.OutOfMemoryError),
+                       clear=torch.cuda.empty_cache)
 
 
 @torch.inference_mode()
 def generate(prompts, max_new_tokens, sample):
-    out = []
-    for i in range(0, len(prompts), GEN_BATCH):
-        enc = encode([chat(p) for p in prompts[i:i + GEN_BATCH]])
-        kw = dict(do_sample=True, temperature=0.7, top_p=0.9) if sample else dict(do_sample=False)
+    kw = dict(do_sample=True, temperature=0.7, top_p=0.9) if sample else dict(do_sample=False)
+
+    def run(batch):
+        enc = encode([chat(p) for p in batch])
         ids = model.generate(**enc, max_new_tokens=max_new_tokens, pad_token_id=tok.pad_token_id, **kw)
-        out += tok.batch_decode(ids[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
-    return out
+        return tok.batch_decode(ids[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
+
+    return batched(prompts, GEN_BATCH, run)
 
 
 @torch.inference_mode()
@@ -190,34 +202,30 @@ if not BASE and section("belebele"):
     t0 = time.time()
     rows = load_dataset("facebook/belebele", "plt_Latn", split="test")
     digit_ids = [tok.encode(d, add_special_tokens=False)[-1] for d in "1234"]
-    preds, nan_rows = [], 0
-    with torch.inference_mode():
-        for i in range(0, len(rows), BELEBELE_BATCH):
-            batch = rows[i:i + BELEBELE_BATCH]
-            prompts = [bl.belebele_prompt({k: batch[k][j] for k in batch}) for j in range(len(batch["question"]))]
-            logits = last_logits(encode([chat(p) for p in prompts]))[:, digit_ids].float()
-            nan_rows += int(torch.isnan(logits).any(-1).sum())
-            preds += (logits.argmax(-1) + 1).tolist()
-    R["belebele"] = {"acc": round(bl.accuracy(preds, rows["correct_answer_num"]), 4), "n": len(preds),
-                     "nan_rows": nan_rows, "seconds": round(time.time() - t0),
-                     "protocol": "0-shot, chat template, English instruction, argmax of next-token logits over '1'-'4'"}
+    protocol = "0-shot, chat template, English instruction, argmax of next-token logits over '1'-'4'"
+    try:
+        scores = torch.tensor(batched([chat(bl.belebele_prompt(r)) for r in rows], BELEBELE_BATCH,
+                                      lambda b: last_logits(encode(b))[:, digit_ids].float().tolist()))
+        R["belebele"] = {"acc": round(bl.accuracy((scores.argmax(-1) + 1).tolist(), rows["correct_answer_num"]), 4),
+                         "n": len(scores), "nan_rows": int(torch.isnan(scores).any(-1).sum()),
+                         "seconds": round(time.time() - t0), "protocol": protocol}
+    except StillOutOfMemory:
+        R["belebele"] = {"oom": True, "protocol": protocol}
     save_results(SLUG, R)
 print("BELEBELE", R.get("belebele"))"""),
 code("""if section("belebele_completion"):  # the one protocol for every model: plain text, no chat template
     t0 = time.time()
     rows = load_dataset("facebook/belebele", "plt_Latn", split="test")
     letter_ids = [tok.encode(" " + letter, add_special_tokens=False)[-1] for letter in "ABCD"]
-    preds, nan_rows = [], 0
-    for i in range(0, len(rows), BELEBELE_BATCH):
-        batch = rows[i:i + BELEBELE_BATCH]
-        prompts = [bl.belebele_completion_prompt({k: batch[k][j] for k in batch}) for j in range(len(batch["question"]))]
-        enc = tok(prompts, return_tensors="pt", padding=True, add_special_tokens=True).to("cuda")
-        logits = last_logits(enc)[:, letter_ids].float()
-        nan_rows += int(torch.isnan(logits).any(-1).sum())
-        preds += (logits.argmax(-1) + 1).tolist()
-    R["belebele_completion"] = {"acc": round(bl.accuracy(preds, rows["correct_answer_num"]), 4), "n": len(preds),
-                                "nan_rows": nan_rows, "seconds": round(time.time() - t0),
-                                "protocol": "0-shot plain-text completion (P/Q/A-D/Answer:), no chat template, argmax of next-token logits over ' A'-' D'"}
+    protocol = "0-shot plain-text completion (P/Q/A-D/Answer:), no chat template, argmax of next-token logits over ' A'-' D'"
+    try:
+        scores = torch.tensor(batched([bl.belebele_completion_prompt(r) for r in rows], BELEBELE_BATCH,
+                                      lambda b: last_logits(encode(b, special_tokens=True))[:, letter_ids].float().tolist()))
+        R["belebele_completion"] = {"acc": round(bl.accuracy((scores.argmax(-1) + 1).tolist(), rows["correct_answer_num"]), 4),
+                                    "n": len(scores), "nan_rows": int(torch.isnan(scores).any(-1).sum()),
+                                    "seconds": round(time.time() - t0), "protocol": protocol}
+    except StillOutOfMemory:
+        R["belebele_completion"] = {"oom": True, "protocol": protocol}
     save_results(SLUG, R)
 print("BELEBELE_COMPLETION", R.get("belebele_completion"))"""),
 code("""if section("flores"):
@@ -235,6 +243,9 @@ code("""if section("flores"):
                        "plt-eng_chrf++": round(bl.chrf_pp(hyp_en, en_txt), 2), "n": FLORES_N,
                        "seconds": round(time.time() - t0),
                        "protocol": "devtest first 200, 0-shot chat prompt, greedy, max 256 new tokens, first line kept"}
+        save_results(SLUG, R)
+    except StillOutOfMemory:
+        R["flores"] = {"oom": True}
         save_results(SLUG, R)
     except Exception as e:  # gated dataset not yet accepted: leave the section unsaved so a rerun retries it
         print("FLORES PENDING:", type(e).__name__, str(e)[:300])
@@ -254,11 +265,15 @@ code("""if section("greetings"):
     except EntryNotFoundError:
         greetings, source = FALLBACK_GREETINGS, "fallback made-up greetings"
     torch.manual_seed(42)
-    answers = generate(greetings, 128, True)
-    R["greetings"] = {"source": source, "sampling": "temp 0.7, top_p 0.9, max 128 new tokens, seed 42, no system prompt",
-                      "answers": [{"prompt": p, "answer": a.strip()} for p, a in zip(greetings, answers)]}
+    sampling = "temp 0.7, top_p 0.9, max 128 new tokens, seed 42, no system prompt"
+    try:
+        answers = generate(greetings, 128, True)
+        R["greetings"] = {"source": source, "sampling": sampling,
+                          "answers": [{"prompt": p, "answer": a.strip()} for p, a in zip(greetings, answers)]}
+    except StillOutOfMemory:
+        R["greetings"] = {"oom": True, "source": source, "sampling": sampling}
     save_results(SLUG, R)
-for a in R["greetings"]["answers"]:
+for a in R["greetings"].get("answers", []):
     print(repr(a["prompt"]), "->", repr(a["answer"][:200]))"""),
 code("""if section("qlora_smoke"):
     from trl import SFTTrainer, SFTConfig

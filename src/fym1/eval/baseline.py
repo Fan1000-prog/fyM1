@@ -71,16 +71,18 @@ def selection_row(result: dict, license: str, base_model: bool = False) -> dict:
     """
     flores = result.get("flores", {})
     smoke = result.get("qlora_smoke", {})
-    acc = result.get("belebele_completion", {}).get("acc")
+    completion = result.get("belebele_completion", {})
+    acc = completion.get("acc")
     return {
         "model": result["model"]["hub_id"],
         "license": license,
         "belebele_acc": acc,
-        "belebele_protocol": "completion 0-shot" if acc is not None else "completion 0-shot (pending)",
+        "belebele_protocol": "completion 0-shot" + ("" if acc is not None else " (oom)" if completion.get("oom")
+                                                    else " (pending)"),
         "belebele_chat_acc": None if base_model else result.get("belebele", {}).get("acc"),
         "chrf_plt_eng": flores.get("plt-eng_chrf++"),
         "chrf_eng_plt": flores.get("eng-plt_chrf++"),
-        "flores": "measured" if flores else "pending",
+        "flores": "measured" if "eng-plt_chrf++" in flores else "oom" if flores.get("oom") else "pending",
         "tokens_per_word": result.get("tokens_per_word", {}).get("value"),
         "sniff_natural": None,
         "peak_vram_gb": smoke.get("peak_vram_gb"),
