@@ -1,0 +1,157 @@
+"""Turn the measured outputs in results/ into the data the paper's plots and the README's funnel draw.
+
+Writes, under paper/figdata/:
+  funnel.csv   the data funnel: real conversations before and after the strict gate, synthetic chats written,
+               kept by the filter and passed by the sample gate (data_gate.json, synth_stats.json, synth_gate.json)
+  loss.csv     training loss per logged step (train_log.json loss_curve)
+  eval.csv     held-out loss per evaluation (train_log.json eval_curve)
+  lr.csv       the learning rate per step, recomputed from the run's settings (train_log.json config + data)
+  flags.tex    \\fyFigFunnelReady, \\fyFigTrainReady (1 when measured, 0 when the figure shows "pending")
+With --readme it also rewrites the Mermaid funnel between <!-- figure:funnel:start --> and
+<!-- figure:funnel:end --> in each given file. --check writes nothing and exits 1 if any output is out of date.
+Like paper/make_numbers.py, nothing is typed by hand: a value not measured yet is left out and the figure
+says "pending". Only counts and training curves are read, never text.
+
+Usage: uv run python paper/make_figures.py [--results results] [--out paper/figdata] [--readme README.md] [--check]
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import sys
+from pathlib import Path
+from typing import Any
+
+FUNNEL_START = "<!-- figure:funnel:start -->"
+FUNNEL_END = "<!-- figure:funnel:end -->"
+PENDING = "pending"
+
+# (row id, label, file under results/, key) in the order the funnel reads.
+FUNNEL_ROWS = [
+    ("real-cleaned", "Real conversations, cleaned", "data_gate.json", "conversations_before_gate"),
+    ("real-kept", "Real, passed the strict gate", "data_gate.json", "kept"),
+    ("synth-raw", "Synthetic chats written", "synth_stats.json", "raw"),
+    ("synth-filtered", "Synthetic, kept by the filter", "synth_gate.json", "checked"),
+    ("synth-kept", "Synthetic, passed the sample gate", "synth_gate.json", "kept"),
+]
+
+
+def load(results: Path, name: str) -> Any:
+    path = results / name
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+
+
+def funnel(results: Path) -> list[tuple[str, str, int | None]]:
+    """(row id, label, count or None when not measured) for every funnel row."""
+    out = []
+    for row_id, label, name, key in FUNNEL_ROWS:
+        value = (load(results, name) or {}).get(key)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+            raise TypeError(f"{name}: {key} is not a whole number: {value!r}")
+        out.append((row_id, label, value))
+    return out
+
+
+def planned_steps(train: int, batch: int, grad_accum: int, epochs: float) -> int:
+    """Optimizer steps the Trainer plans (transformers: ceil(epochs * ceil(batches / grad_accum)))."""
+    batches = math.ceil(train / batch)
+    return math.ceil(epochs * math.ceil(batches / grad_accum))
+
+
+def cosine_lr(step: int, peak: float, warmup: int, total: int) -> float:
+    """transformers.get_cosine_schedule_with_warmup (one half cosine) at `step`."""
+    if step < warmup:
+        return peak * step / max(1, warmup)
+    progress = (step - warmup) / max(1, total - warmup)
+    return peak * max(0.0, 0.5 * (1.0 + math.cos(math.pi * progress)))
+
+
+def lr_curve(log: dict[str, Any]) -> list[tuple[int, float]] | None:
+    """The learning rate at every step of the planned schedule, or None if the log cannot say it."""
+    config, data = log.get("config") or {}, log.get("data") or {}
+    needed = [config.get(k) for k in ("lr", "warmup_steps", "batch", "grad_accum")] + [data.get("train"), log.get("epochs")]
+    if config.get("lr_scheduler") != "cosine" or any(v is None for v in needed):
+        return None
+    total = planned_steps(data["train"], config["batch"], config["grad_accum"], log["epochs"])
+    return [(s, cosine_lr(s, config["lr"], config["warmup_steps"], total)) for s in range(total + 1)]
+
+
+def csv(header: str, rows: list[tuple[Any, ...]]) -> str:
+    return "\n".join([header, *(",".join(_cell(v) for v in row) for row in rows)]) + "\n"
+
+
+def _cell(v: Any) -> str:
+    return f"{v:.6g}" if isinstance(v, float) else str(v)
+
+
+def render(results: Path) -> dict[str, str]:
+    """Every figure-data file name -> its content."""
+    rows = funnel(results)
+    log = load(results, "train_log.json") or {}
+    loss = [(p["step"], p["loss"]) for p in log.get("loss_curve") or []]
+    evals = [(p["step"], p["eval_loss"]) for p in log.get("eval_curve") or []]
+    lr = lr_curve(log) if loss else None
+    funnel_ready = all(count is not None for _, _, count in rows)
+    train_ready = bool(loss) and lr is not None
+    return {
+        "funnel.csv": csv("id,count", [(row_id, count) for row_id, _, count in rows if count is not None]),
+        "loss.csv": csv("step,loss", loss),
+        "eval.csv": csv("step,eval_loss", evals),
+        "lr.csv": csv("step,lr", lr or []),
+        "flags.tex": "% Generated by paper/make_figures.py from results/. Do not edit by hand.\n"
+        + f"\\newcommand{{\\fyFigFunnelReady}}{{{int(funnel_ready)}}}\n"
+        + f"\\newcommand{{\\fyFigTrainReady}}{{{int(train_ready)}}}\n",
+    }
+
+
+def mermaid_funnel(results: Path) -> str:
+    """The README's funnel as a Mermaid flowchart (GitHub renders it; the release ships text only)."""
+    counts = {row_id: (f"{count:,}" if count is not None else PENDING) for row_id, _, count in funnel(results)}
+    return "\n".join([
+        "```mermaid",
+        "flowchart LR",
+        f'  R0["{counts["real-cleaned"]} real conversations, cleaned on my laptop"] --> R1["{counts["real-kept"]} passed the strict gate"]',
+        f'  S0["{counts["synth-raw"]} synthetic chats written by an open model"] --> S1["{counts["synth-filtered"]} kept by the filter"]',
+        f'  S1 --> S2["{counts["synth-kept"]} passed the sample gate"]',
+        '  R1 --> T["Training mix (+ formal and identity chats)"]',
+        "  S2 --> T",
+        "```",
+    ])
+
+
+def inject_funnel(markdown: str, block: str) -> str:
+    start, end = markdown.find(FUNNEL_START), markdown.find(FUNNEL_END)
+    if start == -1 or end < start:
+        raise ValueError(f"file needs {FUNNEL_START} ... {FUNNEL_END} markers")
+    return markdown[: start + len(FUNNEL_START)] + "\n" + block + "\n" + markdown[end:]
+
+
+def main(argv: list[str] | None = None) -> int:
+    here = Path(__file__).resolve().parent
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--results", type=Path, default=here.parent / "results")
+    parser.add_argument("--out", type=Path, default=here / "figdata")
+    parser.add_argument("--readme", type=Path, nargs="*", default=[])
+    parser.add_argument("--check", action="store_true", help="write nothing; exit 1 if an output is out of date")
+    args = parser.parse_args(argv)
+
+    wanted = {args.out / name: body for name, body in render(args.results).items()}
+    block = mermaid_funnel(args.results)
+    for path in args.readme:
+        wanted[path] = inject_funnel(path.read_text(encoding="utf-8"), block)
+    stale = [p for p, body in wanted.items() if not p.is_file() or p.read_text(encoding="utf-8") != body]
+    if args.check:
+        for path in stale:
+            print(f"out of date: {path} (run paper/make_figures.py)", file=sys.stderr)
+        return 1 if stale else 0
+    args.out.mkdir(parents=True, exist_ok=True)
+    for path in stale:
+        path.write_text(wanted[path], encoding="utf-8")
+    print(f"{args.out}: {len(stale)} file(s) updated")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
