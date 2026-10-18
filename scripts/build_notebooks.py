@@ -582,7 +582,7 @@ licences). Generators are permissive only (owner decision 2026-10-18: fy-m1 ship
 `synth.generator_licence` refuses any other model, or a model card whose licence changed, before anything loads.
 Kaggle: Accelerator **GPU T4 x2**, Internet on, `HF_TOKEN` secret on (no gated-model licence to accept). Code comes from `fyM1-ckpt` `code/` (`scripts/sync_code_to_hub.py`)."""),
 code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
-!pip install -q -U transformers accelerate bitsandbytes fasttext-numpy2-wheel"""),
+!pip install -q -U transformers accelerate bitsandbytes fasttext-numpy2-wheel ftfy"""),
 code("""GENERATORS = [  # (hub id, dtype), tried in order; permissive licences only (synth.GENERATOR_LICENCES)
     # float16 is ~2x faster on a T4 (no bfloat16) and ran the 9B's baseline; float32 avoids float16 inf/nan.
     # Gemma 4 runs float32: on a T4 Unsloth keeps gemma4 in float32 (00_baseline, 01_train).
