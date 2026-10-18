@@ -40,6 +40,8 @@ When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit ref
   sheet for the owner to block; lower-case ones rely on the review sheet.
 - Names spelled out or disguised: "Ni-ri-na", "N i r i n a", "N1r1na".
 - Phone numbers written in words ("aotra telo efatra…", "034 douze …") or with letters for digits ("l2").
+- Mobiles written without the 0 when the group after "34" is not a pair ("34 123 45 67",
+  "34 1 234 567", "34 123 4567"). A wider rule would turn price pairs ("35 000, 3 500") into phones.
 - Phone numbers glued to a word without the leading 0 ("tel34 12 345 67") or with a letter O for it
   ("telO34 …"): a word's own last letters can't be told apart from a number's start.
 - Addresses other than "Lot …" ("Cité 67Ha porte 12", "Villa 23 Ivandry"), and place names.

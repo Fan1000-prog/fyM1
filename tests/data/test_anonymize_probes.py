@@ -186,6 +186,9 @@ KNOWN_LIMITS = [
     "Villa 23 Ivandry",
     "tel34 12 345 67",  # glued mobile without the leading 0
     "telO34 12 345 67",  # glued, letter O typed for the 0
+    "34 123 45 67",  # no-0 mobile with a 3-digit or 1-digit second group: a wider rule
+    "34 1 234 567",  # risks turning price pairs into phones again
+    "34 123 4567",
 ]
 
 
@@ -511,3 +514,86 @@ def test_hashed_handle_fake_never_rebuilds_a_split_name(split, first):
     out = NOBODY("@" + split.format(a=key[:2], b=key[2:], a2=key[1:]) + " salama")  # {a}_{a2}: "lo_ova"
 
     assert compare_key(out.split()[0]) != compare_key(first)
+
+
+# --- #16 review notes ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("+261 038 27 2000/5", "<TEL>"),
+        ("Antsoy +261 038 27 2000/5 aho", "Antsoy <TEL> aho"),
+        ("00261 038 27 2000/5", "<TEL>"),
+        ("(+261) 38 27 2000/5", "<TEL>"),
+        ("261 038 27 2000/5", "<TEL>"),
+    ],
+)
+def test_country_code_phone_wins_over_date_filter(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text", ["01/02/2026 03/04 no daty roa", "ny 03/10/2026 amin'ny 14h30", "Taona 2020-03-12 io", "2h03 50 olona"]
+)
+def test_dates_still_kept_after_country_code_rule(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Antsoy 038 27 2000/5 aho", "Antsoy <TEL> aho"),
+        ("034 12 2019-5", "<TEL>"),
+        ("0 34 12 2019/5", "<TEL>"),
+        ("034/12/2019/5", "<TEL>"),
+        ("(034) 12 2000/5", "<TEL>"),
+        ("laharana038 27 2000/5", "laharana<TEL>"),
+        ("34 12 2019/5", "<TEL>"),
+    ],
+)
+def test_local_phone_with_a_year_like_group_is_a_phone(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+@pytest.mark.parametrize("text", ["01/02/2026 03/04", "03/04/2026 12 30", "2020-03-12 034", "17/10/2026 1430"])
+def test_full_dates_next_to_numbers_are_kept(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "35 000, 3 500",
+        "35 000 - 3 500 = 31 500",
+        "38 500, 2 500 Ar",
+        "Vidiny 35 000, 5 000 ny livraison",
+        "35 000 / 5 000",
+        "35 000 3 500",
+        "35 000 000 / 2",
+    ],
+)
+def test_price_pairs_are_kept(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize("text", ["3412 345 67", "3412 34567", "3412345 67"])
+def test_glued_mobiles_without_the_zero_are_caught(text):
+    assert Anonymizer(PRIV_NAMES)(text) == "<TEL>"
+
+
+@pytest.mark.parametrize("text", ["34/12/2019/5", "+261-34-12-2019-5", "+261 34/12/2019/5"])
+def test_phone_containing_a_date_is_still_a_phone(text):
+    assert Anonymizer(PRIV_NAMES)(text) == "<TEL>"
+
+
+@pytest.mark.parametrize(
+    "text", ["01/02/2026 03/04", "03/04/2026 12 30", "2020-03-12 034", "17/10/2026 1430", "31/12/2025"]
+)
+def test_whole_dates_are_kept(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize("text", ["03/13/2026 12", "032/12/2026 1"])
+def test_impossible_dates_are_not_exempt(text):
+    assert "<TEL>" in Anonymizer(PRIV_NAMES)(text)
