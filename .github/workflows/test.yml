@@ -18,3 +18,33 @@ jobs:
           key: glotlid-v2-85cd6716494360367b75f642b5bc78667605d0b4
       - run: uv sync --all-groups
       - run: uv run pytest -q
+  paper:
+    # Builds the paper from paper/fym1.tex with Tectonic (one pinned, checksummed binary; TeX packages are
+    # fetched on demand and cached). Also fails if numbers.tex or the figure data are stale against results/.
+    runs-on: ubuntu-latest
+    env:
+      TECTONIC_VERSION: "0.17.0"
+      TECTONIC_SHA256: 8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Generated paper inputs match results/
+        run: |
+          uv run --no-project python paper/make_numbers.py --out "$RUNNER_TEMP/numbers.tex"
+          diff -u paper/numbers.tex "$RUNNER_TEMP/numbers.tex"
+          uv run --no-project python paper/make_figures.py --check --readme README.md
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/Tectonic
+          key: tectonic-${{ env.TECTONIC_VERSION }}-${{ hashFiles('paper/fym1.tex') }}
+          restore-keys: tectonic-${{ env.TECTONIC_VERSION }}-
+      - name: Install Tectonic
+        run: |
+          tarball="tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl -fsSLo "$RUNNER_TEMP/$tarball" \
+            "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/$tarball"
+          echo "${TECTONIC_SHA256}  $RUNNER_TEMP/$tarball" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Compile the paper
+        run: tectonic -X compile --outdir "$RUNNER_TEMP" paper/fym1.tex
