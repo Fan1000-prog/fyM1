@@ -47,7 +47,8 @@ URL = re.compile(
     re.IGNORECASE,
 )
 _SEP = r"\s*[./,_-]?\s*"
-_INTL = r"(?:\+|(?<!\d[ .,])00)"  # "00" not inside a long amount: "1 000 000 000 Ar"
+# "00" not inside a long amount ("1 000 000 000 Ar"), unless it reads "00261": "14h42 00261 34 …"
+_INTL = r"(?:\+|(?<!\d[ .,])00|00(?=261))"
 # A Malagasy number, written once so the spaced and glued rules accept the same forms.
 _MG_COUNTRY = rf"(?:\(\s*{_INTL}?261\s*\)|{_INTL}?261)"  # +261, 00261, 261, (+261)
 _ZERO_TRUNK = rf"(?:\(\s*0\s*\)|0){_SEP}"  # 0 or (0), then any gap
@@ -94,44 +95,91 @@ _ONE_DATE = "|".join(
     + [rf"{_DAY}/{_MONTH}"]
 )
 DATE = re.compile(rf"(?<!\d)(?<!\d[/.])(?:{_ONE_DATE})(?:\s*[-–]\s*(?:{_ONE_DATE}))*(?![/.-]?\d)")
+# Clock times are set aside the same way: "03:02 034 …" must not read "02 034 …" as the phone.
+TIME = re.compile(r"(?<![\w:])(?:[01]?\d|2[0-3])[:hH][0-5]\d(?![\w:])")
 # A phone starting outside a date with one of these still wins over a date shape inside it,
-# unless it continues an amount ("25 000 000 28/09", "1 261 340 000 19/04").
-_STRONG_PHONE_START = re.compile(r"\(?\s*(?:\+|00[1-9]|261|[0Oo]\s*\)?\s*[./,_-]?\s*[23]\d)")
-_AMOUNT_BEFORE = re.compile(r"\d[ .,]$")
+# unless it continues an amount ("1 261 340 000 19/04", "1 020 000 15/03"). "03-24-…": the
+# 3 may stand apart from the next digit by a mark, not by a space ("03 45" is a time).
+_MOBILE_START = r"[0Oo]\s*\)?\s*[./,_-]?\s*[23](?:\s*[./,_-]\s*)?\d"
+_STRONG_PHONE_START = re.compile(rf"\(?\s*(?:\+|00[1-9]|261|{_MOBILE_START})")
+# A strong Malagasy start, then every digit after it: "034 12 01/02/26" and "261 32 01/11/12 12"
+# carry a stray digit, so the exact-length PHONE misses them once a date shape sits inside.
+_STRONG_RUN = re.compile(
+    rf"(?<![\w+])(?:{_MG_COUNTRY}{_SEP}(?:{_ZERO_TRUNK})?|(?:\(\s*)?(?={_MOBILE_START})[0Oo]\s*\)?{_SEP})"
+    rf"\d(?:{_SEP}\d){{8,}}"
+)
+# A grouped amount right before: "1 ", "25 000 " ("Ar 2500 261 …" and "35.000 261 …" are not one)
+_AMOUNT_BEFORE = re.compile(r"(?<!\d)(?<!\d[ .,])\d{1,3}(?P<groups>(?:[ .,]\d{3})*)(?P<sep>[ .,])$")
+_THOUSANDS_GROUP = re.compile(r"\d{3}(?!\d)")
+# Digit groups still glued on by a mark after a phone match ("05 58 0326-59-58-41": the match
+# takes "05 58 0326-59") belong to it, so no tail of the number is left in clear.
+_PHONE_TAIL = re.compile(r"(?:\s*[./_-]\s*\d+)+")
 _DATE_FILLER = "\ue010"  # private-use: not a digit, word, space or separator
 
 
-def _is_strong_phone(text: str, match: re.Match) -> bool:
-    return bool(_STRONG_PHONE_START.match(match.group())) and not _AMOUNT_BEFORE.search(text, 0, match.start())
+def _continues_amount(text: str, blanked: str, start: int) -> bool:
+    """A 3-digit group right after digits ("1 261 340 …"); dates and times before it are blanked,
+    so "15/03/2026 034 …" and "12h16 261 …" are not amounts, nor "3 500 03-47-…" (a 2-digit group)."""
+    before = _AMOUNT_BEFORE.search(blanked, 0, start)
+    return bool(
+        before
+        and set(before["groups"][::4]) <= {before["sep"]}  # one separator all through
+        and _THOUSANDS_GROUP.match(text, start)
+    )
+
+
+def _strong_spans_through_dates(text: str, blanked: str, dates: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Strong phones (or strong digit runs) that start outside a date or time and run through one."""
+    spans = []
+    for pattern in (PHONE, _STRONG_RUN):
+        pos = 0
+        while match := pattern.search(text, pos):
+            start, end = match.span()
+            date_end = next((e for s, e in dates if s <= start < e), None)
+            if date_end is not None:
+                pos = date_end
+                continue
+            if (
+                any(s < end and start < e for s, e in dates)
+                and _STRONG_PHONE_START.match(match.group())
+                and not _continues_amount(text, blanked, start)
+            ):
+                spans.append((start, end))
+            pos = start + 1
+    return spans
+
+
+def _all_matches(pattern: re.Pattern, text: str) -> list[tuple[int, int]]:
+    """Every match, overlapping ones too: in "35.000 00261 37 76 034 84" the leftmost match
+    ("000 00261 3") hides the real phone; masking both leaves nothing of it."""
+    spans, pos = [], 0
+    while match := pattern.search(text, pos):
+        spans.append(match.span())
+        pos = match.start() + 1
+    return spans
 
 
 def _mask_phones(text: str) -> str:
-    """Every phone becomes <TEL>; real dates are never read as part of one.
+    """Every phone becomes <TEL>; real dates and clock times are never read as part of one.
 
-    Phones are matched on a copy where each date is blanked out, so "15/03/2026 1 500 Ar"
+    Phones are matched on a copy where each date and time is blanked out, so "15/03/2026 1 500 Ar"
     keeps its price and "15/03/2026 034 12 345 67" masks only the phone. A strong phone
-    (+, 00x, 261, 0[23]x) that starts outside a date and runs through a date shape is
-    matched on the real text and still wins: "034 01/02/26 7".
+    (+, 00x, 261, 0[23]x, 0-3-x) that starts outside a date and runs through a date shape is
+    matched on the real text and still wins, stray extra digits included: "034 01/02/26 7",
+    "034 12 01/02/26". Digit groups glued on by a mark after a phone are masked with it.
     """
-    dates = [m.span() for m in DATE.finditer(text)]
-    if not dates:
-        return PHONE.sub("<TEL>", text)
-    blanked = list(text)
+    dates = sorted(m.span() for pattern in (DATE, TIME) for m in pattern.finditer(text))
+    chars = list(text)
     for start, end in dates:
-        blanked[start:end] = _DATE_FILLER * (end - start)
-    spans = [m.span() for m in PHONE.finditer("".join(blanked))]
-    pos = 0
-    while match := PHONE.search(text, pos):
-        start, end = match.span()
-        date_end = next((e for s, e in dates if s <= start < e), None)
-        if date_end is not None:
-            pos = date_end
-            continue
-        if any(s < end and start < e for s, e in dates) and _is_strong_phone(text, match):
-            spans.append((start, end))
-        pos = start + 1
+        chars[start:end] = _DATE_FILLER * (end - start)
+    blanked = "".join(chars)
+    spans = _all_matches(PHONE, blanked)
+    if dates:
+        spans += _strong_spans_through_dates(text, blanked, dates)
     pieces, done = [], 0
     for start, end in sorted(spans):
+        if tail := _PHONE_TAIL.match(blanked, end):
+            end = tail.end()
         if start >= done:
             pieces += [text[done:start], "<TEL>"]
         done = max(done, end)  # an overlapping match widens the phone before it
