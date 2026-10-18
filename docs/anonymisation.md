@@ -91,8 +91,9 @@ placeholder or a currency word) is either cleared or replaced. A hyphenated `Ra-
   the first list that has it gets the count (`cleared_<list>`):
   1. `mg_common`: the anonymiser's common Malagasy words that `mg_wiki` also has, plus short texting words.
   2. `mg_wiki` (`mg_wiki_words.txt`): words Malagasy Wikipedia types in lower case 3+ times.
-  3. `known_names` (`mg_known_names.txt`): a short hand list of places, brands, religious and family
-     words that are not person names (Tana, Mvola, Jesoa, Neny, Dada, Dadabe, Zoky, Tonton, ...).
+  3. `known_names` (`mg_known_names.txt`): a short hand list of places, brands, religious, family,
+     calendar and title words and texting words that are not person names (Tana, Mvola, Jesoa, Neny,
+     Dada, Zoky, Zoma, Alatsinainy, Desambra, Krismasy, Rtoa, Dr, Andao, ...).
   4. `fr`, `en` (`fr_words.txt`, `en_words.txt`): the 30,000 most frequent French and English words from `wordfreq`.
 
   A first name in `first_names.txt` never clears, whatever list has it ("Sandrine", "Kevin", "Tony").
@@ -111,6 +112,9 @@ Also replaced, the same way:
 - **Lower-case names.** After a name particle (`i`, `ry`, `n'i`, `an'i`, `tamin'i`, `ho an'i`), a word
   that is a pool name or that no list knows ("ry hasina", "tamin'i rakoto"; "ry namana", "i dada" stay).
   Anywhere, `ra` + a word no list knows ("rakoto"), and any `ra-` hyphenated word.
+  Anywhere, a word in `first_names.txt` that is not in `wordlike_first_names.txt` ("salut sandrine",
+  "chez kevin"; "je t'aime", "une rose", "tia" stay), and a first name hyphen-joined to another
+  ("jean-pierre", "marie-claire").
 
 Words match folded (lower case, no accents). Stretched letters are collapsed only when the word has
 some ("Bonjouuur" -> "bonjour"); always collapsing would let "Marie" match "mariée".
@@ -123,6 +127,11 @@ common-word list ignore case, so without this "marie", "sandrine" or "kevin" wou
 common in France included), minus first names Malagasy Wikipedia types in lower case 150+ times
 (everyday words: "tia", "mila", "amin") and the hand list. The Wikipedia revision and the INSEE file's
 hash are pinned in the script. Every list file starts with a `#` source line.
+It also builds `wordlike_first_names.txt` (185 names): INSEE first names that wordfreq's top 30k
+French/English or Malagasy Wikipedia has, and that the same language's Wikipedia types in lower case
+3+ times and does not mostly capitalise (the 3x name filter). French and English Wikipedia are read
+as the first 100,000 articles of the pinned revision. So "rose", "claire", "aime", "tia" are words,
+while "pierre", "max", "france", "dina" stay names (Wikipedia capitalises them far more often).
 
 Counts only (never text or words) go to `data_gate.json` next to `--out`; `--gate-results
 results/data_gate.json` copies them into the repo. `--dry-run` prints the same counts and writes nothing.
@@ -135,6 +144,8 @@ off by default; `--blocklist` still replaces listed words everywhere.
   `20231101.mg`), text under CC BY-SA 4.0, by Wikipedia contributors. Only a word list is kept.
 - `first_names.txt`: derived from the INSEE "fichier des prénoms" (édition 2022, national file),
   Licence Ouverte / Etalab 2.0. Only folded names over the threshold are kept.
+- `wordlike_first_names.txt`: INSEE names (Licence Ouverte) filtered with wordfreq and French, English
+  and Malagasy Wikipedia case counts (CC BY-SA 4.0). Only a word list is kept.
 - `fr_words.txt`, `en_words.txt`: derived from `wordfreq` 3.1 by Robyn Speer (code Apache-2.0, word
   frequency data CC BY-SA 4.0). `wordfreq` is a build-time dependency only (`data` group).
 
@@ -149,7 +160,9 @@ When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit ref
 - **A name that is also a word** passes the gate: Malagasy names are often words ("Hery", "Soa",
   "Vola", "Fitia") unless typed right after a name particle or already a pool name in the raw text.
   French first names are refused outright, but a name that is also an everyday Malagasy word
-  ("Tia", "Mila") still passes, and so do English-only names rare in France.
+  ("Tia", "Mila") still passes, and so do English-only names rare in France. In lower case, a
+  first name in `wordlike_first_names.txt` passes ("rose", "tiana", "liam", "karen") unless after
+  a particle or hyphen-joined to another first name.
 - Capitalised ordinary words in no list (rare words, typos, places) are replaced by a fake name:
   over-masking, not a leak.
 - A real pool name ("Rabe") is caught only in a conversation whose raw text holds it capitalised.

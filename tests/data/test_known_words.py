@@ -74,3 +74,20 @@ def test_every_word_list_file_starts_with_a_source_line():
 
 def test_build_pins_the_wikipedia_revision():
     assert len(build_known_words.WIKIPEDIA_REVISION) == 40
+
+
+def test_build_keeps_first_names_a_wikipedia_uses_as_words_and_not_names():
+    fr = build_known_words.count_cases(["une rose rouge, une Rose."] * 5 + ["hoy i Sandrine sy i Pierre"] * 10)
+    mg = build_known_words.count_cases(["tia azy aho"] * 5)
+    vocabularies = {"fr": {"rose", "sandrine", "pierre", "tia"}, "mg": set(mg.lower)}
+
+    words = build_known_words.wordlike_first_names(
+        ["rose", "sandrine", "pierre", "tia", "kevin"], vocabularies, {"fr": fr, "mg": mg}, min_lower=3
+    )
+
+    assert words == ["rose", "tia"]
+
+
+def test_wordlike_first_names_file_starts_with_a_source_line():
+    first = (Path(build_known_words.DATA) / "wordlike_first_names.txt").read_text("utf-8").splitlines()[0]
+    assert first.startswith("# ")

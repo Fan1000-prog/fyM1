@@ -25,6 +25,8 @@ Lower-case names are replaced too (the same way, never counted as "typed in lowe
 - after a name particle (`i`, `ry`, `n'i`, `an'i`, `tamin'i`, `ho an'i`): any word that is a pool
   name or that no list knows ("ry hasina", "tamin'i rakoto"); "ry namana", "i dada" stay.
 - `ra` + a word no list knows ("rakoto"), and any `Ra-`/`ra-` hyphenated word ("Ra-be").
+- a first name that is not also an everyday word ("salut sandrine"; "je t'aime", "une rose" stay),
+  and any first name hyphen-joined to another ("jean-pierre", "marie-claire").
 
 Only counts leave this module; never text or words.
 """
@@ -36,7 +38,7 @@ from collections.abc import Collection, Iterable, Iterator, Mapping
 from typing import NamedTuple
 
 from fym1.data.anonymize import EMAIL, FALLBACK_NAME, FIRST_NAMES, SURNAMES, compare_key, fold
-from fym1.data.known_words import KNOWN_WORDS, Lexicon, known_by
+from fym1.data.known_words import FIRST_NAME_WORDS, KNOWN_WORDS, WORDLIKE_FIRST_NAMES, Lexicon, known_by
 from fym1.data.leftovers import LETTERS, MIN_LETTERS, fake_name_keys
 
 GATE_REASONS = ("long_number", "contact", "too_many_unknown")
@@ -63,6 +65,11 @@ PARTICLE_WINDOW = 12  # characters looked back for a particle
 RA_PREFIX = "ra"
 MIN_RA_NAME = 4  # "rabe"
 POOL_KEYS = frozenset(compare_key(name) for name in (*FIRST_NAMES, *SURNAMES))
+ANY_FIRST_NAME = FIRST_NAME_WORDS | WORDLIKE_FIRST_NAMES
+LOWERCASE_NAMES = FIRST_NAME_WORDS - WORDLIKE_FIRST_NAMES  # a name even in lower case
+NAME_BEFORE_HYPHEN = re.compile(r"([^\W\d_]+)-$")
+NAME_AFTER_HYPHEN = re.compile(r"-([^\W\d_]+)")
+HYPHEN_WINDOW = 30  # characters looked back for "jean-" before "pierre"
 
 
 class GateResult(NamedTuple):
@@ -105,12 +112,23 @@ def _capitalised(text: str, fake_keys: set[str]) -> Iterator[re.Match]:
     return (m for m in TOKEN.finditer(text) if _is_capitalised(m.group(), fake_keys))
 
 
+def _in_compound_first_name(text: str, match: re.Match) -> bool:
+    """`match` is a first name hyphen-joined to another first name ("jean-pierre")."""
+    if fold(match.group()) not in ANY_FIRST_NAME:
+        return False
+    before = NAME_BEFORE_HYPHEN.search(text, max(0, match.start() - HYPHEN_WINDOW), match.start())
+    after = NAME_AFTER_HYPHEN.match(text, match.end())
+    return any(m and fold(m.group(1)) in ANY_FIRST_NAME for m in (before, after))
+
+
 def _is_lowercase_name(text: str, match: re.Match, lexicon: Lexicon) -> bool:
     """A lower-case word that is a name by its place or shape (see the module docstring)."""
     word = match.group()
     if not word[0].islower() or len(word) < MIN_LETTERS:
         return False
     if "-" in word:  # "ra-koto"
+        return True
+    if fold(word) in LOWERCASE_NAMES or _in_compound_first_name(text, match):
         return True
     unknown = known_by(word, lexicon) is None
     if NAME_PARTICLE.search(text, max(0, match.start() - PARTICLE_WINDOW), match.start()):

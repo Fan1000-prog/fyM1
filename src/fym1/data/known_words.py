@@ -16,6 +16,9 @@ mostly capitalises mid-sentence ("Marie", "David") and every word in `first_name
 is checked before every list: a first name never clears, whatever list has it ("Sandrine",
 "Kevin", "Tony"). First names that are everyday Malagasy words ("tia", "mila") are left out of it.
 
+`wordlike_first_names.txt` holds first names that are also everyday words ("aime", "rose",
+"claire", "tia"). The gate treats any other first name typed in lower case as a name ("salut sandrine").
+
 A word matches folded (lower case, no accents). Stretched letters are collapsed only when the
 word has some ("Bonjouuur" -> "bonjour"): collapsing always would let "Marie" match "mariée".
 """
@@ -50,6 +53,8 @@ def _words(name: str) -> list[str]:
 
 
 FIRST_NAME_WORDS = frozenset(fold(w) for w in _words("first_names.txt"))
+# First names that are also everyday words ("aime", "rose", "tia"): a name only when capitalised.
+WORDLIKE_FIRST_NAMES = frozenset(fold(w) for w in _words("wordlike_first_names.txt"))
 _MG_WIKI = word_list(_words("mg_wiki_words.txt"))
 KNOWN_WORDS: Lexicon = {
     "mg_common": word_list({fold(w) for w in COMMON_WORDS} & _MG_WIKI.folded | TEXTING_WORDS),

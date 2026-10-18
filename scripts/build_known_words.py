@@ -9,6 +9,12 @@ Writes, into src/fym1/data/:
   INSEE "fichier des prénoms" (Licence Ouverte / Etalab 2.0), minus everyday Malagasy words
   (typed in lower case MG_WORD_MIN_LOWER+ times in Malagasy Wikipedia: "tia", "mila") and the
   hand list mg_known_names.txt. It holds the English names common in France too (Kevin, Jessica).
+- wordlike_first_names.txt: INSEE first names that are also everyday words, so the gate leaves them
+  in lower case ("je t'aime", "une rose"; "salut sandrine" is still a name). A name is a word if a
+  language has it (wordfreq top --top French or English, or Malagasy Wikipedia lower case
+  --min-lower+ times) and that language's Wikipedia types it in lower case --min-lower+ times and
+  does not mostly capitalise it (the name filter below). French and English Wikipedia are read as
+  the first --wiki-sample articles of the same pinned revision. "pierre" and "max" stay names.
 
 Name filter, on all three lists: a word Malagasy Wikipedia writes capitalised mid-sentence at
 least NAME_MIN_CAPITALISED times and more than NAME_RATIO times as often as in lower case is
@@ -52,6 +58,9 @@ SOURCES = {
     "CC BY-SA 4.0",
     "fr_words.txt": "wordfreq top French words (code Apache-2.0, data CC BY-SA 4.0)",
     "en_words.txt": "wordfreq top English words (code Apache-2.0, data CC BY-SA 4.0)",
+    "wordlike_first_names.txt": "INSEE first names (Licence Ouverte / Etalab 2.0) that wordfreq (CC BY-SA 4.0) "
+    f"or Malagasy Wikipedia has as words and French/English/Malagasy Wikipedia @ {WIKIPEDIA_REVISION[:12]} "
+    "(CC BY-SA 4.0) types mostly in lower case",
     "first_names.txt": f"INSEE fichier des prenoms 2022 ({INSEE_URL}), Licence Ouverte / Etalab 2.0",
 }
 
@@ -82,17 +91,42 @@ def looks_like_a_name(word: str, cases: CaseCounts) -> bool:
     return capitalised >= NAME_MIN_CAPITALISED and capitalised > NAME_RATIO * cases.lower[word]
 
 
-def first_names(rows: Iterable[dict], cases: CaseCounts, min_births: int) -> list[str]:
-    """Folded INSEE first names given `min_births`+ times, minus everyday Malagasy words."""
+def insee_names(rows: Iterable[dict], min_births: int) -> list[str]:
+    """Folded INSEE first names given `min_births`+ times, letters only."""
     births = Counter()
     for row in rows:
         if not row["preusuel"].startswith("_"):  # "_PRENOMS_RARES" is a bucket, not a name
             births[fold(row["preusuel"])] += int(row["nombre"])
+    return sorted(name for name, n in births.items() if n >= min_births and LETTERS.fullmatch(name))
+
+
+def first_names(rows: Iterable[dict], cases: CaseCounts, min_births: int) -> list[str]:
+    """Folded INSEE first names given `min_births`+ times, minus everyday Malagasy words."""
+    return [name for name in insee_names(rows, min_births) if cases.lower[name] < MG_WORD_MIN_LOWER]
+
+
+def is_word_in(word: str, cases: CaseCounts, min_lower: int) -> bool:
+    """`cases` (one language's Wikipedia) types `word` in lower case `min_lower`+ times, not mostly capitalised."""
+    return cases.lower[word] >= min_lower and not looks_like_a_name(word, cases)
+
+
+def wordlike_first_names(
+    names: Iterable[str], vocabularies: dict[str, set[str]], cases: dict[str, CaseCounts], min_lower: int
+) -> list[str]:
+    """`names` that some language's vocabulary has and its Wikipedia `cases` show used as a word."""
     return sorted(
         name
-        for name, n in births.items()
-        if n >= min_births and LETTERS.fullmatch(name) and cases.lower[name] < MG_WORD_MIN_LOWER
+        for name in names
+        if any(name in words and is_word_in(name, cases[lang], min_lower) for lang, words in vocabularies.items())
     )
+
+
+def wikipedia_cases(config: str, sample: int | None = None) -> CaseCounts:
+    """Case counts over a pinned Wikipedia; only its first `sample` articles when given (streamed)."""
+    articles = load_dataset(
+        "wikimedia/wikipedia", config, split="train", revision=WIKIPEDIA_REVISION, streaming=sample is not None
+    )
+    return count_cases(a["text"] for a in (articles if sample is None else articles.take(sample)))
 
 
 def insee_rows() -> list[dict]:
@@ -140,15 +174,22 @@ def main() -> None:
     parser.add_argument("--min-lower", type=int, default=3)
     parser.add_argument("--top", type=int, default=30_000)
     parser.add_argument("--min-births", type=int, default=1_000)
+    parser.add_argument("--wiki-sample", type=int, default=100_000, help="French/English Wikipedia articles read")
     args = parser.parse_args()
 
-    articles = load_dataset("wikimedia/wikipedia", args.config, split="train", revision=WIKIPEDIA_REVISION)
-    cases = count_cases(a["text"] for a in articles)
-    names = [n for n in first_names(insee_rows(), cases, args.min_births) if n not in hand_listed()]
+    cases = wikipedia_cases(args.config)
+    rows = insee_rows()
+    names = [n for n in first_names(rows, cases, args.min_births) if n not in hand_listed()]
     write(names, "first_names.txt")
     write(lower_case_words(cases, args.min_lower, set(names)), "mg_wiki_words.txt")
     for lang in ("fr", "en"):
         write(frequent_words(lang, args.top, cases, set(names)), f"{lang}_words.txt")
+
+    vocabularies = {lang: {fold(w) for w in top_n_list(lang, args.top)} for lang in ("fr", "en")}
+    vocabularies["mg"] = set(cases.lower)
+    all_cases = {"mg": cases, **{lang: wikipedia_cases(f"20231101.{lang}", args.wiki_sample) for lang in ("fr", "en")}}
+    wordlike = wordlike_first_names(insee_names(rows, args.min_births), vocabularies, all_cases, args.min_lower)
+    write(wordlike, "wordlike_first_names.txt")
 
 
 if __name__ == "__main__":

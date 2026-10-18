@@ -314,3 +314,39 @@ def test_real_lists_clear_family_words(word):
     result = strict_gate([record("a", f"tonga {word} omaly", "eny tsara ihany koa")], fake_names=[])
 
     assert texts(result)[0] == f"tonga {word} omaly"
+
+
+@pytest.mark.parametrize(
+    "text", ["Zoma alina", "Alatsinainy.", "tonga ny Talata", "amin'ny Desambra", "Krismasy sy Paska", "Andao e",
+             "hoy Dr Koto", "Rtoa Soa", "Google ve", "Covid izany", "any Analakely", "Lesy a", "Ndrey a"],
+)  # fmt: skip
+def test_real_lists_clear_calendar_title_place_and_texting_words(text):
+    result = strict_gate([record("a", text, "eny tsara ihany koa, eny tsara ihany koa")], fake_names=["Koto", "Soa"])
+
+    assert texts(result)[0] == text
+
+
+@pytest.mark.parametrize(
+    ("text", "name"),
+    [
+        ("salut sandrine ca va", "sandrine"),
+        ("chez kevin ce soir", "kevin"),
+        ("jean-pierre tonga", "jean"),
+        ("jean-pierre tonga", "pierre"),
+        ("hoy marie-claire", "marie"),
+        ("hoy marie-claire", "claire"),
+    ],
+)
+def test_lowercase_first_names_are_replaced(text, name):
+    result = strict_gate([record("a", text, "eny tsara ihany koa, eny tsara ihany koa")], fake_names=[])
+
+    assert name not in re.findall(r"\w+", texts(result)[0])
+
+
+@pytest.mark.parametrize(
+    "text", ["je t'aime trop", "une rose rouge", "tia anao aho", "mila vola aho", "eau claire", "la marine", "une olive"]
+)
+def test_lowercase_first_names_that_are_everyday_words_stay(text):
+    result = strict_gate([record("a", text, "eny tsara ihany koa, eny tsara ihany koa")], fake_names=[])
+
+    assert texts(result)[0] == text
