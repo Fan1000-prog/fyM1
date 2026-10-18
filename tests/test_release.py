@@ -46,6 +46,25 @@ def make_export(tmp_path: Path, senders: list[str] = FAKE_SENDERS) -> Path:
     return raw
 
 
+FAKE_ID = "fake.user-42"  # synthetic private account id
+
+
+def make_ids(tmp_path: Path, text: str = f"# private ids\n{FAKE_ID}\n") -> Path:
+    ids = tmp_path / "private" / "ids.txt"  # outside the synthetic repo
+    ids.parent.mkdir(exist_ok=True)
+    ids.write_text(text)
+    return ids
+
+
+def snap(repo: Path, out: Path, export: Path):
+    return build_snapshot(repo, "HEAD", out, export, make_ids(repo.parent))
+
+
+def cli_args(tmp_path: Path, repo: Path, out: Path) -> list[str]:
+    return ["--repo", str(repo), "--export", str(make_export(tmp_path)), "--private-ids", str(make_ids(tmp_path)),
+            "--out", str(out)]
+
+
 CLEAN_FILES = {
     "README.md": "# demo\nNothing private here.\n",
     "src/fym1/data/mg_first_names.txt": "# hand list\nmialy\nZÀFY\nfanja\n",
@@ -120,7 +139,7 @@ def test_secret_hits_env_files_and_email_allow_list():
 def test_snapshot_drops_excluded_paths_strips_hand_lists_only_and_passes(tmp_path):
     repo = make_repo(tmp_path, CLEAN_FILES)
     out = tmp_path / "public"
-    report = build_snapshot(repo, "HEAD", out, make_export(tmp_path))
+    report = snap(repo, out, make_export(tmp_path))
     assert report.ok
     assert not (out / "AGENTS.md").exists() and not (out / "docs/superpowers").exists()
     assert not (out / ".git").exists()
@@ -141,8 +160,7 @@ def test_name_and_secret_hits_fail_and_never_leak(tmp_path, capsys):
     files = {**CLEAN_FILES, "docs/notes.md": f"Thanks to Zafy.\nkey {FAKE_HF}\n", "zafy/readme.md": "x\n"}
     repo = make_repo(tmp_path, files)
     out = tmp_path / "public"
-    code = cli.main(["--repo", str(repo), "--export", str(make_export(tmp_path)), "--out", str(out),
-                     "--results", str(tmp_path / "results/release_check.json")])
+    code = cli.main([*cli_args(tmp_path, repo, out), "--results", str(tmp_path / "results/release_check.json")])
     assert code == 1
     assert not list(out.rglob("*.json"))  # the report never goes into the snapshot
     report = json.loads((tmp_path / "results/release_check.json").read_text())
@@ -159,14 +177,14 @@ def test_refuses_dirty_tree(tmp_path):
     repo = make_repo(tmp_path, CLEAN_FILES)
     (repo / "README.md").write_text("changed\n")
     with pytest.raises(RefusedError, match="not clean"):
-        build_snapshot(repo, "HEAD", tmp_path / "public", make_export(tmp_path))
+        snap(repo, tmp_path / "public", make_export(tmp_path))
 
 
 @pytest.mark.parametrize("inside", ["repo/out", "repo"])
 def test_refuses_output_inside_repo(tmp_path, inside):
     repo = make_repo(tmp_path, CLEAN_FILES)
     with pytest.raises(RefusedError, match="inside the repo"):
-        build_snapshot(repo, "HEAD", tmp_path / inside, make_export(tmp_path))
+        snap(repo, tmp_path / inside, make_export(tmp_path))
 
 
 def test_refuses_non_empty_output_and_unreadable_export(tmp_path):
@@ -175,12 +193,12 @@ def test_refuses_non_empty_output_and_unreadable_export(tmp_path):
     used.mkdir()
     (used / "x").write_text("x")
     with pytest.raises(RefusedError, match="not empty"):
-        build_snapshot(repo, "HEAD", used, make_export(tmp_path))
+        snap(repo, used, make_export(tmp_path))
     bad = tmp_path / "bad"
     bad.mkdir()
     (bad / "zafy.json").write_text('{"other": 1}')
     with pytest.raises(RefusedError, match="could not be read") as error:
-        build_snapshot(repo, "HEAD", tmp_path / "public", bad)
+        snap(repo, tmp_path / "public", bad)
     assert "zafy" not in str(error.value).lower()
 
 
@@ -192,25 +210,23 @@ def test_symlink_is_refused_unless_excluded(tmp_path):
     git(repo, "commit", "-q", "-m", "links")
     export = make_export(tmp_path)
     with pytest.raises(RefusedError, match="non-regular"):
-        build_snapshot(repo, "HEAD", tmp_path / "public", export)
+        snap(repo, tmp_path / "public", export)
     assert not (tmp_path / "public").exists()
     git(repo, "rm", "-q", "link.md")
     git(repo, "commit", "-q", "-m", "drop link")
-    assert build_snapshot(repo, "HEAD", tmp_path / "public", export).ok
+    assert snap(repo, tmp_path / "public", export).ok
 
 
 def test_cli_refusal_exits_2(tmp_path):
     repo = make_repo(tmp_path, CLEAN_FILES)
     results = str(tmp_path / "r.json")
-    assert cli.main(["--repo", str(repo), "--export", str(make_export(tmp_path)), "--out", str(repo / "x"),
-                     "--results", results]) == 2
+    assert cli.main([*cli_args(tmp_path, repo, repo / "x"), "--results", results]) == 2
 
 
 def test_cli_refuses_results_inside_the_snapshot(tmp_path, capsys):
     repo = make_repo(tmp_path, CLEAN_FILES)
     out = tmp_path / "public"
-    assert cli.main(["--repo", str(repo), "--export", str(make_export(tmp_path)), "--out", str(out),
-                     "--results", str(out / "check.json")]) == 2
+    assert cli.main([*cli_args(tmp_path, repo, out), "--results", str(out / "check.json")]) == 2
     assert "outside --out" in capsys.readouterr().err
     assert not out.exists()
 
@@ -256,3 +272,52 @@ def test_no_shipped_file_imports_an_excluded_script():
         if path.endswith(".py") and not release.exclusion_reason(path):
             text = (REPO_ROOT / path).read_text("utf-8")
             assert not any(f'"{m}"' in text or f"/ \"{m}.py\"" in text for m in excluded_modules), path
+
+
+# ---- private ids ----------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("text", "hits"), [
+    (f"kaggle user {FAKE_ID}", 1),
+    (f"{FAKE_ID.upper()}/fym1-00-baseline", 1),
+    ('"id": "fake.user\\u002d42"', 1),
+    (f"x{FAKE_ID} {FAKE_ID}2 {FAKE_ID}_b", 0),
+    ("nothing here", 0),
+])
+def test_private_ids_match_whole_words_any_case(tmp_path, text, hits):
+    ids, count = release.load_private_ids(make_ids(tmp_path), [tmp_path / "repo"])
+    assert count == 1
+    assert release.count_private_ids(text, ids) == hits
+
+
+def test_private_id_hits_fail_with_counts_and_paths_only(tmp_path, capsys):
+    files = {**CLEAN_FILES, "scripts/push.py": f'USER = "{FAKE_ID}"\n', f"docs/{FAKE_ID}.md": "x\n"}
+    repo = make_repo(tmp_path, files)
+    results = tmp_path / "results.json"
+    assert cli.main([*cli_args(tmp_path, repo, tmp_path / "public"), "--results", str(results)]) == 1
+    report = json.loads(results.read_text())
+    assert report["private_ids"] == {"ids_checked": 1, "hits_per_file": {"scripts/push.py": 1,
+                                                                          "<redacted path 1>": 1}, "hits_total": 2}
+    printed = capsys.readouterr()
+    assert FAKE_ID not in results.read_text() + printed.out + printed.err
+
+
+@pytest.mark.parametrize("where", ["repo/ids.txt", "worktree/ids.txt"])
+def test_private_ids_file_inside_the_repo_or_a_worktree_is_refused(tmp_path, where):
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    git(repo, "worktree", "add", "-q", str(tmp_path / "worktree"))
+    (repo / ".git/info/exclude").write_text("ids.txt\n")  # ignored, so the tree stays clean
+    (tmp_path / where).write_text(f"{FAKE_ID}\n")
+    with pytest.raises(RefusedError, match="inside the repo") as error:
+        build_snapshot(repo, "HEAD", tmp_path / "public", make_export(tmp_path), tmp_path / where)
+    assert FAKE_ID not in str(error.value)
+    assert not (tmp_path / "public").exists()
+
+
+def test_private_ids_file_empty_or_missing_is_refused(tmp_path):
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    export = make_export(tmp_path)
+    with pytest.raises(RefusedError, match="holds no ids"):
+        build_snapshot(repo, "HEAD", tmp_path / "public", export, make_ids(tmp_path, "# only a comment\n\n"))
+    with pytest.raises(RefusedError, match="could not be read"):
+        build_snapshot(repo, "HEAD", tmp_path / "public", export, tmp_path / "missing.txt")

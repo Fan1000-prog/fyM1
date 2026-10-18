@@ -2,8 +2,9 @@
 
 The public repo is a fresh single-commit repo built from this snapshot, so private git history never ships.
 Release blocker (lead decision 21): the export's sender names are read at run time, removed from the hand-written
-name lists, and searched for in every file except the lists a script rebuilds from public data. Everything this module reports is a count or a repo path; it never returns
-a sender name, a message text or a matched secret value.
+name lists, and searched for in every file except the lists a script rebuilds from public data. Everything
+this module reports is a count or a repo path; it never returns a sender name, a message text, a private id
+or a matched secret value.
 """
 
 import fnmatch
@@ -138,6 +139,8 @@ class Report:
     placeholder_senders_skipped: int = 0
     list_entries_removed: dict[str, int] = field(default_factory=dict)
     name_hits: dict[str, int] = field(default_factory=dict)
+    private_ids: int = 0
+    private_id_hits: dict[str, int] = field(default_factory=dict)
     unscannable: list[str] = field(default_factory=list)
     secret_hits: dict[str, dict[str, int]] = field(default_factory=dict)
     emails_allowed: int = 0
@@ -146,7 +149,7 @@ class Report:
 
     @property
     def ok(self) -> bool:
-        return not (self.name_hits or self.secret_hits or self.unscannable)
+        return not (self.name_hits or self.private_id_hits or self.secret_hits or self.unscannable)
 
     def as_dict(self) -> dict:
         return {
@@ -164,6 +167,11 @@ class Report:
                 "hits_per_file": self.name_hits,
                 "hits_total": sum(self.name_hits.values()),
                 "unscannable_files": self.unscannable,
+            },
+            "private_ids": {
+                "ids_checked": self.private_ids,
+                "hits_per_file": self.private_id_hits,
+                "hits_total": sum(self.private_id_hits.values()),
             },
             "secrets": {
                 "hits_per_file": self.secret_hits,
@@ -217,8 +225,12 @@ def export_senders(export: Path) -> list[str]:
 
 def count_name_hits(text: str, names: frozenset[str]) -> int:
     """Whole-word, case/accent-insensitive matches of `names`; JSON/Python escapes are read as characters."""
-    unescaped = _ESCAPES.sub(lambda m: chr(int(m.group(1), 16)) if m.group(1) else " ", text)
-    return sum(1 for word in words(unescaped) if is_name_word(word, names))
+    return sum(1 for word in words(_unescape(text)) if is_name_word(word, names))
+
+
+def _unescape(text: str) -> str:
+    """JSON/Python `\\n` and `\\uXXXX` escapes read as the characters they stand for."""
+    return _ESCAPES.sub(lambda m: chr(int(m.group(1), 16)) if m.group(1) else " ", text)
 
 
 def strip_list(text: str, names: frozenset[str]) -> tuple[str, int]:
@@ -230,6 +242,35 @@ def strip_list(text: str, names: frozenset[str]) -> tuple[str, int]:
         else:
             kept.append(line)
     return "".join(kept), removed
+
+
+# ---- private ids ----------------------------------------------------------------------------------------------
+
+
+def load_private_ids(path: Path, trees: Iterable[Path]) -> tuple[re.Pattern[str], int]:
+    """Whole-word, case-insensitive pattern for the ids in `path` (one per line, `#` comments), and their count.
+
+    The file must sit outside the repo and its worktrees, so the ids never get committed. Errors never carry
+    the file's contents.
+    """
+    target = path.expanduser().resolve()
+    if any(target == tree or tree in target.parents for tree in trees):
+        raise RefusedError("private ids file is inside the repo or one of its worktrees")
+    try:
+        lines = target.read_text("utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as error:
+        raise RefusedError(f"private ids file could not be read ({type(error).__name__})") from None
+    ids = sorted({line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")}, key=len,
+                 reverse=True)
+    if not ids:
+        raise RefusedError("private ids file holds no ids")
+    pattern = re.compile(rf"(?<![A-Za-z0-9_])(?:{'|'.join(map(re.escape, ids))})(?![A-Za-z0-9_])", re.IGNORECASE)
+    return pattern, len(ids)
+
+
+def count_private_ids(text: str, ids: re.Pattern[str]) -> int:
+    """Whole-word matches of the private ids in `text`, JSON/Python escapes read as characters."""
+    return len(ids.findall(_unescape(text)))
 
 
 # ---- secrets --------------------------------------------------------------------------------------------------
@@ -276,6 +317,13 @@ def _git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout
 
 
+def worktrees(root: Path) -> set[Path]:
+    """The repo root and every worktree of it."""
+    return {root, *(Path(line[len("worktree "):]).resolve()
+                    for line in _git(root, "worktree", "list", "--porcelain").splitlines()
+                    if line.startswith("worktree "))}
+
+
 def check_inputs(repo: Path, ref: str, out: Path) -> tuple[Path, str]:
     """The repo root and the commit sha, or RefusedError: dirty tree, bad ref, output inside a worktree or used."""
     try:
@@ -285,10 +333,8 @@ def check_inputs(repo: Path, ref: str, out: Path) -> tuple[Path, str]:
         raise RefusedError(f"not a git repo or unknown ref: {ref}") from None
     if _git(root, "status", "--porcelain").strip():
         raise RefusedError("working tree is not clean (local changes or untracked files)")
-    worktrees = [Path(line[len("worktree "):]).resolve()
-                 for line in _git(root, "worktree", "list", "--porcelain").splitlines() if line.startswith("worktree ")]
     target = out.resolve()
-    for tree in {root, *worktrees}:
+    for tree in worktrees(root):
         if target == tree or tree in target.parents:
             raise RefusedError("output dir is inside the repo or one of its worktrees")
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
@@ -361,15 +407,17 @@ def is_list_file(path: str) -> bool:
     return any(fnmatch.fnmatch(path, pattern) for pattern in LIST_GLOBS)
 
 
-def build_snapshot(repo: Path, ref: str, out: Path, export: Path) -> Report:
+def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: Path) -> Report:
     """Make the snapshot in `out` and check it. Raises RefusedError before copying anything unsafe."""
     root, sha = check_inputs(repo, ref, out)
+    ids, id_count = load_private_ids(private_ids, worktrees(root))
     names, short, placeholders = name_tokens(export_senders(export))
     if not names:
         raise RefusedError("export gave no sender name tokens")
     kept, excluded = copy_tracked(root, sha, out)
     report = Report(ref=sha, files_copied=len(kept), excluded=excluded, name_tokens=len(names),
-                    short_tokens_skipped=short, placeholder_senders_skipped=placeholders)
+                    short_tokens_skipped=short, placeholder_senders_skipped=placeholders,
+                    private_ids=id_count)
     matched = {exclusion_entry(e["path"]) for e in excluded}
     report.excludes_unmatched = [entry.path for entry in EXCLUDES if entry.path not in matched]
     if (out / NOTICE_NAME).exists():
@@ -390,6 +438,8 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path) -> Report:
             continue
         if hits := (0 if path in GENERATED_LISTS else count_name_hits(text, names)) + count_name_hits(path, names):
             report.name_hits[path] = hits
+        if id_hits := count_private_ids(text, ids) + count_private_ids(path, ids):
+            report.private_id_hits[path] = id_hits
         if secrets := secret_hits(path, text):
             report.secret_hits[path] = dict(sorted(secrets.items()))
         report.emails_allowed += allowed_email_count(path, text)
@@ -398,20 +448,20 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path) -> Report:
         for ref_path in excluded_refs:
             if ref_path in text:
                 report.references_to_excluded[ref_path] = report.references_to_excluded.get(ref_path, 0) + 1
-    _redact_named_paths(report, names)
+    _redact_named_paths(report, names, ids)
     return report
 
 
-def _redact_named_paths(report: Report, names: frozenset[str]) -> None:
-    """A repo path that itself holds a name token is reported as `<redacted path N>`."""
+def _redact_named_paths(report: Report, names: frozenset[str], ids: re.Pattern[str]) -> None:
+    """A repo path that itself holds a name token or a private id is reported as `<redacted path N>`."""
     aliases: dict[str, str] = {}
 
     def alias(path: str) -> str:
-        if count_name_hits(path, names):
+        if count_name_hits(path, names) or count_private_ids(path, ids):
             return aliases.setdefault(path, f"<redacted path {len(aliases) + 1}>")
         return path
 
-    for attr in ("list_entries_removed", "name_hits", "secret_hits", "private_hf_ids"):
+    for attr in ("list_entries_removed", "name_hits", "private_id_hits", "secret_hits", "private_hf_ids"):
         setattr(report, attr, {alias(p): v for p, v in sorted(getattr(report, attr).items())})
     report.unscannable = [alias(p) for p in report.unscannable]
     report.excluded = [{**e, "path": alias(e["path"])} for e in report.excluded]
