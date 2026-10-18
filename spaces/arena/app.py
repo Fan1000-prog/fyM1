@@ -1,4 +1,4 @@
-"""fyM1 arena: raters see one prompt and two unlabelled answers (base vs fyM1) and pick the more natural one.
+"""fy-m1 arena: raters see one prompt and two unlabelled answers (base vs fy-m1) and pick the more natural one.
 
 Votes are appended to a local JSONL file that CommitScheduler pushes to the private dataset VOTES_REPO.
 Env: ARENA_KEY (Space secret, signs session ids), HF_TOKEN (Space secret with write access to VOTES_REPO),
@@ -118,7 +118,7 @@ def vote_for(choice: str):
     return handle
 
 
-with gr.Blocks(title="fy-m-1 arena") as demo:
+with gr.Blocks(title="fy-m1 arena") as demo:
     # Kept in the browser so a page refresh keeps the same id (and cannot re-vote the same pair).
     # The id is signed by the server; ARENA_KEY as the storage secret lets it survive Space restarts.
     session_id = gr.BrowserState(None, storage_key="fym1-arena-session", secret=ARENA_KEY)

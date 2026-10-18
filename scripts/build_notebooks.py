@@ -50,7 +50,7 @@ def bootstrap_cell():
 
 def baseline_cells() -> list:
     return [
-md("""# fyM1 00 — base-model baseline (T4)
+md("""# fy-m1 00 — base-model baseline (T4)
 One candidate per run. **Runtime → Run all**; the notebook picks the first candidate in `CANDIDATES` whose
 results file on `Fan1000-Prog/fyM1-ckpt` (`results/baseline/<slug>.json`) still misses a required section, and
 skips sections already saved there, so a rerun after a disconnect resumes. Restart the runtime between candidates
@@ -355,7 +355,7 @@ print("BASELINE_DONE" if not missing else f"BASELINE_INCOMPLETE {missing}", SLUG
 
 def train_cells() -> list:
     return [
-md("""# fyM1 01 — QLoRA training (T4)
+md("""# fy-m1 01 — QLoRA training (T4)
 Set `MODEL_ID` (the lead's pick) and `RUN_ID`, then **Runtime → Run all**. Trains a LoRA adapter on the private
 `Fan1000-Prog/fyM1-chats` data (every `*.jsonl`, rows `{"id", "messages"}`, plus `system_prompt.txt`) at a pinned
 dataset revision. Everything of a run lives under `fyM1-ckpt/<RUN_ID>/`: each `checkpoint-<step>/` carries
