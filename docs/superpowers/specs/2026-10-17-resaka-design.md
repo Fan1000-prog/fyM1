@@ -60,7 +60,7 @@ Two audiences:
 
 ### 5.1 Base model selection
 - Shortlist the newest open-weight models in the 7–12B range as of Oct 2026 (Gemma, Llama, Qwen, and any newer multilingual family; Aya-style models if they cover Malagasy). Verify what exists now — don't rely on memory.
-- Score each candidate on: Malagasy comprehension (Belebele `plt_Latn`), translation (FLORES-200 `plt_Latn` chrF++ both directions), tokenizer efficiency (tokens per Malagasy word), a quick 20-prompt everyday-chat sniff test the owner rates, T4 QLoRA fit, and license.
+- Score each candidate on: Malagasy comprehension (Belebele `plt_Latn`), translation (FLORES-200 `plt_Latn` chrF++ both directions), tokenizer efficiency (tokens per Malagasy word), a quick 20-prompt everyday-chat sniff test (now scored by the blind automatic greeting gate, §8.6), T4 QLoRA fit, and license.
 - Pick the winner by these numbers; record the table in the paper. The owner sees the table before training starts (it's an architectural choice).
 
 ### 5.2 Training data mix

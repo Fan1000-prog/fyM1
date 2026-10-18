@@ -160,4 +160,11 @@ make your own answers with `notebooks/02_eval_export.ipynb`.
 
 Code: [Apache-2.0](LICENSE). The model follows the base model's license (see [MODEL_CARD.md](MODEL_CARD.md)).
 
+### Third-party data
+
+- [wordfreq](https://github.com/rspeer/wordfreq) by Robyn Speer: the data cleaner uses its French and English
+  word lists to tell ordinary words from names. wordfreq's word data is licensed
+  [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); word lists derived from it keep that licence
+  and this attribution.
+
 Made by Fan's lab.
