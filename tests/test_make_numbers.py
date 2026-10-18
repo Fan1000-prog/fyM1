@@ -212,6 +212,71 @@ def test_cli_strict_fails_on_rejected_leak_run(results_dir, tmp_path):
     assert "release is blocked" in run.stderr
 
 
+PASSING_IDENTITY = {"n": 34, "passed": 32, "pass_rate": 32 / 34, "threshold": 0.9, "foreign_identity": 0,
+                    "gate_passed": True,
+                    "reasons": {"not_malagasy": 0, "no_name": 2, "no_lab": 0, "foreign_identity": 0,
+                                "foreign_mention": 1}}
+
+
+@pytest.mark.parametrize(
+    "change, problem",
+    [
+        ({}, None),
+        ({"passed": 30, "pass_rate": 30 / 34, "gate_passed": False}, "identity check failed"),
+        ({"foreign_identity": 1, "gate_passed": False, "reasons": PASSING_IDENTITY["reasons"] | {"foreign_identity": 1}}, "identity check failed"),
+        ({"foreign_identity": 1, "reasons": PASSING_IDENTITY["reasons"] | {"foreign_identity": 1}}, "gate_passed does not match"),
+        ({"foreign_identity": 1}, "reasons.foreign_identity does not match"),
+        ({"reasons": PASSING_IDENTITY["reasons"] | {"foreign_identity": 1}}, "reasons.foreign_identity does not match"),
+        ({"reasons": {"no_name": 2}}, None),
+        ({"pass_rate": 0.5}, "does not match"),
+        ({"passed": 33}, "pass_rate does not match passed / n"),
+        ({"n": 40}, "pass_rate does not match passed / n"),
+        ({"n": 0}, "passed is not between 0 and n"),
+        ({"n": 30, "passed": 32, "pass_rate": 32 / 30}, "passed is not between 0 and n"),
+        ({"passed": -1, "pass_rate": -1 / 34}, "passed is not between 0 and n"),
+        ({"foreign_identity": 3, "gate_passed": False}, "foreign_identity count exceeds"),
+        ({"reasons": {"no_name": 3}}, "no_name count exceeds"),
+        ({"reasons": {"no_name": 2, "foreign_mention": 2}}, None),
+        ({"threshold": 0.5, "pass_rate": 0.6}, "threshold is below"),
+        ({"threshold": 0.89}, "threshold is below"),
+        ({"threshold": 0.95, "gate_passed": False}, "identity check failed"),
+    ],
+)
+def test_identity_gate_needs_a_consistent_pass(change, problem):
+    problems = numbers.identity_gate_problems({numbers.IDENTITY_FILE: PASSING_IDENTITY | change})
+    assert problems == [] if problem is None else any(problem in p for p in problems)
+
+
+def test_identity_gate_floor_matches_the_check():
+    from fym1.eval.identity_check import PASS_THRESHOLD
+
+    assert numbers.MIN_IDENTITY_THRESHOLD == PASS_THRESHOLD
+
+
+def test_identity_gate_without_report_is_left_to_missing_values():
+    assert numbers.identity_gate_problems({}) == []
+
+
+def test_identity_numbers_are_cited(tmp_path):
+    (tmp_path / "eval").mkdir()
+    (tmp_path / "eval" / "identity_check.json").write_text(json.dumps(PASSING_IDENTITY))
+    tex = numbers.render_tex(resolve(tmp_path))
+    assert macro(tex, "identity-pass-rate") == r"94.1\%"
+    assert macro(tex, "identity-threshold") == r"90.0\%"
+    assert macro(tex, "identity-gate") == "passed"
+    assert macro(tex, "identity-n") == "34"
+
+
+def test_cli_strict_fails_on_failed_identity_check(tmp_path):
+    results = full_results(tmp_path / "results")
+    failed = PASSING_IDENTITY | {"foreign_identity": 1, "gate_passed": False,
+                                 "reasons": PASSING_IDENTITY["reasons"] | {"foreign_identity": 1}}
+    (results / numbers.IDENTITY_FILE).write_text(json.dumps(failed))
+    run = run_cli("--results", str(results), "--out", str(tmp_path / "n.tex"), "--strict")
+    assert run.returncode != 0
+    assert "identity check failed" in run.stderr
+
+
 def test_lookup_picks_list_items_and_dotted_names():
     data = {"candidates": [{"model": "a/x", "v": 1}, {"model": "b/y.z", "v": 2}], "models": {"y.z": {"n": 3}}}
     assert numbers.lookup(data, ("candidates", numbers.Pick("model", "b/y.z"), "v")) == 2
@@ -311,6 +376,7 @@ def full_results(root: Path) -> Path:
     for col in numbers.SELECTION_COLUMNS:
         _set(base, col, 1)
     files[numbers.LEAK_FILE] = {"matches": 1, "approved_generic": 1, "rejected": 0}
+    files[numbers.IDENTITY_FILE] = PASSING_IDENTITY
     for name, data in files.items():
         (root / name).parent.mkdir(parents=True, exist_ok=True)
         (root / name).write_text(json.dumps(data))

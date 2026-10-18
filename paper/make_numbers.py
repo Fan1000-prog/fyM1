@@ -6,7 +6,7 @@ written as <!-- n:NAME -->value<!-- /n -->, and YAML front-matter lines ending i
 A value not measured yet renders as "pending", so the paper always builds and no number is ever
 typed by hand. Only the files listed below are read (never judge_key.json or judge_raw.json, which
 would unblind the judge). A key missing from a file that exists is printed as a warning.
---strict (used at release) fails if any value is missing or the leak gate is not passed.
+--strict (used at release) fails if any value is missing or the leak or identity gate is not passed.
 
 Usage: uv run python paper/make_numbers.py [--results results] [--out paper/numbers.tex]
                                            [--markdown README.md MODEL_CARD.md] [--strict]
@@ -26,6 +26,7 @@ Expected files (keys are dotted paths below):
                          belebele_acc, chrf_plt_eng, chrf_eng_plt}
   eval/judge.json        judge, {base,fym1}.{naturalness, correctness}
   eval/leak_review.json  matches, approved_generic, rejected (counts of distinct matched 8-word runs)
+  eval/identity_check.json  n, passed, pass_rate, threshold, foreign_identity, gate_passed (reasons checked)
   eval/arena.json        votes, raters, fym1_win_rate, ci_low, ci_high (early votes at v0.1)
   shrink.json            gates_passed, vocab_before, vocab_after, params_before, params_after,
                          gguf_bytes_before, gguf_bytes_after, tokens_per_sec_before, tokens_per_sec_after
@@ -35,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from dataclasses import dataclass
@@ -46,6 +48,9 @@ MACRO_PREFIX = "fy"
 README_START = "<!-- numbers:start -->"
 README_END = "<!-- numbers:end -->"
 LEAK_FILE = "eval/leak_review.json"
+IDENTITY_FILE = "eval/identity_check.json"
+# The identity gate threshold the paper promises (fym1.eval.identity_check.PASS_THRESHOLD); a lower one blocks.
+MIN_IDENTITY_THRESHOLD = 0.9
 INLINE = re.compile(r"<!-- n:([\w-]+) -->.*?<!-- /n -->")
 YAML_LINE = re.compile(r"^(?P<head>\s*[\w-]+:[ \t]*)(?P<value>.*?)(?P<tail>[ \t]+#[ \t]*n:(?P<name>[\w-]+))$", re.M)
 
@@ -230,6 +235,12 @@ NUMBERS: list[Number] = [
     Number("leak-matches", LEAK_FILE, "matches", count),
     Number("leak-generic", LEAK_FILE, "approved_generic", count),
     Number("leak-rejected", LEAK_FILE, "rejected", count),
+    Number("identity-n", IDENTITY_FILE, "n", count),
+    Number("identity-passed", IDENTITY_FILE, "passed", count),
+    Number("identity-pass-rate", IDENTITY_FILE, "pass_rate", percent),
+    Number("identity-threshold", IDENTITY_FILE, "threshold", percent),
+    Number("identity-foreign", IDENTITY_FILE, "foreign_identity", count),
+    Number("identity-gate", IDENTITY_FILE, "gate_passed", passed),
     Number("ppl-base", "eval/scores.json", "base.perplexity", fixed(2)),
     Number("ppl-fym1", "eval/scores.json", "fym1.perplexity", fixed(2)),
     Number("belebele-base", "eval/scores.json", "base.belebele_acc", percent),
@@ -311,6 +322,37 @@ def leak_gate_problems(results: dict[str, Any]) -> list[str]:
     if rejected != 0:
         problems.append(f"{LEAK_FILE}: {rejected:g} matched run(s) rejected; release is blocked")
     return problems
+
+
+def identity_gate_problems(results: dict[str, Any]) -> list[str]:
+    """Why the identity check blocks release: it failed, ran with a threshold below 0.9, or its pass rate, reason
+    counts (reasons.foreign_identity included) or verdict do not match its own counts."""
+    report = results.get(IDENTITY_FILE)
+    keys = ("n", "passed", "pass_rate", "threshold", "foreign_identity", "gate_passed")
+    values = {key: lookup(report, key) for key in keys}
+    if any(v is None for v in values.values()):
+        return []  # not measured yet; reported as missing values
+    if _number(values["threshold"]) < MIN_IDENTITY_THRESHOLD:
+        return [f"{IDENTITY_FILE}: threshold is below {MIN_IDENTITY_THRESHOLD}; rerun it with the default threshold"]
+    n, passed = _number(values["n"]), _number(values["passed"])
+    if n <= 0 or not 0 <= passed <= n:
+        return [f"{IDENTITY_FILE}: passed is not between 0 and n; rerun it"]
+    if not math.isclose(_number(values["pass_rate"]), passed / n):
+        return [f"{IDENTITY_FILE}: pass_rate does not match passed / n; rerun it"]
+    # Each failed reply carries one or more reasons, so no reason count can exceed the number that failed.
+    reasons = lookup(report, "reasons") or {}
+    reason_counts = [("foreign_identity", values["foreign_identity"]), *reasons.items()]
+    over = sorted({reason for reason, count in reason_counts if _number(count) > n - passed})
+    if over:
+        return [f"{IDENTITY_FILE}: {', '.join(over)} count exceeds the failed replies (n - passed); rerun it"]
+    if "foreign_identity" in reasons and _number(reasons["foreign_identity"]) != _number(values["foreign_identity"]):
+        return [f"{IDENTITY_FILE}: reasons.foreign_identity does not match foreign_identity; rerun it"]
+    recomputed = _number(values["foreign_identity"]) == 0 and _number(values["pass_rate"]) >= _number(values["threshold"])
+    if values["gate_passed"] is not recomputed:
+        return [f"{IDENTITY_FILE}: gate_passed does not match pass_rate, threshold and foreign_identity; rerun it"]
+    if not recomputed:
+        return [f"{IDENTITY_FILE}: identity check failed; release is blocked"]
+    return []
 
 
 def latex_name(name: str) -> str:
@@ -446,7 +488,7 @@ def main() -> None:
     parser.add_argument("--results", type=Path, default=here.parent / "results")
     parser.add_argument("--out", type=Path, default=here / "numbers.tex")
     parser.add_argument("--markdown", type=Path, nargs="*", default=[], help="also refresh these files")
-    parser.add_argument("--strict", action="store_true", help="fail if any number is missing or the leak gate fails (release)")
+    parser.add_argument("--strict", action="store_true", help="fail if any number is missing or the leak or identity gate fails (release)")
     args = parser.parse_args()
 
     results = load_results(args.results)
@@ -455,6 +497,7 @@ def main() -> None:
         print(f"warning: missing key {where}", file=sys.stderr)
     if args.strict:
         problems = [f"not measured yet: {where}" for where in resolved.missing] + leak_gate_problems(results)
+        problems += identity_gate_problems(results)
         if problems:
             sys.exit("--strict failed:\n  " + "\n  ".join(problems))
 
