@@ -20,7 +20,7 @@ from pathlib import Path
 
 from huggingface_hub import hf_hub_download
 
-from fym1 import release
+from fym1.data import name_scan
 from fym1.data.private import private_path
 from fym1.data.synth_gate import SAMPLE_SEED, SAMPLE_SIZE, raw_reference, run_gate
 
@@ -49,8 +49,8 @@ def download_filtered(revision: str) -> Path:
 
 def read_raw(export: Path) -> tuple[list[str], list[str]]:
     """(every sender and participant, every message text) of the raw export."""
-    threads = release.read_export(export.expanduser())
-    return release.export_senders(threads), release.export_texts(threads)
+    threads = name_scan.read_export(export.expanduser())
+    return name_scan.export_senders(threads), name_scan.export_texts(threads)
 
 
 def read_records(path: Path) -> list[dict]:
@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None, download: Callable[[str], Path] = downlo
     private_out = private_path(args.private_out)
     try:
         raw = raw_reference(*load_raw(args.export))
-    except release.RefusedError as error:
+    except name_scan.RefusedError as error:
         print(f"refused: {error}", file=sys.stderr)
         return 2
     path = download(args.revision)

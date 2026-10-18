@@ -5,7 +5,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from fym1 import release
+from fym1.data import name_scan
 from fym1.data.synth import record_id
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,7 +37,7 @@ def run(tmp_path, records, raw=(["Zebulon Quixbert"], [RAW_LINE])):
 
     def load_raw(export):
         if raw is None:
-            raise release.RefusedError("export holds no conversations")
+            raise name_scan.RefusedError("export holds no conversations")
         return raw
 
     results, private = tmp_path / "results" / "synth_gate.json", tmp_path / "private"

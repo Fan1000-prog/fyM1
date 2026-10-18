@@ -5,7 +5,7 @@ Every chat is checked by code; a chat with any of DROP_REASONS is dropped, never
 - `broken`: not `{"id", "messages"}`, a turn that is not user/assistant text, roles that do not alternate
   user -> assistant, an empty turn, a placeholder (`<TEL>`, `[NAME]`), a turn repeated verbatim, a turn count
   outside synth.MIN_TURNS..MAX_TURNS, an id that is not the hash of its messages, or an id seen before.
-- `real_name`: a word that is a sender or participant name of the raw export (`fym1.release.count_name_hits`:
+- `real_name`: a word that is a sender or participant name of the raw export (`fym1.data.name_scan.count_name_hits`:
   any case, spaced-out letters, digits for letters, a name glued to a marker or ending).
 - `unknown_name`: a capitalised word no known-word list clears and not a fake-pool name (lead decision 30).
 - `long_number`, `contact`, `hidden_char`: the strict data gate's checks (`fym1.data.gate`).
@@ -23,7 +23,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
-from fym1 import release
+from fym1.data import name_scan
 from fym1.data.anonymize import normalise
 from fym1.data.gate import contact_left, has_hidden_char, has_long_number, replaced_word_count, unknown_capitalised_words
 from fym1.data.leftovers import leftover_names
@@ -67,8 +67,8 @@ class GateResult:
 
 def raw_reference(senders: Iterable[str], texts: list[str]) -> RawReference:
     """Name tokens of every sender/participant and 8-word runs of every message text of the raw export."""
-    names, _, _ = release.name_tokens(senders)
-    return RawReference(names, release.chat_text_index(texts, "raw export"))
+    names, _, _ = name_scan.name_tokens(senders)
+    return RawReference(names, name_scan.chat_text_index(texts, "raw export"))
 
 
 def _turns(record: object) -> list | None:
@@ -113,12 +113,12 @@ def chat_reasons(record: dict, raw: RawReference, is_malagasy: Callable[[str], b
     both = [*texts, *map(normalise, texts)]  # the chat is kept as written, so read it as written and normalised
     replies = _replies(turns)
     found = {
-        "real_name": any(release.count_name_hits(text, raw.names) for text in texts),
+        "real_name": any(name_scan.count_name_hits(text, raw.names) for text in texts),
         "unknown_name": unknown_capitalised_words(texts, fake_names=FAKE_POOL) > 0,
         "long_number": any(map(has_long_number, both)),
         "contact": any(map(contact_left, both)),
         "hidden_char": any(map(has_hidden_char, both)),
-        "leak_8gram": any(release.has_chat_text(text, [raw.leaks]) for text in texts),
+        "leak_8gram": any(name_scan.has_chat_text(text, [raw.leaks]) for text in texts),
         "drift": not all(is_malagasy(reply) for _, reply in replies),
         "identity": any(_claims_another_assistant(prompt, reply) for prompt, reply in replies),
     }
