@@ -36,3 +36,6 @@ paper/*.out
 
 # Arena answer key (which model is A): lives only in the private votes dataset
 pairs_key*.jsonl
+
+# The release snapshot writes NOTICE into its output folder only; it is never committed here
+/NOTICE

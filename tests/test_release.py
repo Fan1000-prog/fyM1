@@ -43,11 +43,18 @@ def make_repo(tmp_path: Path, files: dict[str, str | bytes]) -> Path:
     return repo
 
 
-def make_export(tmp_path: Path, senders: list[str] = FAKE_SENDERS) -> Path:
+# Synthetic chat line in the synthetic export: shipped text sharing 8 words in a row with it is copied chat text.
+FAKE_CHAT = "rahampitso maraina dia handeha hiantsena izahay miaraka amin'ny namanay any an-tanàna"
+FAKE_CHAT_WORDS = FAKE_CHAT.replace("'", " ").replace("-", " ").split()  # as fym1.eval.metrics splits words
+
+
+def make_export(tmp_path: Path, senders: list[str] = FAKE_SENDERS, chat: str = FAKE_CHAT) -> Path:
+    """Each sender says "salama"; the first one also says `chat`."""
     raw = tmp_path / "raw"
     raw.mkdir()
-    messages = [{"id": str(i), "sender": s, "text": "salama", "timestamp": f"2026-01-01T10:0{i}:00"}
-                for i, s in enumerate(senders)]
+    lines = [*((s, "salama") for s in senders), (senders[0], chat)]
+    messages = [{"id": str(i), "sender": s, "text": text, "timestamp": f"2026-01-01T10:0{i}:00"}
+                for i, (s, text) in enumerate(lines)]
     (raw / "export.json").write_text(json.dumps({"conversation": {"title": "t"}, "messages": messages}))
     return raw
 
@@ -62,13 +69,33 @@ def make_ids(tmp_path: Path, text: str = f"# private ids\n{FAKE_ID}\n") -> Path:
     return ids
 
 
+# Synthetic anonymised chat turn (a fake name, two messages joined) that is in no export message: the anonymised
+# chats.jsonl holds text the raw export does not, so the check indexes it too.
+FAKE_TURN = "Salama Tsikivola! efa tonga ve ianao?\nmbola miandry anao eto amin'ny fiantsonana izahay rehetra"
+FAKE_TURN_WORDS = FAKE_TURN.replace("'", " ").replace("?", " ").replace("!", " ").split()
+
+
+def make_chats(tmp_path: Path, turns: list[str] | None = None, text: str | None = None) -> Path:
+    """The anonymised chats file, outside the synthetic repo: one record of `turns` (user, assistant, ...), plus a
+    system turn the check leaves out; or exactly `text` when given."""
+    chats = tmp_path / "private" / "chats.jsonl"
+    chats.parent.mkdir(exist_ok=True)
+    if text is None:
+        turns = [FAKE_TURN, "eny"] if turns is None else turns
+        messages = [{"role": "system", "content": "system prompt"},
+                    *({"role": ("user", "assistant")[i % 2], "content": t} for i, t in enumerate(turns))]
+        text = json.dumps({"id": "c1", "messages": messages}) + "\n"
+    chats.write_text(text, encoding="utf-8")
+    return chats
+
+
 def snap(repo: Path, out: Path, export: Path):
-    return build_snapshot(repo, "HEAD", out, export, make_ids(repo.parent))
+    return build_snapshot(repo, "HEAD", out, export, make_ids(repo.parent), make_chats(repo.parent))
 
 
 def cli_args(tmp_path: Path, repo: Path, out: Path) -> list[str]:
     return ["--repo", str(repo), "--export", str(make_export(tmp_path)), "--private-ids", str(make_ids(tmp_path)),
-            "--out", str(out)]
+            "--chats", str(make_chats(tmp_path)), "--out", str(out)]
 
 
 CLEAN_FILES = {
@@ -535,7 +562,8 @@ def test_private_ids_file_inside_the_repo_or_a_worktree_is_refused(tmp_path, whe
     (repo / ".git/info/exclude").write_text("ids.txt\n")  # ignored, so the tree stays clean
     (tmp_path / where).write_text(f"{FAKE_ID}\n")
     with pytest.raises(RefusedError, match="inside the repo") as error:
-        build_snapshot(repo, "HEAD", tmp_path / "public", make_export(tmp_path), tmp_path / where)
+        build_snapshot(repo, "HEAD", tmp_path / "public", make_export(tmp_path), tmp_path / where,
+                       make_chats(tmp_path))
     assert FAKE_ID not in str(error.value)
     assert not (tmp_path / "public").exists()
 
@@ -544,9 +572,145 @@ def test_private_ids_file_empty_or_missing_is_refused(tmp_path):
     repo = make_repo(tmp_path, CLEAN_FILES)
     export = make_export(tmp_path)
     with pytest.raises(RefusedError, match="holds no ids"):
-        build_snapshot(repo, "HEAD", tmp_path / "public", export, make_ids(tmp_path, "# only a comment\n\n"))
+        build_snapshot(repo, "HEAD", tmp_path / "public", export, make_ids(tmp_path, "# only a comment\n\n"),
+                       make_chats(tmp_path))
     with pytest.raises(RefusedError, match="could not be read"):
-        build_snapshot(repo, "HEAD", tmp_path / "public", export, tmp_path / "missing.txt")
+        build_snapshot(repo, "HEAD", tmp_path / "public", export, tmp_path / "missing.txt", make_chats(tmp_path))
+
+
+# ---- copied chat text (lead decision 34) ------------------------------------------------------------------------
+
+
+def _run(words: list[str]) -> str:
+    return " ".join(words)
+
+
+@pytest.mark.parametrize(("text", "hit"), [
+    (f"Example reply: {_run(FAKE_CHAT_WORDS[2:10])}.", True),  # 8 words in a row
+    (f"Example reply: {_run(FAKE_CHAT_WORDS[2:10]).upper()}!", True),  # any case
+    (f'"text": "{_run(FAKE_CHAT_WORDS[:4])}\\n{_run(FAKE_CHAT_WORDS[4:8])}"', True),  # JSON escape between words
+    (f"{_run(FAKE_CHAT_WORDS[:4])}\u200b {_run(FAKE_CHAT_WORDS[4:8])}", True),  # hidden character
+    (f"Example reply: {_run(FAKE_CHAT_WORDS[2:9])}.", False),  # only 7 words in a row
+    (f"{_run(FAKE_CHAT_WORDS[:4])} sy {_run(FAKE_CHAT_WORDS[4:8])}", False),  # a word between the halves
+])
+def test_has_chat_text_needs_an_8_word_run(tmp_path, text, hit):
+    messages = release.export_texts(release.read_export(make_export(tmp_path)))
+    assert len(messages) == len(FAKE_SENDERS) + 1
+    assert release.has_chat_text(text, [release.chat_text_index(messages, "export")]) == hit
+
+
+@pytest.mark.parametrize("letters", [
+    lambda c: chr(ord(c) - ord("a") + 0xFF41),  # full-width
+    lambda c: chr(ord(c) - ord("a") + 0x24D0),  # circled
+])
+def test_export_in_styled_letters_matches_plain_shipped_text_through_normalise(tmp_path, letters):
+    styled = "".join(letters(c) if "a" <= c <= "z" else c for c in FAKE_CHAT)
+    plain = f"Example reply: {_run(FAKE_CHAT_WORDS[1:9])}."
+    as_written = release.NgramIndex([styled, FAKE_TURN], n=8)  # FAKE_TURN: circled letters alone give no 8-gram
+    assert not as_written.shares_with(plain)  # read as written, the export misses it
+    messages = release.export_texts(release.read_export(make_export(tmp_path, chat=styled)))
+    assert release.has_chat_text(plain, [release.chat_text_index(messages, "export")])
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/copied.md": plain})
+    report = snap(repo, tmp_path / "public", tmp_path / "raw")
+    assert report.chat_text_hits == ["docs/copied.md"] and not report.ok
+
+
+def test_export_without_an_8_word_message_is_refused_before_anything_is_written(tmp_path):
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    with pytest.raises(RefusedError, match="8-word message"):
+        snap(repo, tmp_path / "public", make_export(tmp_path, chat=_run(FAKE_CHAT_WORDS[:7])))
+    assert not (tmp_path / "public").exists() and not _leftovers(tmp_path)
+
+
+def test_copied_chat_text_fails_with_counts_and_paths_only(tmp_path, capsys):
+    copied = _run(FAKE_CHAT_WORDS[1:9])
+    files = {**CLEAN_FILES, "paper/examples.tex": f"Reply: {copied}\n", "docs/near.md": _run(FAKE_CHAT_WORDS[:7]),
+             f"docs/{FAKE_ID}.md": f"{copied}\n"}
+    repo = make_repo(tmp_path, files)
+    out, results = tmp_path / "public", tmp_path / "results.json"
+    assert cli.main([*cli_args(tmp_path, repo, out), "--results", str(results)]) == 1
+    assert not out.exists() and not _leftovers(tmp_path)  # refused: nothing written
+    report = json.loads(results.read_text())
+    assert report["ok"] is False
+    assert report["chat_text"] == {"messages_indexed": 3, "anonymised_turns_indexed": 2, "ngram_words": 8,
+                                   "files_total": 2,
+                                   "files_with_hits": ["<redacted path 1>", "paper/examples.tex"]}
+    printed = capsys.readouterr()
+    for blob in (results.read_text(), printed.out + printed.err):
+        assert copied not in blob and not any(word in blob for word in FAKE_CHAT_WORDS if len(word) > 5)
+    assert "files sharing an 8-word run 2" in printed.out
+
+
+@pytest.mark.parametrize("copied", [
+    FAKE_TURN,  # the whole anonymised turn, fake name and joined messages included
+    _run(FAKE_TURN_WORDS[3:11]),  # 8 words across the join
+    _run(FAKE_TURN_WORDS[3:11]).replace("a", "\uff41"),  # full-width letters: read as the anonymiser normalises
+])
+def test_an_anonymised_chat_turn_copied_into_a_shipped_file_fails(tmp_path, capsys, copied):
+    export = make_export(tmp_path)
+    assert not release.has_chat_text(copied, [release.chat_text_index(
+        release.export_texts(release.read_export(export)), "export")])  # the raw export alone misses it
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "spaces/chat/examples.md": f"Example:\n{copied}\n"})
+    out, results = tmp_path / "public", tmp_path / "results.json"
+    args = ["--repo", str(repo), "--export", str(export), "--private-ids", str(make_ids(tmp_path)),
+            "--chats", str(make_chats(tmp_path)), "--out", str(out), "--results", str(results)]
+    assert cli.main(args) == 1
+    assert not out.exists() and not _leftovers(tmp_path)
+    report = json.loads(results.read_text())
+    assert report["chat_text"]["files_with_hits"] == ["spaces/chat/examples.md"]
+    assert report["chat_text"]["anonymised_turns_indexed"] == 2
+    printed = capsys.readouterr()
+    for blob in (results.read_text(), printed.out + printed.err):
+        assert not any(word in blob for word in FAKE_TURN_WORDS if len(word) > 5)
+    assert "anonymised turns 2" in printed.out
+
+
+def test_the_system_turn_is_not_indexed(tmp_path):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/prompt.md": "system prompt\n"})
+    assert release.read_chats(make_chats(tmp_path), []) == [FAKE_TURN, "eny"]
+    assert snap(repo, tmp_path / "public", make_export(tmp_path)).ok
+
+
+@pytest.mark.parametrize(("text", "match"), [
+    (None, "could not be read"),  # missing
+    ("", "holds no turns"),
+    ('{"id": "c1", "messages": [{"role": "system", "content": "only the prompt"}]}\n', "holds no turns"),
+    ("not json\n", "could not be read"),
+    ('{"id": "c1"}\n', "could not be read"),
+    ('{"id": "c1", "messages": [{"role": "user", "content": 7}]}\n', "could not be read"),
+    (json.dumps({"id": "c1", "messages": [{"role": "user", "content": _run(FAKE_TURN_WORDS[:7])}]}) + "\n",
+     "chats file has no 8-word message"),
+])
+def test_chats_file_missing_empty_or_malformed_is_refused_with_exit_2(tmp_path, capsys, text, match):
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    out, results = tmp_path / "public", tmp_path / "results.json"
+    args = cli_args(tmp_path, repo, out)
+    chats = Path(args[args.index("--chats") + 1])
+    if text is None:
+        chats.unlink()
+    else:
+        chats.write_text(text, encoding="utf-8")
+    assert cli.main([*args, "--results", str(results)]) == 2
+    assert match in capsys.readouterr().err
+    assert not out.exists() and not results.exists() and not _leftovers(tmp_path)
+
+
+@pytest.mark.parametrize("where", ["repo/chats.jsonl", "worktree/chats.jsonl"])
+def test_chats_file_inside_the_repo_or_a_worktree_is_refused(tmp_path, where):
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    git(repo, "worktree", "add", "-q", str(tmp_path / "worktree"))
+    (repo / ".git/info/exclude").write_text("chats.jsonl\n")  # ignored, so the tree stays clean
+    shutil.copy(make_chats(tmp_path), tmp_path / where)
+    with pytest.raises(RefusedError, match="chats file is inside the repo"):
+        build_snapshot(repo, "HEAD", tmp_path / "public", make_export(tmp_path), make_ids(tmp_path), tmp_path / where)
+    assert not (tmp_path / "public").exists()
+
+
+def test_a_7_word_overlap_passes_end_to_end(tmp_path):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/near.md": f"{_run(FAKE_CHAT_WORDS[:7])}\n"})
+    report = snap(repo, tmp_path / "public", make_export(tmp_path))
+    assert report.ok and report.chat_text_hits == []
+    assert (tmp_path / "public/docs/near.md").exists()
 
 
 # ---- unreadable files and NOTICE ------------------------------------------------------------------------------
@@ -569,10 +733,16 @@ def test_tracked_notice_is_refused_before_anything_is_written(tmp_path):
 # ---- reading files: only known text types and PDFs; archives are refused ------------------------------------------
 
 
-def _pdf(info: str) -> bytes:
-    """A minimal one-page PDF with no text and `info` as its document info dictionary."""
-    objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-               "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] >>", info]
+def _pdf(info: str, page_text: str = "") -> bytes:
+    """A minimal one-page PDF with `info` as its document info dictionary and `page_text` (if any) on its page."""
+    page = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] >>"
+    objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", page, info]
+    if page_text:
+        stream = f"BT /F1 8 Tf 10 400 Td ({page_text}) Tj ET"
+        objects[2] = ("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 2000 800] /Contents 5 0 R "
+                      "/Resources << /Font << /F1 6 0 R >> >> >>")
+        objects += [f"<< /Length {len(stream)} >>\nstream\n{stream}\nendstream",
+                    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
     body, offsets = "%PDF-1.4\n", []
     for number, obj in enumerate(objects, 1):
         offsets.append(len(body))
@@ -610,6 +780,16 @@ def test_pdf_metadata_is_scanned(tmp_path):
     path = tmp_path / "paper.pdf"
     path.write_bytes(_pdf("<< /Author (Zafy Bodo) /Title (notes) >>"))
     assert count_name_hits(release.read_text(path), NAMES) == 2
+
+
+@needs_poppler
+@pytest.mark.parametrize("where", ["metadata", "page"])
+def test_chat_text_in_a_pdf_fails(tmp_path, where):
+    copied = _run(FAKE_CHAT_WORDS[:8])
+    pdf = _pdf(f"<< /Title ({copied}) >>") if where == "metadata" else _pdf("<< /Title (notes) >>", copied)
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "paper/main.pdf": pdf})
+    report = snap(repo, tmp_path / "public", make_export(tmp_path))
+    assert report.chat_text_hits == ["paper/main.pdf"] and not report.unscannable and not report.ok
 
 
 @pytest.mark.parametrize("path", ["data/a.zip", "data/a.txt.gz", "dist/x.tar.gz", "dist/x.TGZ", "vendor/x.whl",
