@@ -1,5 +1,6 @@
 import pytest
 
+from fym1.data.kept_checks import KEPT_COUNT_KEYS
 from fym1.data.messenger import Message, Thread
 from fym1.data.pipeline import build_records, merge_data_stats
 
@@ -88,6 +89,7 @@ def test_merge_data_stats_fills_build_counts_and_keeps_later_ones():
     assert stats == {
         "threads": 3,
         "conversations": 120,
+        **dict.fromkeys(KEPT_COUNT_KEYS),
         "approved": 90,
         "identity": 16,
         "formal": None,

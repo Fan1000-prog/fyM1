@@ -5,6 +5,8 @@ Runs on the owner's laptop only. Prints counts, never text. After anonymising, t
 conversation with a 7+ digit number that is not a price, an email/link/@handle, or more than 30%
 of its words replaced. Nobody reads the text. The gate counts
 (counts only) go to data_gate.json next to --out; --gate-results also copies them into the repo.
+--stats (results/data_stats.json) gets the kept messages per role and post-run leak checks on the
+kept chats (7+ digit runs, emails, @, links; each must be 0), from fym1.data.kept_checks.
 
 --sheet (a 100-sample review page) and --leftover-sheet (leftover capitalised words with counts)
 are optional extras, off by default. --blocklist still replaces listed words everywhere.
@@ -24,6 +26,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from fym1.data.kept_checks import kept_counts
 from fym1.data.leftovers import read_blocklist, render_leftover_sheet
 from fym1.data.messenger import Thread, load_threads
 from fym1.data.pipeline import build_records, merge_data_stats
@@ -114,6 +117,7 @@ def main() -> None:
         leftover_sheet = private_path(args.leftover_sheet) if args.leftover_sheet else None
 
     result = build_records(threads, owner=args.owner, is_malagasy=load_is_malagasy(), blocklist=blocklist)
+    kept = kept_counts(result.records)
     counts = {
         **segment_counts(threads, args.owner),
         **result.gate,
@@ -121,6 +125,7 @@ def main() -> None:
         "unharvested_nickname_events": sum(t.unharvested_nickname_events for t in threads),
         "blocklist": len(blocklist),
         "leftover_names": len(result.leftover_names),
+        **kept,
     }
     if args.dry_run:
         print(json.dumps(counts))
@@ -141,7 +146,7 @@ def main() -> None:
         leftover_sheet.write_text(render_leftover_sheet(result.leftover_names), encoding="utf-8")
 
     existing = json.loads(args.stats.read_text()) if args.stats.exists() else {}
-    stats = merge_data_stats(existing, threads=len(threads), conversations=len(result.records))
+    stats = merge_data_stats(existing, threads=len(threads), conversations=len(result.records), **kept)
     args.stats.write_text(json.dumps(stats, indent=2) + "\n")
     print(json.dumps(counts))
 
