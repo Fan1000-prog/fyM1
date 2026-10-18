@@ -18,7 +18,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from fym1.data.anonymize import fold
+from fym1.data.anonymize import NAME_SUFFIXES, compare_key, normalise
+from fym1.data.gate import PERSON_MARKER_WORDS
 from fym1.data.messenger import load_threads
 
 
@@ -178,15 +179,24 @@ class Report:
 
 
 def words(text: str) -> list[str]:
-    """Folded (lower case, no accents) letter runs: the whole words names are compared as."""
-    return _LETTERS.findall(fold(text))
+    """Letter runs as the anonymiser compares them: normalised, folded, stretched letters collapsed ("Zafyyy")."""
+    return [compare_key(run) for run in _LETTERS.findall(normalise(text))]
+
+
+def is_name_word(word: str, names: frozenset[str]) -> bool:
+    """`word` (a `words()` key) is a name, alone or with a glued person marker ("iZafy", "n'iZafy" reads "izafy",
+    "ryZafy") and/or a glued possessive ending ("Zafyko"), the anonymiser's suffix list."""
+    stems = {word} | {word[len(m):] for m in PERSON_MARKER_WORDS if word.startswith(m)}
+    stems |= {stem[: -len(s)] for stem in stems for s in NAME_SUFFIXES if stem.endswith(s)}
+    return not stems.isdisjoint(names)
 
 
 def name_tokens(senders: Iterable[str]) -> tuple[frozenset[str], int, int]:
     """Name tokens of `senders`, plus how many short tokens and placeholder senders were skipped."""
     tokens, short, placeholders = set(), set(), 0
+    placeholder_keys = {" ".join(words(label)) for label in PLACEHOLDER_SENDERS}
     for sender in set(senders):
-        if " ".join(words(sender)) in PLACEHOLDER_SENDERS:
+        if " ".join(words(sender)) in placeholder_keys:
             placeholders += 1
             continue
         for token in words(sender):
@@ -208,14 +218,14 @@ def export_senders(export: Path) -> list[str]:
 def count_name_hits(text: str, names: frozenset[str]) -> int:
     """Whole-word, case/accent-insensitive matches of `names`; JSON/Python escapes are read as characters."""
     unescaped = _ESCAPES.sub(lambda m: chr(int(m.group(1), 16)) if m.group(1) else " ", text)
-    return sum(1 for word in words(unescaped) if word in names)
+    return sum(1 for word in words(unescaped) if is_name_word(word, names))
 
 
 def strip_list(text: str, names: frozenset[str]) -> tuple[str, int]:
     """`text` (one entry per line, `#` comments) without entries holding a name token, and how many went."""
     kept, removed = [], 0
     for line in text.splitlines(keepends=True):
-        if not line.startswith("#") and any(word in names for word in words(line)):
+        if not line.startswith("#") and any(is_name_word(word, names) for word in words(line)):
             removed += 1
         else:
             kept.append(line)

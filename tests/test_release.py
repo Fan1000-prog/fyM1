@@ -59,9 +59,14 @@ CLEAN_FILES = {
 
 
 def test_name_tokens_fold_case_and_accents_and_skip_short_and_placeholders():
-    tokens, short, placeholders = name_tokens(["Zàfy TEST", "Ny Bodo", "Facebook User", "zafy test"])
+    tokens, short, placeholders = name_tokens(["Zàfy TEST", "Ny Bodo", "Facebook User", "zafy test", "Zafyyy"])
     assert tokens == {"zafy", "test", "bodo"}
     assert (short, placeholders) == (1, 1)
+
+
+def test_strip_list_catches_stretched_and_glued_entries():
+    text, removed = strip_list("mialy\nZafyyy\niBodo\nfanja\n", NAMES)
+    assert (text, removed) == ("mialy\nfanja\n", 2)
 
 
 def test_strip_list_removes_matching_entries_any_case_or_accent_and_keeps_comments():
@@ -78,6 +83,14 @@ def test_strip_list_removes_matching_entries_any_case_or_accent_and_keeps_commen
     ('"\\u005aafy"', 1),
     ("Zafyo Bodoina", 0),
     ("nothing here", 0),
+    ("Salama iZafy", 1),
+    ("tamin'n'iZafy sy an'iBodo", 2),
+    ("n’iZafy", 1),
+    ("ryZafy raBodo", 2),
+    ("Zafyyy!! ZAAAFY", 2),
+    ("iZafyyyko", 1),
+    ("Za\u200bfy", 1),
+    ("ｚａｆｙ", 1),
 ])
 def test_count_name_hits_is_whole_word(text, hits):
     assert count_name_hits(text, NAMES) == hits

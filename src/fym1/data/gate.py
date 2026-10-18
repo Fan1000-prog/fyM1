@@ -134,7 +134,9 @@ _ONE = r"(?<![^\W\d_])[^\W\d_](?![^\W\d_])"
 _SPELLED = rf"(?P<spelled>{_ONE}(?:[\W_]{{1,3}}{_ONE}){{2,}})"
 _PIECE = re.compile("|".join(map(re.escape, PLACEHOLDERS)) + rf"|{_LEET}|{_SPELLED}|(?:[Rr]a-)?[^\W\d_]+")
 LETTER_RUN = re.compile(r"[^\W\d_]+")
-PERSON_MARKER = re.compile(r"(?:(?<![\w'’])(?:i|ry|ra)|\w['’]i)\s+$", re.IGNORECASE)
+# Words that put a person's name after them ("i Soa", "ry Bodo", "ra Fara"); also typed glued on ("iSoa").
+PERSON_MARKER_WORDS = ("i", "ry", "ra")
+PERSON_MARKER = re.compile(rf"(?:(?<![\w'’])(?:{'|'.join(PERSON_MARKER_WORDS)})|\w['’]i)\s+$", re.IGNORECASE)
 MARKER_WINDOW = 12  # characters looked back for a marker
 AT_BEFORE = re.compile(r"@\s*$")  # "@njaka", "@ njaka": a handle, a name position
 # Pool names (and the fallback) written in raw text: real people there, never our fakes.
