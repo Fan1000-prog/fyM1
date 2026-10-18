@@ -2,6 +2,7 @@
 
 import pytest
 
+from fym1.data import name_scan
 from fym1.data.synth import record_id
 from fym1.data.synth_gate import (
     DROP_REASONS,
@@ -45,6 +46,11 @@ def test_raw_reference_holds_name_tokens_and_leak_runs(raw):
     assert isinstance(raw, RawReference)
     assert raw.names == frozenset({"zebulon", "quixbert"})  # the placeholder sender is skipped
     assert raw.leaks.shares_with(f"hoy izy: {RAW_LINE}")
+
+
+def test_raw_reference_refuses_an_export_with_no_name_tokens():
+    with pytest.raises(name_scan.RefusedError, match="no sender name tokens"):
+        raw_reference(["Facebook User"], RAW_TEXTS)
 
 
 def test_clean_chat_has_no_reasons(raw):
@@ -178,6 +184,12 @@ def test_duplicate_ids_are_broken(raw):
     result = run_gate([good, good], raw, says_malagasy, sample_size=1, seed=7)
     assert result.kept_ids == [good["id"]]
     assert result.report["dropped_by_reason"]["broken"] == 1
+
+
+def test_two_dropped_chats_sharing_an_id_fail_loudly(raw):
+    good = clean_chat()
+    with pytest.raises(ValueError, match="3 chats checked"):
+        run_gate([good, good, good], raw, says_malagasy, sample_size=1, seed=7)
 
 
 def test_sample_is_fixed_by_seed_and_counts_only(raw):

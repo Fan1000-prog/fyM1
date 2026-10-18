@@ -68,6 +68,8 @@ class GateResult:
 def raw_reference(senders: Iterable[str], texts: list[str]) -> RawReference:
     """Name tokens of every sender/participant and 8-word runs of every message text of the raw export."""
     names, _, _ = name_scan.name_tokens(senders)
+    if not names:  # an empty name set would clear every chat of real_name, so refuse
+        raise name_scan.RefusedError("export gave no sender name tokens")
     return RawReference(names, name_scan.chat_text_index(texts, "raw export"))
 
 
@@ -87,7 +89,7 @@ def broken(record: object) -> bool:
     expected_roles = [ROLES[i % 2] for i in range(len(turns))]
     return (
         [t.get("role") for t in turns] != expected_roles
-        or len(turns) % 2 == 1
+        or len(turns) % 2 == 1  # a chat must end on an assistant reply: an odd count ends on a user turn
         or not all(texts)
         or any(PLACEHOLDER.search(text) for text in texts)
         or len(set(texts)) < len(texts)
@@ -162,6 +164,8 @@ def run_gate(records: list[dict], raw: RawReference, is_malagasy: Callable[[str]
         else:
             kept_ids.append(record_key)
             seen.add(record_key)
+    if len(kept_ids) + len(dropped_ids) != len(records):  # two dropped chats sharing one id would hide a drop
+        raise ValueError(f"{len(records)} chats checked but {len(kept_ids)} kept + {len(dropped_ids)} dropped")
     well_formed = [r for r in records if not broken(r)]
     failed = any(by_reason[reason] for reason in FAIL_REASONS) or not kept_ids
     report = {
