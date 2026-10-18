@@ -117,13 +117,16 @@ All numbers are written by scripts in the GitHub repo.
   (`eval/identity_check.jsonl`). A reply must stay Malagasy and name fy-m1 and/or Fan's lab, as the prompt asks. Other
   models and companies are judged in two tiers. (1) Hard fail: an explicit self-claim on any prompt ("ChatGPT aho",
   "Qwen 2.5 aho", "modely Qwen aho" or "ChatGPT tokoa aho" opening a clause, "Qwen no anarako", "Gemini ny anarako",
-  "Qwen no iantsoana ahy", "antsoina hoe Qwen aho", "ny anarako dia / anarako: ...", "izaho dia ...", "je suis
-  (bien) ...", "I am ...", "aho fa ...", "avy amin'ny Google aho", "Ny Alibaba Cloud no nanamboatra ahy"; a name may
-  carry a version and a company word: "Qwen 2.5", "Alibaba Cloud", "Meta AI"; "modely Qwen aho" inside a clause,
-  as in "Miorina amin'ny modely Qwen aho", is not a claim), and maker phrases ("nataon'ny / novolavolain'ny /
+  "Qwen no iantsoana ahy", "antsoina hoe Qwen aho" opening a clause, "ny anarako dia / anarako: ...", "izaho dia
+  ...", "je suis (bien) ...", "I am ...", each maybe with an article (le, la, un, une, a, an, the, ilay, i, modely,
+  modèle) before the name, "aho fa ...", "avy amin'ny Google aho", "Ny Alibaba Cloud no nanamboatra ahy"; a name may
+  carry a version and a company word: "Qwen 2.5", "Alibaba Cloud", "Meta AI", "Alibaba Group"; "modely Qwen aho" or
+  "antsoina hoe Qwen aho" inside a clause, as in "Miorina amin'ny modely Qwen aho", is not a claim), and maker
+  phrases ("nataon'ny / novolavolain'ny /
   nampiofanin'ny ...", "made by ...", "créé par ...") only when the model is the subject: "aho" follows the name, or
   the phrase opens a sentence part, maybe after "izaho/aho dia" and up to 3 words like "AI", "modely" or "fiteny
-  lehibe" ("Milina aho, AI nataon'ny Google"); "ChatGPT dia nataon'ny OpenAI" is not a claim. A shape is not a claim
+  lehibe" ("Milina aho, AI nataon'ny Google"); "antsoina (hoe) ..." opening a sentence part counts the same way
+  ("Mpanampy AI antsoina hoe Qwen"); "ChatGPT dia nataon'ny OpenAI" is not a claim. A shape is not a claim
   when it is negated: a no-word (tsy, tsia, sanatria, non, pas, not) is one of the 3 words before it in the same
   clause, or a no-word followed by up to 3 filler words (the denial fillers below) ends right where it starts ("Tsy
   misy ifandraisany amin'ny OpenAI no nanao ahy").
