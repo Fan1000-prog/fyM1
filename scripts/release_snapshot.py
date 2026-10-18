@@ -1,15 +1,15 @@
 """Make the public release snapshot of a clean commit and check it (counts only).
 
     uv run python scripts/release_snapshot.py --export ~/malagasy-data/raw --out ../fy-m1-public \
-        --results results/release_check.json --private-ids ~/fyM1-handoff/private_ids.txt [--ref origin/main]
+        --results results/release_check.json --private-ids /path/outside/the/repo/private_ids.txt [--ref origin/main]
 
 Copies the commit's tracked files (no git history) into --out, outside every worktree, minus the private paths
 in fym1.release.EXCLUDES (including the word lists scripts/build_known_words.py writes), and adds a NOTICE for
 the third-party word lists. Sender names are read from the export at run time, removed from the hand-written
 name lists and searched for in every file but the lists a script builds from public data alone, as the strict
 gate reads words (case changes, spaced-out letters, digits typed for letters, hidden characters, escapes); then
-a secret scan runs. Only known text types, PDFs (text and metadata) and zip/gz members are read; any other file
-fails. Writes the counts report to --results only (never into --out: the report is a private build record).
+a secret scan runs. Only known text types and PDFs (text and metadata) are read; any other file fails, and any
+archive (zip, gz, tar, whl, ...) is refused before anything is written. Writes the counts report to --results only (never into --out: the report is a private build record).
 --private-ids names a file outside the repo (one private account id per line); any whole-word,
 case-insensitive match in a snapshot file or path fails the check, counted per file, never shown.
 Prints and writes counts and repo paths only, never a name, message text or secret value.

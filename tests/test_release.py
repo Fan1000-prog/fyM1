@@ -1,13 +1,10 @@
 """fym1.release and scripts/release_snapshot.py, on synthetic repos and exports only."""
 
 import ast
-import gzip
 import hashlib
 import importlib.util
-import io
 import json
 import shutil
-import zipfile
 import subprocess
 from pathlib import Path, PurePath
 
@@ -166,10 +163,10 @@ def test_count_name_hits_is_whole_word(text, hits):
     ("&amp;#90;afy", 1),
     ("%5Aafy", 1),
     ("%255Aafy", 1),
-    # a 5+ letter name inside a longer word no known-word list has; known words stay
+    # a 4+ letter name inside a longer word no known-word list has; known words stay
     ("xxfakenainaxx", 1),
     ("bodofakenaina", 1),
-    ("xxzafyxx", 0),  # 4-letter names only at a word's start: known limit (docs/anonymisation.md)
+    ("xxzafyxx", 1),  # a 4-letter name inside a word no list has
     ("contest attestation", 0),
     # digits for letters around a gate word
     ("B0d0", 1),
@@ -182,6 +179,43 @@ def test_a_name_inside_a_known_word_is_not_a_hit():
     names = name_tokens(["Ertain"])[0]
     assert count_name_hits("certainly", names) == 0  # a known English word
     assert count_name_hits("xertainx", names) == 1
+
+
+def test_a_4_letter_name_inside_an_unknown_word_is_caught():
+    assert count_name_hits("see xxzafyxx and qbodoq", NAMES) == 2
+
+
+def _allow(monkeypatch, pairs: dict[tuple[str, str], str]) -> None:
+    monkeypatch.setattr(release, "INNER_NAME_ALLOWED", pairs)
+
+
+def test_inner_name_allow_list_is_exact_per_file_and_word(monkeypatch):
+    _allow(monkeypatch, {("docs/a.md", "xxzafyxx"): "synthetic"})
+    allowed = release.inner_allowed("docs/a.md")
+    assert count_name_hits("xxzafyxx XXZAFYXX", NAMES, allowed) == 0
+    assert count_name_hits("yyzafyyy", NAMES, allowed) == 1  # another word
+    assert count_name_hits("xxzafyxxko", NAMES, allowed) == 1  # a longer word
+    assert count_name_hits("Zafy zafyxx", NAMES, allowed) == 2  # the name alone, the name at a word's start
+    assert count_name_hits("xxzafyxx", NAMES, release.inner_allowed("docs/b.md")) == 1  # another file
+
+
+def test_inner_name_allow_list_never_covers_paths_end_to_end(tmp_path, monkeypatch):
+    _allow(monkeypatch, {("docs/a.md", "xxzafyxx"): "synthetic", ("docs/xxzafyxx.md", "xxzafyxx"): "synthetic"})
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/a.md": "xxzafyxx twice: xxzafyxx\n",
+                                "docs/b.md": "xxzafyxx\n", "docs/xxzafyxx.md": "ok\n"})
+    report = snap(repo, tmp_path / "public", make_export(tmp_path))
+    assert report.name_hits == {"<redacted path 1>": 1, "docs/b.md": 1}
+    assert report.inner_name_words_allowed == 2
+    assert "xxzafyxx" not in json.dumps(report.as_dict())
+
+
+def test_every_inner_name_allow_list_entry_has_a_reason_and_its_word_is_in_its_file():
+    assert release.INNER_NAME_ALLOWED
+    for (path, word), reason in release.INNER_NAME_ALLOWED.items():
+        assert reason.strip() and "\n" not in reason, (path, word)
+        assert word == release.compare_key(word) and word.isalpha(), (path, word)
+        text = release.read_text(REPO_ROOT / path)
+        assert text is not None and word in release.words(text), (path, word)
 
 
 def test_short_names_are_checked_before_stretched_letters_collapse():
@@ -272,7 +306,7 @@ def test_snapshot_drops_excluded_paths_strips_hand_lists_only_and_passes(tmp_pat
 
 def test_name_and_secret_hits_fail_and_never_leak(tmp_path, capsys):
     files = {**CLEAN_FILES, "docs/notes.md": f"Thanks to Zafy.\nkey {FAKE_HF}\n", "zafy/readme.md": "x\n",
-             "docs/inbox/xbodox_1.md": f"{FAKE_HF}\n"}  # a name inside a path word: redacted too
+             "docs/inbox/xbodox_1.md": f"{FAKE_HF}\n"}  # a 4-letter name inside a path word: a hit, redacted
     repo = make_repo(tmp_path, files)
     out = tmp_path / "public"
     code = cli.main([*cli_args(tmp_path, repo, out), "--results", str(tmp_path / "results/release_check.json")])
@@ -280,8 +314,8 @@ def test_name_and_secret_hits_fail_and_never_leak(tmp_path, capsys):
     assert not list(out.rglob("*.json"))  # the report never goes into the snapshot
     report = json.loads((tmp_path / "results/release_check.json").read_text())
     assert report["ok"] is False
-    assert report["names"]["hits_per_file"] == {"docs/notes.md": 1, "<redacted path 1>": 1}
-    assert report["secrets"]["hits_per_file"] == {"<redacted path 2>": {"hf_token": 1},
+    assert report["names"]["hits_per_file"] == {"<redacted path 1>": 1, "docs/notes.md": 1, "<redacted path 2>": 1}
+    assert report["secrets"]["hits_per_file"] == {"<redacted path 1>": {"hf_token": 1},
                                                   "docs/notes.md": {"hf_token": 1}}
     written = (tmp_path / "results/release_check.json").read_text()
     printed = capsys.readouterr()
@@ -493,15 +527,7 @@ def test_tracked_notice_is_refused_before_anything_is_written(tmp_path):
     assert not (tmp_path / "public").exists()
 
 
-# ---- reading files: only known text types; archives and PDFs through readers -----------------------------------
-
-
-def _zip(members: dict[str, bytes]) -> bytes:
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w") as archive:
-        for name, data in members.items():
-            archive.writestr(name, data)
-    return buffer.getvalue()
+# ---- reading files: only known text types and PDFs; archives are refused ------------------------------------------
 
 
 def _pdf(info: str) -> bytes:
@@ -526,14 +552,9 @@ def _pdf(info: str) -> bytes:
     ("docs/a.md", "Salama Zafy caf\u00e9".encode("latin-1"), False, 0),  # not UTF-8: no guessing
     ("assets/logo.png", b"\x89PNG\r\n\x1a\nZafy", False, 0),  # not a text type
     ("LICENSE", b"Apache", True, 0),
-    ("data/a.zip", _zip({"notes/x.txt": b"Zafy"}), True, 1),
-    ("data/a.zip", _zip({"zafy/x.txt": b"ok"}), True, 1),  # member names are read too
-    ("data/a.zip", _zip({"x.txt": b"ok", "y.bin": b"\x00\x01"}), False, 0),
-    ("data/a.zip", b"PK broken", False, 0),
-    ("data/a.txt.gz", gzip.compress(b"Zafy"), True, 1),
-    ("data/a.tar.gz", gzip.compress(b"Zafy"), False, 0),  # a tar is not a text type
+    ("data/a.txt.gz", b"Zafy", False, 0),  # an archive is never read (and is refused before the scan)
 ])
-def test_only_known_text_types_and_archives_are_read(tmp_path, name, data, readable, hits):
+def test_only_known_text_types_are_read(tmp_path, name, data, readable, hits):
     path = tmp_path / PurePath(name).name
     path.write_bytes(data)
     text = release.read_text(path)
@@ -552,11 +573,25 @@ def test_pdf_metadata_is_scanned(tmp_path):
     assert count_name_hits(release.read_text(path), NAMES) == 2
 
 
-@needs_poppler
-def test_pdf_inside_a_zip_is_read_with_its_metadata(tmp_path):
-    path = tmp_path / "a.zip"
-    path.write_bytes(_zip({"paper.pdf": _pdf("<< /Author (Zafy) >>")}))
-    assert count_name_hits(release.read_text(path), NAMES) == 1
+@pytest.mark.parametrize("path", ["data/a.zip", "data/a.txt.gz", "dist/x.tar.gz", "dist/x.TGZ", "vendor/x.whl",
+                                  "lib/x.jar", "data/x.7z", "data/x.rar", "data/x.tar", "data/x.bz2", "data/x.xz"])
+def test_an_archive_fails_the_release_before_anything_is_written(tmp_path, capsys, path):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, path: b"not read"})
+    out = tmp_path / "public"
+    with pytest.raises(RefusedError, match="1 archive files") as error:
+        snap(repo, out, make_export(tmp_path))
+    assert path not in str(error.value)  # counted, never named: a path may hold a name
+    assert not out.exists() and not _leftovers(tmp_path)
+    (tmp_path / "cli").mkdir()
+    assert cli.main([*cli_args(tmp_path / "cli", repo, out), "--results", str(tmp_path / "r.json")]) == 2
+    assert not out.exists() and not (tmp_path / "r.json").exists()
+    assert "refused" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(("path", "archive"), [("a.tar.gz", True), ("a.ZIP", True), ("v0.1.jar.md", True),
+                                               ("notes.md", False), ("zip.md", False), ("data/gz", False)])
+def test_is_archive_reads_every_suffix_of_the_file_name(path, archive):
+    assert release.is_archive(path) == archive
 
 
 def test_unscannable_files_fail_end_to_end(tmp_path):
