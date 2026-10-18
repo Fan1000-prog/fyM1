@@ -214,6 +214,8 @@ def test_every_inner_name_allow_list_entry_has_a_reason_and_its_word_is_in_its_f
     for (path, word), reason in release.INNER_NAME_ALLOWED.items():
         assert reason.strip() and "\n" not in reason, (path, word)
         assert word == release.compare_key(word) and word.isalpha(), (path, word)
+        if path.endswith(".pdf") and not all(map(shutil.which, ("pdftotext", "pdfinfo", "pdfdetach"))):
+            continue  # poppler missing (CI): the PDF cannot be read here
         text = release.read_text(REPO_ROOT / path)
         assert text is not None and word in release.words(text), (path, word)
 
