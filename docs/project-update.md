@@ -1,21 +1,22 @@
 # fyM1 project update
 
-Snapshot: 2026-10-18, ~00:05 UTC. Read with the spec (`docs/superpowers/specs/2026-10-17-resaka-design.md`)
+Snapshot: 2026-10-18, ~00:00 UTC, `main` at b2f2aa3. Status moves fast; check `gh pr list` for anything newer. Read with the spec (`docs/superpowers/specs/2026-10-17-resaka-design.md`)
 and the plan (`docs/superpowers/plans/2026-10-17-fym1-v0.1.md`). This file says where the project stands; the
 spec and plan say what it is and how it is built.
 
 ## 1. Where we are
 
-The tooling is built and merged. No model is picked or trained yet. Two things block training:
+The tooling is built and merged. No model is picked or trained yet. Two things gate training:
 
 1. **The Messenger export is not on the laptop.** `~/malagasy-data/raw/` does not exist, so there are no real
    chats yet. Without them the model can't learn everyday style.
-2. **Colab's free GPU limit was hit** at 23:12 UTC after a few hours of baseline tests. Retries every ~45 min.
+2. **A GPU with enough hours.** Colab's free limit was hit at 23:12 UTC (back at ~23:57; the Gemma 3 baseline is
+   running there). Training moves to Kaggle: the owner has an account; its token file is being saved.
 
 Ship date moved from 2026-10-17 to **when the export is in** (owner: tomorrow is fine). The owner chose this
 over shipping a model trained only on Wikipedia + identity lines, which would still talk formally.
 
-`main`: 620 tests pass, 1 skipped, 9 expected failures (known anonymiser limits, strict xfail).
+`main`: 635 tests pass, 1 skipped, 9 expected failures (known anonymiser limits, strict xfail).
 
 ## 2. Done
 
@@ -28,6 +29,7 @@ over shipping a model trained only on Wikipedia + identity lines, which would st
 | 3 Eval | `is_malagasy`, `drift_rate`, `leak_rate`, 150 owner-approved test prompts, judge rubric; greeting words "akory", "aby" | #4, #15 |
 | 4 Train infra | `latest_checkpoint` resume, Colab smoke notebook, token-safe Colab operator flow, one-shot local token server (one extra fix round, owner-approved) | #2 |
 | 4 Baseline + training | `00_baseline` and `01_train` notebooks, scout table `results/model_selection.json`, per-run folders that refuse a resume on changed settings or code, training time across disconnects, own early-stop rule, `sync_code_to_hub.py` | #13 |
+| 4 Kaggle runtime | Token helper that checks Kaggle before Colab, `kaggle_push.py` (reads only the username), `docs/kaggle_operator.md` | #18 |
 | 5 Scoring | `score.py`: blind judge batch, judge means, `scores.json`, leak matches, owner leak review, strict leak gate | #6, #10, #11, #15 |
 | 6 Spaces | Chat + arena apps, `make_vote`, vote tally, owner-approved Malagasy text, `fy-m-1` Space names | #7, #9, #12 |
 | 7 Shrink | Vocabulary trim that keeps BPE merges valid (notebook not run yet) | #8 |
@@ -107,8 +109,7 @@ reports.
 | Item | Owner | State |
 |---|---|---|
 | PR #16 anonymiser leak fix | main | blocked after 2 fix rounds (glued rule eats words ending in "o" before a price; bracketed non-Malagasy area codes; doubled-letter split handles); owner decides on one more round |
-| PR #18 Kaggle runtime helper + push script | trainer | in review (fix round 1 pushed) |
-| Wire notebooks to Kaggle | trainer | follow-up PR after #18 |
+| Wire notebooks to Kaggle | trainer | next PR (#18 merged) |
 | Messenger export | owner | not on the laptop |
 | 20-greeting ratings per model | owner | after every candidate has answers |
 | Kaggle setup | owner | phone-verified account, API token in `~/.kaggle/kaggle.json`, then HF_TOKEN in Kaggle Secrets |
