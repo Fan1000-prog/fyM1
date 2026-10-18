@@ -2,12 +2,15 @@
 
     uv run python scripts/filter_synth.py --real ~/malagasy-data/private/chats-2026-10-18d/chats.jsonl
     uv run python scripts/filter_synth.py --real ~/malagasy-data/private/chats-2026-10-18d/chats.jsonl --upload
+    uv run python scripts/filter_synth.py --real ~/malagasy-data/private/chats-2026-10-18d/chats.jsonl --upload --promote
 
 notebooks/04_synth.ipynb filters with the code and the real chats.jsonl it started with. This script redoes that
 step after either changes: it downloads every `synth/raw/part-*.ndjson`, runs
 `fym1.data.synth.filter_conversations` against the LOCAL real chats in --real (few-shot leak reference), and writes
 `filtered.ndjson` plus counts-only `synth_stats.json`. Default is a dry run into --out-dir (outside every git work
 tree). --upload writes both to `synth/filtered.ndjson` and `synth/synth_stats.json` in fyM1-chats, in one commit.
+--promote also writes the kept chats to `synth/synth_chats.jsonl`, the file 01_train reads, with the same bytes as
+filtered.ndjson (what 04_synth writes with PROMOTE = True). Use it only after the sample check.
 Run settings the raw rows do not carry (seed, few_shot_k, target_raw, gpus) are kept from the Hub's current
 synth_stats.json when there is one; `data_revision` is a hash of the --real file. The Hugging Face token comes
 from the local cache, never an argument.
@@ -31,6 +34,7 @@ from fym1.data.private import private_path
 DATA_REPO = "Fan1000-Prog/fyM1-chats"
 RAW_GLOB = "synth/raw/part-*.ndjson"
 FILTERED, STATS = "synth/filtered.ndjson", "synth/synth_stats.json"
+PROMOTED = "synth/synth_chats.jsonl"  # 01_train input; 04_synth writes it with PROMOTE = True
 CARRIED_META = ("seed", "few_shot_k", "target_raw", "gpus")  # notebook settings the raw rows do not record
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = Path("~/malagasy-data/private/synth-refilter")
@@ -41,6 +45,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--real", type=Path, required=True, help="local real chats.jsonl (leak reference)")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT, help="dry-run output folder, outside any repo")
     parser.add_argument("--upload", action="store_true", help=f"write {FILTERED} and {STATS} to {DATA_REPO}")
+    parser.add_argument("--promote", action="store_true", help=f"also write the kept chats to {PROMOTED} (training)")
     return parser.parse_args(argv)
 
 
@@ -78,9 +83,12 @@ def local_revision(real: Path) -> str:
     return "local-sha256-" + hashlib.sha256(real.expanduser().read_bytes()).hexdigest()[:12]
 
 
-def bodies(kept: list[dict], stats: dict) -> dict[str, bytes]:
-    return {FILTERED: "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept).encode(),
-            STATS: (json.dumps(stats, indent=2) + "\n").encode()}  # fmt: skip
+def bodies(kept: list[dict], stats: dict, promote: bool) -> dict[str, bytes]:
+    files = {FILTERED: "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept).encode(),
+             STATS: (json.dumps(stats, indent=2) + "\n").encode()}  # fmt: skip
+    if promote:
+        files[PROMOTED] = files[FILTERED]
+    return files
 
 
 def main(argv: list[str] | None = None, api: HfApi | None = None,
@@ -101,13 +109,14 @@ def main(argv: list[str] | None = None, api: HfApi | None = None,
     meta = {key: previous.get(key) for key in CARRIED_META}
     meta |= {"code_sha": sha(), "data_revision": local_revision(args.real)}
     kept, stats = synth.filter_raw_rows(rows, real, is_malagasy, meta)
-    files = bodies(kept, stats)
+    files = bodies(kept, stats, args.promote)
 
     if args.upload:
         api.create_commit(DATA_REPO, repo_type="dataset", parent_commit=revision,  # fails if the Hub moved on
                           operations=[CommitOperationAdd(path, body) for path, body in files.items()],
-                          commit_message=f"synth refilter: {len(kept)}/{len(rows)} kept (code {stats['code_sha']})")  # fmt: skip
-        where = f"{DATA_REPO} ({FILTERED}, {STATS})"
+                          commit_message=f"synth refilter: {len(kept)}/{len(rows)} kept (code {stats['code_sha']})"
+                                         + (", promoted" if args.promote else ""))  # fmt: skip
+        where = f"{DATA_REPO} ({', '.join(files)})"
     else:
         out_dir.mkdir(parents=True, exist_ok=True)
         for path, body in files.items():
