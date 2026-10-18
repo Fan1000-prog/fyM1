@@ -57,3 +57,21 @@ def test_synth_notebook_never_prints_chat_text():
     assert prints
     for needle in ('["output"]', '["messages"]', '["content"]', "real[", "kept[", "rows[", "smoke"):
         assert not any(needle in line for line in prints), needle
+
+
+def test_synth_notebook_generators_are_permissive_and_ordered():
+    """Owner decision 2026-10-18: synthetic chats only from permissive models; AfriqueQwen 9B first, Gemma 4 last."""
+    import ast
+    import re
+
+    from fym1.data.synth import generator_licence
+
+    code = "\n".join(synth_code_lines())
+    listed = re.search(r"^GENERATORS = (\[.*?^\])", code, re.S | re.M)[1]
+    generators = ast.literal_eval(re.sub(r"#.*", "", listed))
+    for hub_id, dtype in generators:
+        generator_licence(hub_id)
+        assert dtype in ("float16", "float32")
+    assert generators[0] == ("McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1", "float16")
+    assert generators[-1] == ("google/gemma-4-12B-it", "float32")
+    assert "gemma-3" not in code and "Gemma license" not in code

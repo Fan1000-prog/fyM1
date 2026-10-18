@@ -1,0 +1,258 @@
+{
+  "seed": 20261018,
+  "prompts": [
+    "eval/prompts.jsonl greetings, first 20"
+  ],
+  "sampling": [
+    "temp 0.7, top_p 0.9, max 128 new tokens, seed 42, no system prompt"
+  ],
+  "variant_prompt_ids": [
+    "g04",
+    "g05",
+    "g07",
+    "g09",
+    "g19"
+  ],
+  "key": {
+    "j0001": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g02"
+    },
+    "j0002": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g07"
+    },
+    "j0003": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g20"
+    },
+    "j0004": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g04"
+    },
+    "j0005": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g14"
+    },
+    "j0006": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g07"
+    },
+    "j0007": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g01"
+    },
+    "j0008": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g06"
+    },
+    "j0009": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g05"
+    },
+    "j0010": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g10"
+    },
+    "j0011": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g18"
+    },
+    "j0012": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g12"
+    },
+    "j0013": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g05"
+    },
+    "j0014": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g03"
+    },
+    "j0015": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g18"
+    },
+    "j0016": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g11"
+    },
+    "j0017": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g03"
+    },
+    "j0018": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g02"
+    },
+    "j0019": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g19"
+    },
+    "j0020": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g14"
+    },
+    "j0021": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g06"
+    },
+    "j0022": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g11"
+    },
+    "j0023": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g06"
+    },
+    "j0024": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g03"
+    },
+    "j0025": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g01"
+    },
+    "j0026": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g19"
+    },
+    "j0027": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g08"
+    },
+    "j0028": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g17"
+    },
+    "j0029": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g07"
+    },
+    "j0030": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g04"
+    },
+    "j0031": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g09"
+    },
+    "j0032": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g16"
+    },
+    "j0033": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g01"
+    },
+    "j0034": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g14"
+    },
+    "j0035": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g09"
+    },
+    "j0036": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g20"
+    },
+    "j0037": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g16"
+    },
+    "j0038": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g09"
+    },
+    "j0039": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g16"
+    },
+    "j0040": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g08"
+    },
+    "j0041": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g13"
+    },
+    "j0042": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g12"
+    },
+    "j0043": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g12"
+    },
+    "j0044": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g17"
+    },
+    "j0045": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g17"
+    },
+    "j0046": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g18"
+    },
+    "j0047": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g20"
+    },
+    "j0048": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g04"
+    },
+    "j0049": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g15"
+    },
+    "j0050": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g08"
+    },
+    "j0051": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g19"
+    },
+    "j0052": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g15"
+    },
+    "j0053": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g13"
+    },
+    "j0054": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g10"
+    },
+    "j0055": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g05"
+    },
+    "j0056": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g10"
+    },
+    "j0057": {
+      "model": "gemma-4-12b-it",
+      "prompt_id": "g02"
+    },
+    "j0058": {
+      "model": "gemma-3-12b-it",
+      "prompt_id": "g13"
+    },
+    "j0059": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g11"
+    },
+    "j0060": {
+      "model": "afriqueqwen3.5-9b-instruct",
+      "prompt_id": "g15"
+    }
+  }
+}

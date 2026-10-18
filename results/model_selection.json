@@ -1,8 +1,22 @@
 {
-  "chosen": null,
-  "chosen_size": null,
-  "license": null,
-  "hf_license": null,
+  "chosen": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
+  "chosen_size": "9B",
+  "license": "CC-BY-4.0",
+  "hf_license": "cc-by-4.0",
+  "chosen_reason": [
+    "chrf_eng_plt 49.73 vs google/gemma-3-12b-it 36.84; google/gemma-4-12B-it flores \"pending\"",
+    "greeting_gate.judge_mean 2.9 vs google/gemma-4-12B-it 2.85 (a tie)",
+    "belebele_chat_acc 0.7422 vs google/gemma-4-12B-it 0.75 (equal within noise)",
+    "sec_per_step 83.3 on a T4 in float16 (results/baseline/afriqueqwen3.5-9b-instruct.json qlora_smoke.compute_dtype); google/gemma-4-12B-it sec_per_step null (smoke pending, float32 on a T4 under Unsloth)",
+    "license CC-BY-4.0: simple open licence (owner rule)",
+    "Gemma 4's FLORES+ and smoke were not waited for; it stays a comparison row",
+    "known risk: one Hausa reply and some prompt echoes in its greeting-gate answers"
+  ],
+  "greeting_gate": {
+    "source": "results/greeting_gate.json",
+    "judge": "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code",
+    "rubric": "src/fym1/eval/judge_rubric.md"
+  },
   "candidates": [
     {
       "model": "McGill-NLP/AfriqueQwen-8B",
@@ -27,7 +41,10 @@
         "nearest": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
         "nearest_license": "cc-by-4.0",
         "nearest_note": "different size and architecture (Qwen3.5, 9B); its base lists mg; not measured"
-      }
+      },
+      "greeting_gate": "pending",
+      "status": "dropped",
+      "dropped_reason": "base model, no chat; lead decision"
     },
     {
       "model": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
@@ -53,7 +70,52 @@
       "instruct_version": {
         "exists": true,
         "note": "is the instruct model"
-      }
+      },
+      "greeting_gate": {
+        "judge_mean": 2.9,
+        "shared_prompts_judge_mean": 3.167,
+        "shared_prompts_n": 15,
+        "is_malagasy_rate": 0.95,
+        "drift_rate": 0.05,
+        "n": 20
+      },
+      "status": "candidate"
+    },
+    {
+      "model": "google/gemma-3-12b-it",
+      "license": "Gemma Terms of Use",
+      "belebele_acc": 0.6967,
+      "belebele_protocol": "completion 0-shot",
+      "belebele_chat_acc": 0.7511,
+      "chrf_plt_eng": 51.77,
+      "chrf_eng_plt": 36.84,
+      "flores": "measured",
+      "tokens_per_word": 2.792,
+      "sniff_natural": null,
+      "peak_vram_gb": 10.26,
+      "sec_per_step": 122.4,
+      "qlora_fits": true,
+      "loss_trend": {
+        "first": 1.601762294769287,
+        "min": 1.2104750871658325,
+        "min_step": 14,
+        "last": 1.2441494464874268,
+        "rising_at_end": true
+      },
+      "instruct_version": {
+        "exists": true,
+        "note": "is the instruct model"
+      },
+      "greeting_gate": {
+        "judge_mean": 1.9,
+        "shared_prompts_judge_mean": 1.767,
+        "shared_prompts_n": 15,
+        "is_malagasy_rate": 0.8,
+        "drift_rate": 0.2,
+        "n": 20
+      },
+      "status": "dropped",
+      "dropped_reason": "licence: Gemma Terms of Use; owner wants a simple open licence"
     },
     {
       "model": "google/gemma-4-12B-it",
@@ -73,7 +135,16 @@
       "instruct_version": {
         "exists": true,
         "note": "is the instruct model"
-      }
+      },
+      "greeting_gate": {
+        "judge_mean": 2.85,
+        "shared_prompts_judge_mean": 2.9,
+        "shared_prompts_n": 15,
+        "is_malagasy_rate": 0.9,
+        "drift_rate": 0.1,
+        "n": 20
+      },
+      "status": "candidate"
     }
   ]
 }

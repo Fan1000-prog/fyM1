@@ -15,7 +15,7 @@ _spec.loader.exec_module(build_synth_stats)
 def stats(**extra):
     dropped = {reason: 1 for reason in DROP_REASONS}
     return {**synth_stats(raw=10, kept=10 - len(DROP_REASONS), dropped=dropped,
-                          by_generator={"google/gemma-3-27b-it": 10}, meta={"seed": 0}), **extra}
+                          by_generator={"google/gemma-4-12B-it": 10}, meta={"seed": 0}), **extra}
 
 
 def test_writes_valid_stats(tmp_path):
