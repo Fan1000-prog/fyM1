@@ -12,10 +12,12 @@ gate reads words (case changes, spaced-out letters, digits typed for letters, hi
 file or path sharing an 8-word run with the export's messages or the turns of the anonymised chats file (--chats:
 fake names, joined messages), runs across message boundaries included, or holding a whole shorter message with 4+
 distinctive words, fails (copied chat text, counted per file, never shown; words compared as the name scan
-compares them); then a secret scan runs. The release ships text files only (known text types, decoded in full, no control characters): any
-other file (image, PDF, binary data hidden after a text file) and any archive (zip, gz, tar, whl, ...) is refused
-before anything is written. The paper ships as paper/fym1.tex; its PDF is built from it. Writes the counts report to --results
-only (never into --out: the report is a private build record).
+compares them); then a secret scan runs. The release ships text files only (known text types, decoded in full,
+no control characters, base64 data: URIs or Unicode tag characters): any other file (image, PDF, binary data hidden
+after a text file) and any archive (zip, gz, tar, whl, ...) is refused before anything is written. The paper ships
+as paper/fym1.tex; its PDF is built from it. Every file under --export must be a thread page (message_*.json) or a
+one-file JSON export, at any depth; any other file is refused (counted, never named). Writes the counts report to
+--results only (never into --out: the report is a private build record).
 --private-ids names a file outside the repo (one private account id per line); any whole-word,
 case-insensitive match in a snapshot file or path fails the check, counted per file, never shown.
 Prints and writes counts and repo paths only, never a name, message text or secret value.

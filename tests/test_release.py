@@ -599,6 +599,101 @@ def test_an_unreadable_thread_page_is_refused(tmp_path, page):
     assert "spam" not in str(error.value)
 
 
+def _flat_export(sender: str, title: str = "t", chat: str = "salama") -> str:
+    message = {"id": "1", "sender": sender, "text": chat, "timestamp": "2026-01-01T10:00:00"}
+    return json.dumps({"conversation": {"title": title}, "messages": [message]})
+
+
+def test_a_one_file_export_at_any_depth_is_read(tmp_path):
+    export = make_dyi_export(tmp_path)
+    nested = export / "sub" / "deeper" / "chat.json"
+    nested.parent.mkdir(parents=True)
+    nested.write_text(_flat_export("Nestfake Deep", chat=FAKE_TURN), encoding="utf-8")
+    assert release.compare_key("Nestfake") in name_tokens(release.export_senders(export))[0]
+    assert any("Nestfake Deep" in t.participants for t in release.read_export(export))
+    files = {**CLEAN_FILES, "docs/thanks.md": "Thanks Nestfake!\n", "docs/copied.md": _run(FAKE_TURN_WORDS[3:11])}
+    report = build_snapshot(make_repo(tmp_path, files), "HEAD", tmp_path / "public", export, make_ids(tmp_path),
+                            make_chats(tmp_path, turns=["eny"] * 2 + [_run(FAKE_CHAT_WORDS)]))
+    assert report.name_hits == {"docs/thanks.md": 1} and report.chat_text_hits == ["docs/copied.md"]
+
+
+@pytest.mark.parametrize("unread", ["your_facebook_activity/messages/inbox/zafytest_1/message_1.html",
+                                    "your_facebook_activity/messages/inbox/zafytest_1/notes_secretname.txt",
+                                    "chat.json.bak"])
+def test_a_file_no_reader_consumes_refuses_the_export(tmp_path, capsys, unread):
+    export = make_dyi_export(tmp_path)
+    (export / unread).write_text("<p>Hiddenfake Sender: salama</p>", encoding="utf-8")
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    out = tmp_path / "public"
+    for read in (release.export_senders, release.read_export):
+        with pytest.raises(RefusedError, match="1 files no reader consumes") as error:
+            read(export)
+        assert PurePath(unread).stem not in str(error.value) and "Hiddenfake" not in str(error.value)
+    (tmp_path / "cli").mkdir()
+    args = [*cli_args(tmp_path / "cli", repo, out), "--results", str(tmp_path / "r.json")]
+    args[args.index("--export") + 1] = str(export)
+    assert cli.main(args) == 2
+    assert not out.exists() and not (tmp_path / "r.json").exists()
+    printed = capsys.readouterr()
+    assert "Hiddenfake" not in printed.out + printed.err and PurePath(unread).stem not in printed.err
+
+
+def test_a_symlinked_folder_in_the_export_is_refused(tmp_path):
+    export = make_dyi_export(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "message_1.json").write_text(_dyi_page(["Linkfake Name"], []), encoding="utf-8")
+    (export / "linked").symlink_to(elsewhere, target_is_directory=True)
+    with pytest.raises(RefusedError, match="1 files no reader consumes"):
+        release.export_senders(export)
+
+
+def test_every_name_field_of_a_thread_page_is_read(tmp_path):
+    """A name only in a member event's `users`, or in any `*_name` key, is a sender name too."""
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(_dyi_page(["Bodo Fakenaina"], [
+        {"sender_name": "Bodo Fakenaina", "timestamp_ms": 1, "content": "nanampy olona", "type": "Subscribe",
+         "users": [{"name": "Usersfake Added"}]},
+        {"sender_name": "Bodo Fakenaina", "timestamp_ms": 2, "share": {"original_content_owner_name": "Ownerfake"}},
+    ]), encoding="utf-8")
+    names = name_tokens(release.export_senders(export))[0]
+    assert {release.compare_key(n) for n in ("Usersfake", "Ownerfake")} <= names
+    loaded = {p for t in load_threads(export) for p in [*t.participants, *(m.sender for m in t.messages)]}
+    assert not any("Usersfake" in p or "Ownerfake" in p for p in loaded)  # the conversation loader alone misses them
+
+
+def test_a_name_field_that_is_not_text_is_refused(tmp_path):
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(_dyi_page(["Bodo Fakenaina"], [{"sender_name": "Bodo Fakenaina", "users": [{"name": 7}]}]))
+    with pytest.raises(RefusedError, match="export could not be read"):
+        release.export_senders(export)
+
+
+@pytest.mark.parametrize("flat", [True, False])
+def test_the_distinctive_words_of_a_conversation_title_are_names(tmp_path, flat):
+    title = "famille Zokifake"
+    if flat:
+        export = tmp_path / "raw"
+        export.mkdir()
+        (export / "export.json").write_text(_flat_export("Zafy Test", title=title), encoding="utf-8")
+    else:
+        export = make_dyi_export(tmp_path)
+        page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+        page.write_text(json.dumps({"title": title, "participants": [{"name": "Bodo Fakenaina"}], "messages": []}))
+    names = name_tokens(release.export_senders(export))[0]
+    assert release.compare_key("Zokifake") in names
+    assert release.compare_key("famille") not in names  # an everyday word names nobody
+
+
+def test_the_chat_index_reads_every_chat_form(monkeypatch):
+    """ChatIndex joins as many forms as `_chat_forms` gives, not a fixed number."""
+    monkeypatch.setattr(release, "_chat_forms", lambda text: ("", "", "", text))
+    index = release.ChatIndex([[FAKE_CHAT]], "test")
+    assert index.shares_with(_run(FAKE_CHAT_WORDS[:8]))
+
+
 # ---- private ids ----------------------------------------------------------------------------------------------
 
 
@@ -940,6 +1035,9 @@ BINARY_TAILS = {  # synthetic: archive magic then filler, hidden after a text fi
     ("docs/old.md", "caf\u00e9 notes".encode("latin-1")),
     ("docs/wide.md", "notes".encode("utf-16-le")),
     ("docs/bell.md", b"notes\x07"),
+    ("docs/inline.md", b"![logo](data:image/png;base64,iVBORw0KGgo=)\n"),  # bytes the scan would never decode
+    ("docs/upper.md", b"<img src='DATA:text/plain;charset=utf-8;BASE64,bm90ZXM='>"),
+    ("docs/tagged.md", "notes\U000E0001\U000E0068\U000E0069\U000E007F".encode()),  # invisible tag letters
     ("bin/tool", b"\x7fELF filler"),
     *((f"docs/{kind}-after-text.md", b"# notes\nplain text\n" + tail) for kind, tail in BINARY_TAILS.items()),
     *((f"paper/{kind}-after-eof.pdf", _pdf("<< /Title (notes) >>") + tail) for kind, tail in BINARY_TAILS.items()),

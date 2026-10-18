@@ -219,6 +219,10 @@ SECRET_FILE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
 
 _LETTERS = re.compile(r"[^\W\d_]+")
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]")
+# Text a reader decodes before it can be read (review finding 14 nits): a base64 `data:` URI hides bytes the scan
+# never sees, and Unicode tag characters (U+E0000-E007F) spell invisible ASCII. A text file holding either is refused.
+_DATA_URI = re.compile(r"(?i)\bdata:[^,\s]*;\s*base64\s*,")
+_TAG_CHARS = re.compile("[\U000E0000-\U000E007F]")
 _LETTERS_AND_DIGITS = re.compile(r"[^\W_]+")
 # Digits typed for the letters they look like ("H4nt4", "Rak0to"): the name scan also reads them as letters.
 DIGIT_LETTERS = str.maketrans("140357", "iaoest")
@@ -371,11 +375,46 @@ def name_tokens(senders: Iterable[str]) -> tuple[frozenset[str], int, int]:
     return frozenset(tokens), len(short - tokens), placeholders
 
 
+# Every file under --export must be read by one of these, or the export is refused (review finding 14): a file no
+# reader consumes ("message_1.html", a one-file export renamed or nested) would hold names nobody checks.
+DYI_PAGE = "message_*.json"  # a "Download your information" thread page, in any folder at any depth
+FLAT_SUFFIX = ".json"  # any other JSON file, at any depth: must be a one-file export
+# Keys whose text value is a person's name, anywhere in a thread page (participants, senders, reaction actors, the
+# users of an add/remove-member event, ...), plus any key ending in NAME_KEY_SUFFIX.
+NAME_KEYS = frozenset({"name", "sender_name", "actor", "sender"})
+NAME_KEY_SUFFIX = "_name"
+
+
+@dataclass(frozen=True)
+class ExportFiles:
+    pages: list[Path]  # DYI thread pages
+    flat: list[Path]  # one-file exports
+
+
+def export_files(export: Path) -> ExportFiles:
+    """Every file under `export` (or `export` itself), sorted by reader. Any file no reader consumes refuses the
+    export, counted, never named."""
+    # A symlinked folder is not walked into, so it counts as a file no reader consumes.
+    if export.is_file():
+        files = [export]
+    else:
+        files = sorted(p for p in export.rglob("*") if p.is_symlink() or not p.is_dir())
+    pages = [p for p in files if fnmatch.fnmatch(p.name, DYI_PAGE)]
+    flat = [p for p in files if p.suffix.lower() == FLAT_SUFFIX and p not in pages]
+    unread = len(files) - len(pages) - len(flat)
+    if unread:
+        raise RefusedError(f"export holds {unread} files no reader consumes (want only thread pages "
+                           f"`{DYI_PAGE}` and one-file `*{FLAT_SUFFIX}` exports)")
+    return ExportFiles(pages, flat)
+
+
 def read_export(export: Path) -> list[Thread]:
     """The export's conversations, from every folder of thread pages (message requests and filtered threads too)
-    and the one-file format. Errors never carry the export's paths or text."""
+    and every one-file export at any depth. Errors never carry the export's paths or text."""
+    found = export_files(export)
     try:
-        threads = [*load_dyi_threads(export, folders=None), *load_flat_threads(export)]
+        threads = [*(load_dyi_threads(export, folders=None) if found.pages else []),
+                   *(t for path in found.flat for t in load_flat_threads(path))]
     except (ValueError, OSError, KeyError, TypeError, IndexError, AttributeError) as error:
         raise RefusedError(f"export could not be read ({type(error).__name__})") from None
     if not threads:
@@ -386,23 +425,50 @@ def read_export(export: Path) -> list[Thread]:
 def export_senders(export: Path) -> list[str]:
     """Every person name the export lists, read from its raw files rather than the loaded conversations (which drop
     unsent, call and event messages): in every thread page (`message_*.json`) anywhere under `export`, whatever its
-    folder (inbox, archived_threads, e2ee_cutover, message_requests, filtered_threads, ...), the participants, every
-    message's sender and every reaction's actor; in the one-file format, the listed participants and every sender.
-    A page of any other shape is refused. Errors never carry the export's paths or text."""
+    folder (inbox, archived_threads, e2ee_cutover, message_requests, filtered_threads, ...), every `_page_names`
+    value; in every one-file export, the listed participants and every sender; in both, the distinctive words of the
+    conversation title (`title_words`). A page of any other shape is refused. Errors never carry the export's paths
+    or text."""
+    found = export_files(export)
     try:
-        pages = sorted(export.glob("**/message_*.json")) if export.is_dir() else []
-        names = [name for page in pages for name in _page_names(json.loads(page.read_text(encoding="utf-8")))]
-        names += [p for thread in load_flat_threads(export) for p in thread.participants]
+        names = []
+        for path in found.pages:
+            page = json.loads(path.read_text(encoding="utf-8"))
+            names += [*_page_names(page), *title_words(fix_meta_text(page.get("title") or ""))]
+        for path in found.flat:
+            for thread in load_flat_threads(path):
+                names += [*thread.participants, *title_words(thread.title)]
     except (ValueError, OSError, KeyError, TypeError, AttributeError) as error:
         raise RefusedError(f"export could not be read ({type(error).__name__})") from None
     return names
 
 
+def title_words(title: str) -> list[str]:
+    """The `is_distinctive` words of a conversation title: a group title may hold a person's name ("Hanta's 30th"),
+    while its everyday words ("famille", "tsara") name nobody and would fail every file that uses them."""
+    if not isinstance(title, str):
+        raise TypeError("a title is not text")
+    # Checked as typed (case and accents folded), before `compare_key` collapses letters: "famille" is a common
+    # French word, "famile" is not.
+    typed = _LETTERS_AND_DIGITS.findall(fold(title.translate(ASCII_PUNCTUATION)))
+    return [word for word in typed if is_distinctive(word.translate(DIGIT_LETTERS))]
+
+
 def _page_names(page: dict) -> list[str]:
-    """Participants, senders and reaction actors of one thread page, as Meta-encoded text fixed."""
-    raw = [*(p["name"] for p in page["participants"]),
-           *(m["sender_name"] for m in page["messages"]),
-           *(r["actor"] for m in page["messages"] for r in m.get("reactions", []))]
+    """Every name in one thread page, as Meta-encoded text fixed: the text value of every NAME_KEYS key or
+    `*_name` key at any depth (participants, senders, reaction actors, `users` of a member event, ...). The page
+    must have participants and messages."""
+    if not isinstance(page["participants"], list) or not isinstance(page["messages"], list):
+        raise TypeError("a thread page needs participant and message lists")
+    raw: list[object] = []
+    stack: list[object] = [page]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            raw += [value for key, value in node.items() if key in NAME_KEYS or key.endswith(NAME_KEY_SUFFIX)]
+            stack += node.values()
+        elif isinstance(node, list):
+            stack += node
     if not all(isinstance(name, str) for name in raw):
         raise TypeError("a name is not text")
     return [fix_meta_text(name) for name in raw]
@@ -470,15 +536,15 @@ class ChatIndex:
         self.runs: set[tuple[str, ...]] = set()
         self.short: dict[int, set[tuple[str, ...]]] = {}
         for texts in conversations:
-            joined: list[list[str]] = [[] for _ in range(3)]
+            joined: dict[int, list[str]] = {}  # each of the `_chat_forms`, by position, joined across messages
             for text in texts:
-                for form, words in zip(_chat_forms(text), joined):
+                for position, form in enumerate(_chat_forms(text)):
                     message = chat_words(form)
-                    words += message
+                    joined.setdefault(position, []).extend(message)
                     if len(message) < CHAT_TEXT_NGRAM and len({w for w in message if is_distinctive(w)}) \
                             >= SHORT_MESSAGE_DISTINCTIVE:
                         self.short.setdefault(len(message), set()).add(tuple(message))
-            for words in joined:
+            for words in joined.values():
                 self.runs.update(_runs(words, CHAT_TEXT_NGRAM))
         if not self.runs:  # an empty index would pass every file unchecked
             raise RefusedError(f"{source} has no {CHAT_TEXT_NGRAM}-word run of messages to check copied chat text "
@@ -776,7 +842,8 @@ def notice_text() -> str:
 
 def text_of(name: str, data: bytes) -> str | None:
     """Text of a file called `name`: a TEXT_SUFFIXES/TEXT_NAMES file in UTF-8 (UTF-8/16/32 with a BOM) with no
-    control character but tab, LF and CR. Anything else is None: an unknown file type is never guessed at."""
+    control character but tab, LF and CR, no base64 `data:` URI and no Unicode tag character. Anything else is None:
+    an unknown file type is never guessed at."""
     suffix = PurePosixPath(name).suffix.lower()
     if suffix not in TEXT_SUFFIXES and PurePosixPath(name).name not in TEXT_NAMES:
         return None
@@ -790,7 +857,9 @@ def text_of(name: str, data: bytes) -> str | None:
         text = data.decode(encoding)
     except UnicodeDecodeError:
         return None
-    return None if _CONTROL.search(text) else text  # NUL, bell, escape...: binary posing as text
+    if _CONTROL.search(text):  # NUL, bell, escape...: binary posing as text
+        return None
+    return None if _DATA_URI.search(text) or _TAG_CHARS.search(text) else text
 
 
 def is_list_file(path: str) -> bool:
