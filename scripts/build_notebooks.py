@@ -748,22 +748,13 @@ while start < len(todo):
     print(f"part {part[0]:05d}: {len(rows)} chats, {sum(r['new_tokens'] for r in rows)} new tokens, "
           f"{seconds:.1f} s/chat | {len(done) + start + len(part)}/{TARGET_RAW}")
     start += UPLOAD_EVERY"""),
-code("""from collections import Counter
-from fym1.eval.lang import is_malagasy
+code("""from fym1.eval.lang import is_malagasy
 
 rows = sorted(raw_rows(), key=lambda r: r["index"])
-kept, dropped = synth.filter_conversations((synth.parse_conversation(r["output"]) for r in rows), real,
-                                           is_malagasy=is_malagasy)
-generators = sorted({(r["generator"], r["dtype"]) for r in rows})
-stats = synth.synth_stats(
-    raw=len(rows), kept=len(kept), dropped=dropped, by_generator=Counter(r["generator"] for r in rows),
-    meta={"seed": SEED, "few_shot_k": FEW_SHOT_K, "target_raw": TARGET_RAW,
-          "generator": ", ".join(g for g, _ in generators), "dtype": ", ".join(sorted({d for _, d in generators})),
-          "generator_licence": ", ".join(sorted({synth.generator_licence(g) for g, _ in generators})),
-          "gpus": GPU_NAMES if todo else None, "code_sha": CODE_SHA, "data_revision": DATA_REVISION,
-          "gen_seconds": round(sum(r["gen_seconds"] for r in rows), 1),
-          "new_tokens": sum(r["new_tokens"] for r in rows)})
-synth.validate_stats(stats)
+kept, stats = synth.filter_raw_rows(  # same step as scripts/filter_synth.py
+    rows, real, is_malagasy,
+    meta={"seed": SEED, "few_shot_k": FEW_SHOT_K, "target_raw": TARGET_RAW, "gpus": GPU_NAMES if todo else None,
+          "code_sha": CODE_SHA, "data_revision": DATA_REVISION})
 uploads = {"synth/filtered.ndjson": "".join(json.dumps(r, ensure_ascii=False) + "\\n" for r in kept).encode(),
            "synth/synth_stats.json": (json.dumps(stats, indent=2) + "\\n").encode()}
 if PROMOTE:

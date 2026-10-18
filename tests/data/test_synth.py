@@ -5,6 +5,7 @@ import json
 import pytest
 
 from fym1.data import synth
+from fym1.data.known_words import KNOWN_WORDS, word_list
 from fym1.data.synth import (
     DROP_REASONS,
     Seed,
@@ -180,15 +181,50 @@ def test_placeholder_copied_from_examples_is_dropped():
     assert dropped["placeholder"] == 2
 
 
-def test_unknown_capitalised_name_is_dropped_but_allowed_names_and_common_words_pass():
-    _, dropped = run(conv("Salama Zebulon, aiza ianao?", "Eto aho"))
-    assert dropped["unknown_name"] == 1
-    kept, _ = run(conv("Salama Rindra! Merci be", "Ok Soa, Tsara be"))
+def test_everyday_capitalised_word_at_line_start_is_kept():
+    kept, dropped = run(conv("Merci be!", "Tsara be"), conv("Bonjour, aiza ianao?", "Eto aho"))
+    assert len(kept) == 2 and dropped["unknown_name"] == 0
+
+
+def test_unknown_name_like_token_is_dropped_not_replaced():
+    kept, dropped = run(conv("Salama Zebulon, aiza ianao?", "Eto aho"), conv("Zebulon, aiza ianao?", "Eto aho"))
+    assert kept == [] and dropped["unknown_name"] == 2
+
+
+def test_fake_pool_names_are_kept():
+    kept, _ = run(conv("Salama Rindra! Merci be", "Ok Soa"))
+    assert len(kept) == 1
+
+
+CORPUS_ONLY = "zokitra"  # synthetic: no real list has it; added to mg_corpus alone below
+
+
+def test_mid_sentence_capitalised_word_a_list_knows_is_kept():
+    kept, _ = run(conv("Ok Tsara be", "Eny Merci be"))
+    assert len(kept) == 1
+
+
+def test_lowercase_unknown_word_is_kept():
+    kept, _ = run(conv("Salama blorpik, aiza ianao?", "Eto aho ry blorpik"))
+    assert len(kept) == 1
+
+
+@pytest.fixture
+def corpus_only(monkeypatch):
+    corpus = KNOWN_WORDS["mg_corpus"]
+    monkeypatch.setitem(KNOWN_WORDS, "mg_corpus", word_list(corpus.folded | {CORPUS_ONLY}))
+    return CORPUS_ONLY.capitalize()
+
+
+def test_corpus_only_capitalised_word_is_dropped_mid_sentence_and_in_a_name_slot(corpus_only):
+    kept, dropped = run(conv("Salama", f"Efa nandeha i {corpus_only}"), conv("Salama", f"Tsara ny {corpus_only}"))
+    assert kept == [] and dropped["unknown_name"] == 2
+    kept, _ = run(conv("Salama", f"{corpus_only} ve?"))  # at a sentence start the corpus clears it, like the gate
     assert len(kept) == 1
 
 
 def test_any_shared_eight_word_run_with_a_real_chat_drops_it():
-    copied = "ary hoy izy hoe Mbola any am-piasana aho fa efa ho vita kely"
+    copied = "ary hoy izy hoe mbola any am-piasana aho fa efa ho vita kely"
     _, dropped = run(conv("Salama", copied))
     assert dropped["leak_8gram"] == 1
     seven = "Mbola any am-piasana aho fa efa"  # 7 words with "am-piasana" split in two = 7 \w-words
@@ -322,3 +358,18 @@ def test_sampling_overflow_is_recognised():
                                    RuntimeError("bad input")])
 def test_other_errors_are_not_sampling_overflow(error):
     assert not synth.is_sampling_overflow(error)
+
+
+# --- filter_raw_rows (04_synth's last step, also scripts/filter_synth.py) -------------------------------------
+
+
+def test_filter_raw_rows_keeps_parsed_chats_and_builds_valid_stats():
+    gen = "google/gemma-4-12B-it"
+    rows = [{"output": out, "generator": gen, "dtype": "float32", "gen_seconds": 2.25, "new_tokens": 7}
+            for out in ("A: Manao ahoana?\nB: Tsara be, misaotra", "tsy misy resaka eto")]  # fmt: skip
+    kept, stats = synth.filter_raw_rows(rows, REAL, says_malagasy, meta={"seed": 0, "code_sha": "abc"})
+    assert [r["messages"][1]["content"] for r in kept] == ["Tsara be, misaotra"]
+    assert (stats["raw"], stats["kept"], stats["dropped"]["unparseable"]) == (2, 1, 1)
+    assert (stats["seed"], stats["code_sha"], stats["generator"], stats["dtype"]) == (0, "abc", gen, "float32")
+    assert (stats["generator_licence"], stats["gen_seconds"], stats["new_tokens"]) == ("apache-2.0", 4.5, 14)
+    validate_stats(stats)
