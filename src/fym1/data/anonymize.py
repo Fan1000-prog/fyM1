@@ -33,10 +33,12 @@ MIN_NAME_PREFIX = 4
 # Malagasy possessive / pronoun endings glued to names: "Soako" (my Soa), "Fyntsika".
 NAME_SUFFIXES = ("ntsika", "tsika", "nao", "nay", "ko", "ny")
 
+# "[at]", "(at)" or a spaced "@", with its gaps: one way to split each run of spaces
+_SPELLED_AT = r"(?:\s*(?:\[at\]|\(at\))\s*|\s+@\s+)"
 EMAIL = re.compile(
     r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b"
     r"|\b[\w.+-]+@(?:gmail|yahoo|hotmail|outlook|live|ymail|icloud)\b"  # domain cut short
-    r"|\b[\w.+-]+\s*(?:\[at\]|\(at\)|\s@\s)\s*[\w-]+(?:\s*(?:\.|\[dot\]|\(dot\))\s*[\w-]+)*"
+    rf"|\b[\w.+-]+{_SPELLED_AT}[\w-]+(?:\s*(?:\.|\[dot\]|\(dot\))\s*[\w-]+)*"
     r"\s*(?:\.|\[dot\]|\(dot\))\s*(?:com|fr|mg|net|org|io|me|co)\b",  # obfuscated: x [at] y . com
     re.IGNORECASE,
 )
@@ -120,14 +122,17 @@ TIME = re.compile(r"(?<![\w:])(?:[01]?\d|2[0-3])[:hH][0-5]\d(?![\w:])")
 # A phone starting outside a date with one of these still wins over a date shape inside it,
 # unless it continues an amount ("1 261 340 000 19/04", "1 020 000 15/03"). "03-24-…": the
 # 3 may stand apart from the next digit by a mark, not by a space ("03 45" is a time).
-_MOBILE_START = r"[0Oo]\s*\)?\s*[./,_-]?\s*[23](?:\s*[./,_-]\s*)?\d"
+# Each run of spaces has one way to match (no "\s*" next to an optional piece and another "\s*"),
+# so a long run of spaces can't make the regex backtrack for seconds.
+_ZERO_GAP = r"[0Oo]\s*(?:\)\s*)?(?:[./,_-]\s*)?"  # 0, then a ")" and a mark, each optional, with any gap
+_MOBILE_START = rf"{_ZERO_GAP}[23](?:\s*[./,_-]\s*)?\d"
 _STRONG_PHONE_START = re.compile(rf"\(?\s*(?:\+|00[1-9]|261|{_MOBILE_START})")
 # A Malagasy number has 9 digits after its 0 or its 261.
 _SUBSCRIBER_DIGITS = 9
 # A strong Malagasy start, then every digit after it: "034 12 01/02/26" and "261 32 01/11/12 12"
 # carry a stray digit, so the exact-length PHONE misses them once a date shape sits inside.
 _STRONG_RUN = re.compile(
-    rf"(?<![\w+])(?:{_MG_COUNTRY}{_SEP}(?:{_ZERO_TRUNK})?|(?:\(\s*)?(?={_MOBILE_START})[0Oo]\s*\)?{_SEP})"
+    rf"(?<![\w+])(?:{_MG_COUNTRY}{_SEP}(?:{_ZERO_TRUNK})?|(?:\(\s*)?(?={_MOBILE_START}){_ZERO_GAP})"
     rf"(?P<body>\d(?:{_SEP}\d){{{_SUBSCRIBER_DIGITS - 1},}})"
 )
 # A grouped amount right before: "1 ", "25 000 " ("Ar 2500 261 …" and "35.000 261 …" are not one)
@@ -191,7 +196,7 @@ _NUMBER_BEFORE = re.compile(r"\d[ .,]?$")  # a number goes on right before: not 
 # "02 01 2029-02-02" starts the time "02 01", "350," in "350,000,000 15-03-2026" the price
 _NUMBERS_BEFORE = re.compile(r"(?:\d+[ .,] *)+$")
 # Digits that run on after a phone shape (any gap, no date or time in between)
-_RUN_ON = re.compile(r"(?:\s*[./,_-]?\s*\d)+")
+_RUN_ON = re.compile(rf"(?:{_SEP}\d)+")
 
 
 def _clear_number_end(blanked: str, start: int) -> int | None:
