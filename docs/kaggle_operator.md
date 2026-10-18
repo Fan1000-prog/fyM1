@@ -3,9 +3,10 @@
 Kaggle is the second GPU runtime next to Colab (owner-approved: 30 GPU h/week, 12 h sessions). It is
 driven from the terminal with the Kaggle CLI, not a browser.
 
-Status: prep only. `fym1.runtime` (HF token from Kaggle or Colab secrets, output and scratch folders) and
-`scripts/kaggle_push.py` exist, but the notebooks (`00_baseline`, `01_train`, in PR #13) do not use them
-yet; that wiring is a follow-up PR after #13 merges. Until then this page describes the intended flow.
+`00_baseline` and `01_train` run unchanged on Colab and Kaggle: a bootstrap cell gets the HF token from
+Kaggle or Colab secrets (a verbatim copy of `fym1.runtime.hf_token`, checked by a test), pins one GPU, and
+later cells put small outputs in `output_dir()` and big files in `scratch_dir()`. Push only notebooks from
+a commit that has this wiring (the kaggle-wiring PR); older notebooks read the token from Colab only.
 
 ## One-time setup (owner)
 - Kaggle account with phone verification (needed for GPU and internet).
@@ -40,7 +41,7 @@ small wanted outputs (`fym1.runtime.output_dir()`). Model downloads, checkpoints
 
 ## To verify on the first run (then update this page)
 - The `machine_shape` value `NvidiaTeslaT4` is accepted (the CLI does not list the allowed names).
-- Whether the T4 runtime shows two GPUs; if so the wiring PR sets `CUDA_VISIBLE_DEVICES=0`.
+- Whether the T4 runtime shows two GPUs (the bootstrap sets `CUDA_VISIBLE_DEVICES=0` either way).
 - The `HF_TOKEN` secret stays attached to the kernel across new versions pushed from the CLI.
 - `kernels output` returns the run log.
 - The temp folder used by `scratch_dir()` has room for a 12B model download plus checkpoints.
