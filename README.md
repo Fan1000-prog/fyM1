@@ -166,5 +166,9 @@ Code: [Apache-2.0](LICENSE). The model follows the base model's license (see [MO
   word lists to tell ordinary words from names. wordfreq's word data is licensed
   [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); word lists derived from it keep that licence
   and this attribution.
+- [Wikipedia](https://www.wikipedia.org/) (Malagasy, French, English): the data cleaner's word lists use
+  word case counts from its text, licensed [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+- [INSEE fichier des prénoms](https://www.insee.fr/fr/statistiques/7633685): the French first-name list,
+  [Licence Ouverte / Etalab 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence/).
 
 Made by Fan's lab.

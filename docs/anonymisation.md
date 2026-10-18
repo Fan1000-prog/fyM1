@@ -81,10 +81,12 @@ tests `tests/data/test_gate.py`). It drops a whole conversation if any turn stil
 | Reason | Caught | Kept |
 |---|---|---|
 | `long_number` | 7+ digits in one run across any non-letter characters (every kind of space, `. , / \ - _ ( ) + ; * \| :`, unicode dashes) (`12 34 567`, `(034) 12 345 67`, `15/03/2026`) | a price: clean 3-digit groups or no separator, then `Ar`, `Ariary`, `fmg`, `€`, `euro(s)`, `eur` (`1 500 000 Ar`), and not phone-shaped: no `+` before it, digits not starting `0` or `261`, not `3[2-9]` + 7 digits (`0341234567 Ar`, `341234567 Ar` are long numbers) |
-| `contact` | an email, a link with a path or query, an `@handle`, a private-use mark from a failed replacement | `<EMAIL>`, `<URL>`, a bare `host.com` |
+| `contact` | an email, a link with a path or query, an `@` before a word or a placeholder (`@njaka`, `@ njaka`, `njaka@ <URL>`), `at`/`arobase`/`(at)`/`[at]` before a placeholder or a mail host (`njaka at gmail`), a private-use mark from a failed replacement | `<EMAIL>`, `<URL>`, a bare `host.com`, `@ 3 ora` |
 | `too_many_unknown` | more than 30% of the conversation's words would be replaced as names (below) | 30% or less |
 
-The gate fails closed: replacing or dropping too much is fine, a leak is not. Words are letter runs
+The gate fails closed: replacing or dropping too much is fine, a leak is not. The anonymiser and the
+gate both NFKC-normalise text first, so full-width (`＠`, `Ｒ`) and circled (`Ⓡ`) characters are read as
+plain ones (kept text comes out normalised: no-break spaces become plain spaces). Words are letter runs
 split at digits, underscores, punctuation and a lower-to-upper case change, so "Rakoto2", "2Rakoto",
 "jean_r" and "salutRakoto" are checked; only the exact placeholders (`<TEL>`, `<EMAIL>`, `<URL>`,
 `<HANDLE>`, `<ADDRESS>`) are skipped. A hyphenated `Ra-be` is one word.
@@ -102,7 +104,7 @@ replaced. Any other pool name ("Mialy" where nobody got that fake) is replaced l
      Dada, Zoky, Zoma, Alatsinainy, Desambra, Krismasy, Rtoa, Dr, Andao, ...).
   4. `fr`, `en` (`fr_words.txt`, `en_words.txt`): the 30,000 most frequent French and English words from `wordfreq`.
 - **Cleared mid-sentence or after a person marker** (`i`, `ry`, `ra`, `n'i`, `an'i`, `amin'i`,
-  `tamin'i`, `@`) only by the hand list `known_names` ("any Tana", "i Neny"). "tonga ny Fiara",
+  `tamin'i`) only by the hand list `known_names` ("any Tana", "i Neny"). "tonga ny Fiara",
   "hoy Bonjour" are replaced.
 - **Never cleared**: a person name (`PERSON_NAMES`): `first_names.txt`, the fake-name pool, and
   `name_deny_list.txt`, common Malagasy given names that are also words (Hery, Soa, Vola, Mamy,
@@ -117,13 +119,17 @@ Also replaced, the same way:
 - **A pool name that was already in the raw conversation** ("Rabe no nandeha", "RABE2" before
   anonymising): there it is a real person, not our fake, so it is replaced by a different fake, word
   or not. `build_records` finds these per conversation and passes them to the gate.
-- **Lower-case names.** Anywhere, a Malagasy given name that is not an everyday word
-  (`mg_first_names.txt`: "salut mialy", "aiza ianao njaka?"), and letters with digits inside ("n1r1na").
-  After a person marker, a person name or a word no list knows ("ry hasina",
-  "ry hery", "tamin'i rakoto"; "ry namana", "i dada" stay).
-  Anywhere, `ra` + a word no list knows ("rakoto"), and any `ra-` hyphenated word.
-  Anywhere, a word in `first_names.txt` that is not in `wordlike_first_names.txt` ("salut sandrine",
-  "chez kevin"; "je t'aime", "une rose", "tia" stay), and a first name hyphen-joined to another
+- **Lower-case words no list knows** (fail closed; name lists can never hold every name). Anywhere,
+  a lower-case word that no known-word list knows is replaced like an unknown capitalised word:
+  "salut tsanta", "rakoto", "salut sandrine", usernames such as "sandrinerakoto", and letters with
+  digits inside ("n1r1na"). Person names are never known, so `mg_first_names.txt` ("mialy") and
+  `first_names.txt` ("sandrine") names are always replaced. Kept: words a list knows ("trano", "lol",
+  "mdr"), and names that are also everyday words (`name_deny_list.txt`, `wordlike_first_names.txt`,
+  the fallback "olona": "mila vola", "soa ve", "une rose", "tia"). Lists miss some everyday words too
+  (colloquial Malagasy, some French and English words Wikipedia mostly capitalises): those are
+  replaced as well, which is over-masking, and can push a conversation over the 30% drop line.
+  After a person marker, a person name or a word no list knows ("ry hasina", "ry hery"; "ry namana",
+  "i dada" stay). Any `ra-` hyphenated word, and a first name hyphen-joined to another
   ("jean-pierre", "marie-claire").
 
 Words match folded (lower case, no accents). Stretched letters are collapsed only for real
@@ -169,9 +175,8 @@ When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit ref
 ## Known limits — the strict gate is the backstop
 
 - **Third-party names typed as plain text** (someone not in the chat, no `@`) are not detected
-  automatically; that needs named-entity recognition. Capitalised ones are replaced by the strict
-  gate unless they are also an ordinary word; lower-case ones are caught only after a name particle
-  or with a `ra` prefix.
+  automatically; that needs named-entity recognition. The strict gate replaces them, capitalised or
+  lower-case, unless a known-word list has them: a name that is also an ordinary word can pass.
 - **A name that is also a word** passes only at a sentence start, and only if it is in no name list:
   a Malagasy given name missing from `name_deny_list.txt`, a name that is also an everyday Malagasy
   word ("Tia", "Mila"), or an English-only name rare in France. Mid-sentence it is always replaced
@@ -180,8 +185,8 @@ When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit ref
 - Capitalised ordinary words in no list (rare words, typos, places), any capitalised word
   mid-sentence that the hand list lacks, and sentence-start words that are also names ("Faly be aho")
   are replaced by a fake name: over-masking, not a leak.
-- A real pool name ("Rabe") is caught only in a conversation whose raw text holds it capitalised.
-  Typed in lower case and not after a name particle ("hitako mamy"), it stays.
+- A pool name that is also an everyday word ("Soa", "Vola", "Mamy") typed in lower case and not after
+  a name particle ("hitako mamy") stays.
 - Names spelled out or disguised: "Ni-ri-na", "N i r i n a". ("N1r1na", "Rak0to" are replaced: letters
   with digits inside are always a name.)
 - A phone split over two turns ("nomerao 034 12", then "345 67 io"): the gate checks one turn at a time.
