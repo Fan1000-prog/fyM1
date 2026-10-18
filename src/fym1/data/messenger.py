@@ -181,14 +181,19 @@ def load_dyi_threads(export_dir: Path) -> list[Thread]:
 FLAT_MESSAGE_KEYS = {"sender", "timestamp"}
 
 
-def _is_flat_export(data: object) -> bool:
-    """`{"conversation": {...}, "messages": [{"id", "sender", "text", "timestamp"}, ...]}`."""
+def _has_flat_keys(data: object) -> bool:
+    """`{"conversation": {...}, "messages": [{"sender", "timestamp", ...}, ...]}`, any sender value."""
     return (
         isinstance(data, dict)
         and isinstance(data.get("conversation"), dict)
         and isinstance(data.get("messages"), list)
         and all(isinstance(m, dict) and FLAT_MESSAGE_KEYS <= m.keys() for m in data["messages"])
     )
+
+
+def _is_flat_export(data: object) -> bool:
+    """`{"conversation": {...}, "messages": [{"id", "sender", "text", "timestamp"}, ...]}`, senders strings."""
+    return _has_flat_keys(data) and all(isinstance(m["sender"], str) for m in data["messages"])
 
 
 def _flat_zone(conversation: dict, path: Path) -> ZoneInfo:
@@ -259,6 +264,9 @@ def load_flat_threads(export: Path) -> list[Thread]:
     threads = []
     for path in paths:
         data = json.loads(path.read_text(encoding="utf-8"))
+        if _has_flat_keys(data) and not _is_flat_export(data):
+            bad = next(i for i, m in enumerate(data["messages"]) if not isinstance(m["sender"], str))
+            raise ValueError(f"{path}: message {bad} has no sender name (sender must be a string).")
         if not _is_flat_export(data):
             raise ValueError(
                 f"{path}: unknown export shape. Expected {{'conversation': {{...}}, 'messages': "
