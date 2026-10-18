@@ -1,10 +1,10 @@
-# fyM1
+# fy-m1
 
 An open AI model that chats in everyday Malagasy. The way people really text — not like a government letter.
 
 "fy" means sweet or pleasant in Malagasy. M is for Malagasy. 1 is the first version.
 
-**[Try it](#try-it)** · [Paper](paper/fym1.pdf) · [Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fyM1-arena)
+**[Try it](#try-it)** · [Paper](paper/fym1.pdf) · [Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)
 
 > **Status: v0.1.** *pending* means not measured yet. Coming in v0.2: the full panel's blind human
 > ratings, each model's answer to each test prompt, and the layer-pruning experiment.
@@ -14,7 +14,7 @@ An open AI model that chats in everyday Malagasy. The way people really text —
 1. Start from the open model that is already best at Malagasy, and prove it with numbers.
 2. Fine-tune it on a free Google Colab GPU so it chats in natural, everyday Malagasy.
 3. Make it smaller by removing what Malagasy does not need, without making it worse.
-4. Measure the base model against fyM1 honestly, and write it up in a short paper.
+4. Measure the base model against fy-m1 honestly, and write it up in a short paper.
 5. Share everything: the model, a free demo, the code, the notebooks and the paper.
 
 ## What this is
@@ -28,10 +28,10 @@ Real Malagasy texting is different:
 - Spelling is short and phonetic ("zany" for "izany", "bé", "ahn").
 - Replies are short, friendly, a bit teasing, with emoji.
 
-fyM1 aims for that style. Mixing Malagasy and French is correct here. A reply only counts as "drifting"
+fy-m1 aims for that style. Mixing Malagasy and French is correct here. A reply only counts as "drifting"
 if it is fully French or English with no Malagasy at all.
 
-fyM1 is not a frontier model. The goal is simple: clearly and measurably better than its base model at
+fy-m1 is not a frontier model. The goal is simple: clearly and measurably better than its base model at
 everyday Malagasy chat.
 
 ## How the model was chosen
@@ -70,7 +70,7 @@ Every choice, and why we made it:
 | Save a checkpoint to a private repo often, and resume from the latest one. | Free Colab sessions disconnect. No work is lost. |
 | Stop early if the held-out loss gets worse. | Reduces overfitting. The leak check below is what tests memorising. |
 | Test prompts are written fresh, not taken from the chats. | So the test prompts can be public and anyone can run them. The models' answers to them come out in v0.2. |
-| **Leak check** before release: any fyM1 answer that shares a run of 8 words with the training chats blocks release. The owner sees only the matched 8 words, never the chat, and it ships only if every match is a generic phrase. | Privacy again. |
+| **Leak check** before release: any fy-m1 answer that shares a run of 8 words with the training chats blocks release. The owner sees only the matched 8 words, never the chat, and it ships only if every match is a generic phrase. | Privacy again. |
 | **Vocabulary trimming**: drop tokens Malagasy, French and English never use. Ships only if it passes its checks. | A smaller download. The checks: held-out Malagasy text comes back unchanged, at least 95% of test answers stay identical (greedy decoding), and Belebele stays within 1 point. |
 | No layer pruning yet. | Cutting real layers needs a lot of retraining to heal. Free GPU time cannot pay for that. Planned for v0.2 as an experiment. |
 | Demo runs a 4-bit GGUF file on a free CPU. | Free for everyone. It is slow. |
@@ -83,7 +83,7 @@ The numbers below come from files in [`results/`](results/), written by scripts 
 typed by hand.
 
 <!-- numbers:start -->
-| Measure | Base model | fyM1 |
+| Measure | Base model | fy-m1 |
 |---|---|---|
 | Replies that drift to full French/English (lower is better) | pending | pending |
 | Naturalness, LLM judge, 1-5 | pending | pending |
@@ -91,7 +91,7 @@ typed by hand.
 | Belebele Malagasy reading (accuracy) | pending | pending |
 | FLORES chrF++ Malagasy to English | pending | pending |
 | FLORES chrF++ English to Malagasy | pending | pending |
-| Blind human votes so far (early votes): fyM1 win rate | - | pending |
+| Blind human votes so far (early votes): fy-m1 win rate | - | pending |
 <!-- numbers:end -->
 
 Where each number comes from:
@@ -118,12 +118,12 @@ The LLM judge is a cheap extra signal. Native speakers are the real judges.
 
 ## Try it
 
-- **Chat with it:** [fyM1-chat](https://huggingface.co/spaces/Fan1000-Prog/fyM1-chat) — free, no login.
+- **Chat with it:** [fy-m1-chat](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-chat) — free, no login.
   Try "Sali ahn" or "De ahoana?".
 - **Download the model:** <!-- n:model-repo -->pending<!-- /n --> on [Hugging Face](https://huggingface.co/Fan1000-Prog).
   The GGUF file runs with llama.cpp and Ollama.
 - **Read the paper:** [paper/fym1.pdf](paper/fym1.pdf)
-- **Help us rate (native speakers):** [fyM1-arena](https://huggingface.co/spaces/Fan1000-Prog/fyM1-arena) —
+- **Help us rate (native speakers):** [fy-m1-arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena) —
   read two answers, pick the more natural one. No login.
 
 ## How to rerun
@@ -131,7 +131,7 @@ The LLM judge is a cheap extra signal. Native speakers are the real judges.
 You need [uv](https://docs.astral.sh/uv/) and a free Google Colab account.
 
 ```bash
-git clone https://github.com/Fan1000-prog/fyM1 && cd fyM1
+git clone https://github.com/Fan1000-prog/fy-m1 && cd fy-m1
 uv sync
 uv run pytest            # all code tests
 ```
@@ -139,7 +139,7 @@ uv run pytest            # all code tests
 Then, in order:
 
 1. `notebooks/00_baseline.ipynb` on a Colab T4 — scores the candidate models.
-2. `notebooks/01_train.ipynb` — trains fyM1. Rerun it after a disconnect; it resumes.
+2. `notebooks/01_train.ipynb` — trains fy-m1. Rerun it after a disconnect; it resumes.
 3. `notebooks/02_eval_export.ipynb` — answers the test prompts, scores both models, exports the GGUF.
 4. `notebooks/03_trim.ipynb` — vocabulary trimming and its checks.
 5. Rebuild the numbers and the paper:

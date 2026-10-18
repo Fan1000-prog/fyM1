@@ -1,1 +1,1 @@
-"""fyM1: everyday-Malagasy chat model tooling."""
+"""fy-m1: everyday-Malagasy chat model tooling."""
