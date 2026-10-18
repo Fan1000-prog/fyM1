@@ -68,7 +68,7 @@ Recorded in spec §8 and the plan's "Changes from the plan" too.
 - **Anonymiser trade-offs (owner):** glued `tel34…`/`telO34…` and no-0 layouts like `34 123 45 67` stay known
   limits; no narrower rule for `tel341234567`. PR #24 merged "as is" and kept (no revert) on the owner's word; its date side effect gets fixed forward (§5).
 - **Model pick:** delegated to the lead; same tests for every candidate (plain-text 0-shot Belebele = `belebele_acc`,
-  FLORES+ both ways, tokens per word, 15-step QLoRA smoke on a T4) plus the owner's 1–5 rating of 20 greeting answers.
+  FLORES+ both ways, tokens per word, 15-step QLoRA smoke on a T4) plus the automatic blind greeting gate on 20 greeting answers (`results/greeting_gate.json`).
 - **Compute:** $0. Kaggle is the main GPU (~30 h/week, 12 h sessions), Colab the backup. On a T4, Unsloth trains
   Gemma 3 and Gemma 4 in float32 (slow); the 9B instruct and AfriqueQwen-8B ran in 16-bit.
 - **Training code** reaches the GPU only by syncing clean `origin/main` to the Hub; never during a training run.
@@ -90,7 +90,7 @@ From `results/model_selection.json` on `main` (written by `scripts/build_model_s
 | License | CC-BY-4.0 | Apache-2.0 | CC-BY-4.0 | Gemma Terms of Use |
 
 Caveat for the 9B: its answer to "Sali ahn" came back in Hausa and several greetings echo the prompt, so the
-owner's rating matters. Gemma 4's earlier unscripted smoke (≈126 s/step, loss rising at lr 2e-4) was removed.
+blind greeting gate (`results/greeting_gate.json`) matters. Gemma 4's earlier unscripted smoke (≈126 s/step, loss rising at lr 2e-4) was removed.
 
 ## 5. Open now
 
@@ -100,7 +100,7 @@ owner's rating matters. Gemma 4's earlier unscripted smoke (≈126 s/step, loss 
 | Kaggle baseline run | owner, then trainer | version 2 (Gemma 3) **failed** with no GPU, no internet and no HF_TOKEN, so nothing was measured. Likely the Kaggle account isn't phone-verified (needed for GPU and internet) and the secret isn't switched on for the notebook. Owner: verify phone, check the notebook's Accelerator (GPU T4), Internet on, HF_TOKEN on; then the trainer re-pushes (details in LEAD-HANDOFF §15) |
 | PR #22 baseline guards (draft) | trainer | parked until Gemma 3's result shows `env.loaded_from == "google/gemma-3-12b-it"`; then sync with main, review, merge |
 | Messenger export | owner | waiting on Meta |
-| 20-greeting ratings per model | owner | after all four candidates have answers |
+| Blind greeting gate | automatic | done: `results/greeting_gate.json` (AfriqueQwen-8B dropped: base model, no chat) |
 
 Run order: Gemma 3 (full) → Gemma 4 (plain-text Belebele, FLORES+, scripted 15-step smoke) → AfriqueQwen-8B
 (plain-text Belebele, FLORES+). New result JSONs go in a PR on a fresh branch.
@@ -109,7 +109,7 @@ Run order: Gemma 3 (full) → Gemma 4 (plain-text Belebele, FLORES+, scripted 15
 
 1. **Fix the #24 date issue** (owner kept #24): mask whole real dates before phone matching; own PR and review; before the real export run.
 2. **Finish the baseline** on Kaggle (run order above); merge result PRs; finish or drop PR #22.
-3. **Owner rates** the 20 greeting answers per model; **lead picks** the base model and sends the table + reason.
+3. **Blind greeting gate** scores the 20 greeting answers per model (`results/greeting_gate.json`); **lead picks** the base model and sends the table + reason.
 4. **Export lands** in `~/malagasy-data/raw/`: `data` runs `build_chats.py` from `main`, then the post-run checks
    (counts only to the lead).
 5. **Owner reviews** the 100-sample sheet and ticks real names on the leftover-names list; rerun with the blocklist.

@@ -1,0 +1,178 @@
+{
+  "model": {
+    "slug": "gemma-3-12b-it",
+    "hub_id": "google/gemma-3-12b-it",
+    "quant": "bnb 4-bit nf4 (Unsloth load_in_4bit)"
+  },
+  "env": {
+    "gpu": "Tesla T4",
+    "torch": "2.11.0+cu128",
+    "model_dtype": "torch.float16",
+    "loaded_from": "google/gemma-3-12b-it",
+    "code_sha": "81fdc5c",
+    "vram_after_load_gb": 7.84,
+    "load_s": 216,
+    "utc": "2026-10-18T09:18:54.565628+00:00"
+  },
+  "belebele": {
+    "acc": 0.7511,
+    "n": 900,
+    "nan_rows": 0,
+    "seconds": 704,
+    "protocol": "0-shot, chat template, English instruction, argmax of next-token logits over '1'-'4'",
+    "retried_items": 0,
+    "code_sha": "81fdc5c",
+    "force": null
+  },
+  "belebele_completion": {
+    "acc": 0.6967,
+    "n": 900,
+    "nan_rows": 0,
+    "seconds": 646,
+    "protocol": "0-shot plain-text completion (P/Q/A-D/Answer:), no chat template, argmax of next-token logits over ' A'-' D'",
+    "retried_items": 0,
+    "code_sha": "81fdc5c",
+    "force": null
+  },
+  "flores": {
+    "eng-plt_chrf++": 36.84,
+    "plt-eng_chrf++": 51.77,
+    "n": 200,
+    "seconds": 1167,
+    "protocol": "devtest first 200, 0-shot chat prompt, greedy, max 256 new tokens, first line kept",
+    "retried_items": 0,
+    "code_sha": "81fdc5c",
+    "force": null
+  },
+  "tokens_per_word": {
+    "value": 2.792,
+    "n_sentences": 1000,
+    "source": "wikimedia/wikipedia 20231101.mg, shuffle seed 42, 5-60 words",
+    "code_sha": "81fdc5c",
+    "force": null
+  },
+  "greetings": {
+    "source": "eval/prompts.jsonl greetings, first 20",
+    "sampling": "temp 0.7, top_p 0.9, max 128 new tokens, seed 42, no system prompt",
+    "retried_items": 0,
+    "answers": [
+      {
+        "prompt": "Sali ahn",
+        "answer": "\"Sali ahn\" doesn't have a clear meaning in any common language. It seems like it might be:\n\n*   **A misspelling or incomplete phrase:** Perhaps it's part of a longer greeting or sentence.\n*   **A name or nickname:** It could be a person's name or a familiar way to address someone.\n*   **A phrase in a less common language:** There's a chance it's a phrase in a language I'm not familiar with.\n\nCould you provide more context? For example:\n\n*   Where did you hear or see this phrase?"
+      },
+      {
+        "prompt": "De ahoana?",
+        "answer": "Miaraka amin'ny fomba ahafahan'ny olona mianatra amin'ny alàlan'ny fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba fomba"
+      },
+      {
+        "prompt": "De aona ry zalahy?",
+        "answer": "Misy maro ny antony mety mahatonga olona ho zalahy. Ny tena zava-dehibe dia ny fomba fihevitr'olona momba ny tenany sy ny fitokianany.\n\n**Eny amin'ny lafanan'ny biôlôjia:**\n\n*   **Ny chromôsôma:** Ny lehilahy dia manana chromôsôma XY.\n*   **Ny zava-misy ara-nofo:** Ny zava-misy ara-nofo isan-karazany, toy ny zava-"
+      },
+      {
+        "prompt": "Salama e! Manao ahoana nareo ao?",
+        "answer": "Manao ahoana koa! Tsara, misaotra ny Tomazaia. Ahoana ny androany ho anao?"
+      },
+      {
+        "prompt": "Akory aby e ?",
+        "answer": "\"Akory aby e?\" neznámy výraz v slovenskom jazyku. Mohol by to byť typo alebo neznámy slangový výraz.\n\nAk mi poskytnete viac kontextu, pokúsim sa vám pomôcť. Napríklad:\n\n*   **Kde ste to počuli?** (v rozhovore, v piesni, v knihe...)\n*   **V akom jazyku to bolo povedané?** (slovenčina, iný jazyk...)\n*   **O čom sa rozprávali, keď to bolo povedané?**"
+      },
+      {
+        "prompt": "Mbola velona ve ianao? 😂",
+        "answer": "Mbola velona aho! Izaho dia modely fitaovana lehibe, noho izany, tsy manamitra izaho. Ny famintinana, tsy misy ny fahafatesana ho an'ny AI. 😂"
+      },
+      {
+        "prompt": "Inona no vaovao any aminareo any?",
+        "answer": "Misy maro ny vaovao eo amin'ny sehatra anio! Inona no tena tiany hodinihina? \n\nMba hahafantarako aminao ny vaovao tena manohina anao, azonao ambohitsy ny filazan-kevitro:\n\n*   **Politika:** Misy vaovao momba ny fifanaraham-piaraha-miasa sy ny fampahalalana momba ny fampitsabahan'ny governementa ve ianao?\n*   **Ekonomia:** Misy vaovao momba ny vidin'ny var"
+      },
+      {
+        "prompt": "Manahoana tompoko",
+        "answer": "Manahoana! Izaho no mpomba anao. Inona no azona fombao?"
+      },
+      {
+        "prompt": "Salut, tsara ve ny andro ao?",
+        "answer": "Manao ahoana! Tsara be ny andro, mafana ary mazona kely. Inona no fomba fandraharahana ny androany ho anao?"
+      },
+      {
+        "prompt": "Hey, efa nifoha ve?",
+        "answer": "Miarina! Azafady, inona no ifanaovanao? (Hello! Please, what are you doing?)\n\nI'm responding in Malagasy, as you started the conversation with \"Hey, efa nifoha ve?\". It means \"Hey, are you awake?\".\n\nLet me know what you'd like to talk about!  Do you want to practice Malagasy, or something else?"
+      },
+      {
+        "prompt": "Bonsoir! Mbola tsy matory ve?",
+        "answer": "Salama! Tsia, mbola mbola. Izaho no manana ny fomba fiasa tsy mitsahatra. \n\nMbola tsy matory ianao ve?"
+      },
+      {
+        "prompt": "Ahoana ny weekend-nao?",
+        "answer": "Mianjery tsara ny weekend-ko! Tonga ny Alarobia izao, ary manantena ny famitry ny asa sy ny fialan-tsakafo. Azonao atao ve ny milazava amiko ny weekend-nao?"
+      },
+      {
+        "prompt": "Tsara ve ny dia?",
+        "answer": "Misy isan-tsena maro ahiahy ny tsara ve ny dia. Ny iray amin'izy ireo dia ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny famahana ny fam"
+      },
+      {
+        "prompt": "Efa nisakafo ve ianao?",
+        "answer": "Eny, nisy ny sakafo. Misaona ny fanontanianao!"
+      },
+      {
+        "prompt": "Inona no ataonao zao?",
+        "answer": "Izaho no modely fitaovana lelana araka ny Google, mifanaraka amin'ny famatsiam-peo lelana goavina."
+      },
+      {
+        "prompt": "Aiza ianao zao?",
+        "answer": "Izaho no modely fampianarana lehibe, nafelezina tamin'ny Google."
+      },
+      {
+        "prompt": "Mbola miasa ve ialahy?",
+        "answer": "Mba hahafantarako ny momba ny \"ialahy\" izay lazaina, azonao ampitaina amina teny hafa?"
+      },
+      {
+        "prompt": "Reraka be aho androany 😩",
+        "answer": "Minao aho fa manamitra ianao! Misy antony mahatonga anao ho reraka? Inona no azonao atao mba hifidianana famitry ny famantarana?"
+      },
+      {
+        "prompt": "Sady mafana no feno be lé bus androany",
+        "answer": "Minao aho fa tsy mahatantana ny teny malagasy. Misy fiantra fiteny hafa ampiasaina ve ianao?"
+      },
+      {
+        "prompt": "Faly mahita anao indray!",
+        "answer": "Mahafaly be! Inona no azona atao?"
+      }
+    ],
+    "code_sha": "81fdc5c",
+    "force": null
+  },
+  "qlora_smoke": {
+    "ok": true,
+    "steps": 15,
+    "steps_planned": 15,
+    "stopped_early": null,
+    "seq_len": 2048,
+    "batch": "1 x grad-accum 8",
+    "tokens_per_step": 16384,
+    "lr": 0.0002,
+    "peak_vram_gb": 10.26,
+    "sec_per_step": 122.4,
+    "seconds": 1871,
+    "loss_curve": [
+      1.601762294769287,
+      1.5904701948165894,
+      1.5336320400238037,
+      1.4140303134918213,
+      1.548561453819275,
+      1.5453227758407593,
+      1.3472299575805664,
+      1.2838969230651855,
+      1.3639134168624878,
+      1.3114943504333496,
+      1.3184932470321655,
+      1.2520418167114258,
+      1.308394432067871,
+      1.2104750871658325,
+      1.2441494464874268
+    ],
+    "nan_loss": false,
+    "lora": "r16 a16 all linear (language only)",
+    "compute_dtype": "torch.float16",
+    "code_sha": "81fdc5c",
+    "force": null
+  }
+}
