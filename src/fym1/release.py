@@ -71,6 +71,8 @@ EXCLUDES: tuple[Exclude, ...] = (
                                  "the public account is README, MODEL_CARD, paper and docs/anonymisation.md"),
     Exclude("scripts/serve_hf_token_once.py", "operator-only: hands the local HF token to the browser agent"),
     Exclude("tests/test_serve_hf_token_once.py", "tests the excluded scripts/serve_hf_token_once.py"),
+    Exclude("paper/fym1.pdf", "built from paper/fym1.tex (CI / arXiv); the release ships text files only, so every "
+                              "byte it ships is read (lead decision 36)"),
     Exclude("results/release_check.json", "this tool's own counts report: a private build record of what the "
                                           "snapshot checked"),
     *(Exclude(path, _RELEASE_TOOLING) for path in RELEASE_TOOLING),
@@ -102,7 +104,9 @@ DATA_LICENCES: dict[str, str] = {
 }
 NOTICE_NAME = "NOTICE"
 
-# The only files read as text; any other type is unscannable and fails the check (PDF has a reader).
+# The release ships text files only (lead decision 36): these types (or names), decoded in full, with no control
+# character but tab, LF and CR. Any other file is refused before anything is written: a binary's bytes (images, a
+# PDF's streams, data hidden after its end) are not read, so nothing in them is checked.
 TEXT_SUFFIXES = frozenset({".py", ".md", ".txt", ".json", ".jsonl", ".ipynb", ".toml", ".yml", ".yaml", ".lock",
                            ".jinja", ".tex", ".bib", ".cfg", ".ini", ".csv", ".tsv", ".sh"})
 TEXT_NAMES = frozenset({"LICENSE", "NOTICE", ".gitignore", ".gitkeep", ".gitattributes", ".python-version"})
@@ -124,8 +128,7 @@ ZIP_MARKERS = (b"PK\x03\x04", b"PK\x05\x06")
 # only in these files; any other form, any other file, or either word alone is still a hit. Kept as a hash so this
 # file does not hold the name.
 AUTHOR_SHA256 = "44c9ff23a0c635faa8d70a28269daac1dcffa04e70ee5156c06ef7cbf3e453de"
-AUTHOR_FILES = frozenset({"README.md", "MODEL_CARD.md", "paper/fym1.tex", "paper/fym1.pdf",
-                          "tests/test_public_name.py"})
+AUTHOR_FILES = frozenset({"README.md", "MODEL_CARD.md", "paper/fym1.tex", "tests/test_public_name.py"})
 _WORD_START = re.compile(r"(?<![^\W\d_])[^\W\d_]")
 _TWO_WORDS = re.compile(r"(?<![^\W\d_])[^\W\d_]+ [^\W\d_]+(?![^\W\d_])")
 
@@ -140,7 +143,6 @@ INNER_NAME_ALLOWED: dict[tuple[str, str], str] = {
     ("notebooks/00_baseline.ipynb", "random"): REASON_RANDOM,
     ("notebooks/01_train.ipynb", "random"): REASON_RANDOM,
     ("notebooks/03_trim.ipynb", "random"): REASON_RANDOM,
-    ("paper/fym1.pdf", "random"): REASON_RANDOM,
     ("paper/fym1.tex", "random"): REASON_RANDOM,
     ("scripts/build_formal.py", "random"): REASON_RANDOM,
     ("scripts/build_notebooks.py", "random"): REASON_RANDOM,
@@ -206,6 +208,7 @@ SECRET_FILE_NAMES = frozenset({".env", "kaggle.json", "access_token", "id_rsa", 
 SECRET_FILE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
 
 _LETTERS = re.compile(r"[^\W\d_]+")
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]")
 _LETTERS_AND_DIGITS = re.compile(r"[^\W_]+")
 # Digits typed for the letters they look like ("H4nt4", "Rak0to"): the name scan also reads them as letters.
 DIGIT_LETTERS = str.maketrans("140357", "iaoest")
@@ -235,7 +238,6 @@ class Report:
     chat_messages: int = 0
     chat_turns: int = 0
     chat_text_hits: list[str] = field(default_factory=list)
-    unscannable: list[str] = field(default_factory=list)
     secret_hits: dict[str, dict[str, int]] = field(default_factory=dict)
     emails_allowed: int = 0
     private_hf_ids: dict[str, int] = field(default_factory=dict)
@@ -243,8 +245,7 @@ class Report:
 
     @property
     def ok(self) -> bool:
-        return not (self.name_hits or self.private_id_hits or self.secret_hits or self.unscannable
-                    or self.chat_text_hits)
+        return not (self.name_hits or self.private_id_hits or self.secret_hits or self.chat_text_hits)
 
     def as_dict(self) -> dict:
         return {
@@ -263,7 +264,6 @@ class Report:
                 "list_entries_removed_total": sum(self.list_entries_removed.values()),
                 "hits_per_file": self.name_hits,
                 "hits_total": sum(self.name_hits.values()),
-                "unscannable_files": self.unscannable,
             },
             "private_ids": {
                 "ids_checked": self.private_ids,
@@ -604,8 +604,9 @@ def check_inputs(repo: Path, ref: str, out: Path) -> tuple[Path, str]:
     return root, sha
 
 
-def tracked_files(root: Path, sha: str) -> tuple[dict[str, tuple[bytes, int]], list[dict]]:
-    """The commit's regular files minus EXCLUDES, as path -> (bytes, mode), and the excluded entries.
+def tracked_files(root: Path, sha: str) -> tuple[dict[str, tuple[bytes, int]], dict[str, str], list[dict]]:
+    """The commit's regular files minus EXCLUDES, as path -> (bytes, mode), their texts (`text_of`), and the
+    excluded entries.
 
     Every refusal is raised here, before anything is written.
     """
@@ -628,9 +629,12 @@ def tracked_files(root: Path, sha: str) -> tuple[dict[str, tuple[bytes, int]], l
         raise RefusedError(f"{unsafe} unsafe or non-regular archive entries (symlink, absolute or ../ path)")
     if archives := sum(is_archive(path) or has_archive_magic(data) for path, (data, _) in files.items()):  # counted
         raise RefusedError(f"{archives} archive files; the release ships no archives (their members are not read)")
+    texts = {path: text_of(path, data) for path, (data, _) in files.items()}
+    if non_text := sum(text is None for text in texts.values()):  # counted, not named
+        raise RefusedError(f"{non_text} non-text files; the release ships text files only (lead decision 36)")
     if NOTICE_NAME in files:
         raise RefusedError(f"{NOTICE_NAME} already tracked; merge the licence notes by hand")
-    return files, excluded
+    return files, texts, excluded
 
 
 def is_archive(path: str) -> bool:
@@ -681,24 +685,12 @@ def notice_text() -> str:
 # ---- scan -----------------------------------------------------------------------------------------------------
 
 
-def read_text(path: Path) -> str | None:
-    """The text the checks read from one snapshot file, or None when it cannot be read in full (fails the check)."""
-    return _read(path.name, path.read_bytes())
-
-
-def _read(name: str, data: bytes) -> str | None:
-    """Text of a file called `name`: a TEXT_SUFFIXES/TEXT_NAMES file in UTF-8 (UTF-8/16/32 with a BOM) or a PDF's
-    text and metadata. Anything else (archives included) or a NUL byte is None: an unknown file type is never
-    guessed at."""
+def text_of(name: str, data: bytes) -> str | None:
+    """Text of a file called `name`: a TEXT_SUFFIXES/TEXT_NAMES file in UTF-8 (UTF-8/16/32 with a BOM) with no
+    control character but tab, LF and CR. Anything else is None: an unknown file type is never guessed at."""
     suffix = PurePosixPath(name).suffix.lower()
-    if suffix == ".pdf":
-        return _pdf_text(data)
-    if suffix not in TEXT_SUFFIXES and name not in TEXT_NAMES:
+    if suffix not in TEXT_SUFFIXES and PurePosixPath(name).name not in TEXT_NAMES:
         return None
-    return _decode(data)
-
-
-def _decode(data: bytes) -> str | None:
     for bom, codec in BOMS:
         if data.startswith(bom):
             data, encoding = data[len(bom):], codec
@@ -709,26 +701,7 @@ def _decode(data: bytes) -> str | None:
         text = data.decode(encoding)
     except UnicodeDecodeError:
         return None
-    return None if "\x00" in text else text  # NULs: UTF-16 without a BOM, or binary posing as text
-
-
-def _pdf_text(data: bytes) -> str | None:
-    """A PDF's page text, document info and XMP metadata (poppler), or None: tools missing, a tool failed, or the
-    PDF carries embedded files."""
-    if not all(shutil.which(tool) for tool in ("pdftotext", "pdfinfo", "pdfdetach")):
-        return None
-    with tempfile.TemporaryDirectory() as tmp:
-        pdf = Path(tmp) / "file.pdf"
-        pdf.write_bytes(data)
-        runs = [subprocess.run(cmd, capture_output=True) for cmd in (
-            ["pdftotext", "-q", str(pdf), "-"], ["pdfinfo", str(pdf)], ["pdfinfo", "-meta", str(pdf)],
-            ["pdfdetach", "-list", str(pdf)])]
-    if any(run.returncode for run in runs):
-        return None
-    texts = [_decode(run.stdout) for run in runs]
-    if any(text is None for text in texts) or not re.match(r"0 embedded files\b", texts[3]):
-        return None
-    return "\n".join(texts[:3])
+    return None if _CONTROL.search(text) else text  # NUL, bell, escape...: binary posing as text
 
 
 def is_list_file(path: str) -> bool:
@@ -753,11 +726,11 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
         raise RefusedError("export gave no sender name tokens")
     messages = export_texts(threads)
     chat = (chat_text_index(messages, "export"), chat_text_index(turns, "chats file"))
-    files, excluded = tracked_files(root, sha)
+    files, texts, excluded = tracked_files(root, sha)
     out.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{out.name}.partial-", dir=out.parent))
     try:
-        report = _write_and_check(files, excluded, staging, names, ids, chat)
+        report = _write_and_check(files, texts, excluded, staging, names, ids, chat)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
@@ -773,26 +746,24 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
     return report
 
 
-def _write_and_check(files: dict[str, tuple[bytes, int]], excluded: list[dict], out: Path, names: frozenset[str],
-                     ids: re.Pattern[str], chat: tuple[NgramIndex, ...]) -> Report:
+def _write_and_check(files: dict[str, tuple[bytes, int]], texts: dict[str, str], excluded: list[dict], out: Path,
+                     names: frozenset[str], ids: re.Pattern[str], chat: tuple[NgramIndex, ...]) -> Report:
     kept = write_files(files, out)
     report = Report(ref="", files_copied=len(kept), excluded=excluded)
     matched = {exclusion_entry(e["path"]) for e in excluded}
     report.excludes_unmatched = [entry.path for entry in EXCLUDES if entry.path not in matched]
-    (out / NOTICE_NAME).write_text(notice_text(), encoding="utf-8")
+    texts = {**texts, NOTICE_NAME: notice_text()}
+    (out / NOTICE_NAME).write_text(texts[NOTICE_NAME], encoding="utf-8")
 
     for path in (p for p in kept if p in HAND_LISTS):
-        text, removed = strip_list((out / path).read_text("utf-8"), names)
+        text, removed = strip_list(texts[path], names)
         if removed:
             (out / path).write_text(text, encoding="utf-8")
+            texts[path] = text
             report.list_entries_removed[path] = removed
 
     excluded_refs = [entry.path for entry in EXCLUDES]
-    for path in [*kept, NOTICE_NAME]:
-        text = read_text(out / path)
-        if text is None:
-            report.unscannable.append(path)
-            text = ""  # the path itself is still checked
+    for path, text in texts.items():
         name_text, authors = without_author(path, text)
         report.author_strings_allowed += authors
         text_hits = 0
@@ -832,7 +803,6 @@ def _redact_named_paths(report: Report, names: frozenset[str], ids: re.Pattern[s
 
     for attr in ("list_entries_removed", "name_hits", "private_id_hits", "secret_hits", "private_hf_ids"):
         setattr(report, attr, {alias(p): v for p, v in sorted(getattr(report, attr).items())})
-    report.unscannable = [alias(p) for p in report.unscannable]
     report.chat_text_hits = [alias(p) for p in report.chat_text_hits]
     report.excluded = [{**e, "path": alias(e["path"])} for e in report.excluded]
 

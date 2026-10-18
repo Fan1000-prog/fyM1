@@ -241,9 +241,7 @@ def test_every_inner_name_allow_list_entry_has_a_reason_and_its_word_is_in_its_f
     for (path, word), reason in release.INNER_NAME_ALLOWED.items():
         assert reason.strip() and "\n" not in reason, (path, word)
         assert word == release.compare_key(word) and word.isalpha(), (path, word)
-        if path.endswith(".pdf") and not all(map(shutil.which, ("pdftotext", "pdfinfo", "pdfdetach"))):
-            continue  # poppler missing (CI): the PDF cannot be read here
-        text = release.read_text(REPO_ROOT / path)
+        text = release.text_of(path, (REPO_ROOT / path).read_bytes())
         assert text is not None and word in release.words(text), (path, word)
 
 
@@ -515,7 +513,7 @@ def _imports_release(source: str) -> bool:
 
 
 def test_nothing_shipped_imports_or_describes_the_release_tooling():
-    shipped = {p: release.read_text(REPO_ROOT / p) for p in tracked() if not release.exclusion_reason(p)}
+    shipped = {p: release.text_of(p, (REPO_ROOT / p).read_bytes()) for p in tracked() if not release.exclusion_reason(p)}
     assert shipped
     for path, text in shipped.items():
         assert text is not None, path
@@ -713,14 +711,7 @@ def test_a_7_word_overlap_passes_end_to_end(tmp_path):
     assert (tmp_path / "public/docs/near.md").exists()
 
 
-# ---- unreadable files and NOTICE ------------------------------------------------------------------------------
-
-
-def test_unreadable_pdf_fails_the_check(tmp_path):
-    repo = make_repo(tmp_path, {**CLEAN_FILES, "paper/main.pdf": "not a pdf at all\n"})
-    report = snap(repo, tmp_path / "public", make_export(tmp_path))
-    assert report.unscannable == ["paper/main.pdf"]
-    assert not report.ok
+# ---- NOTICE ------------------------------------------------------------------------------------------------
 
 
 def test_tracked_notice_is_refused_before_anything_is_written(tmp_path):
@@ -730,7 +721,7 @@ def test_tracked_notice_is_refused_before_anything_is_written(tmp_path):
     assert not (tmp_path / "public").exists()
 
 
-# ---- reading files: only known text types and PDFs; archives are refused ------------------------------------------
+# ---- text files only (lead decision 36); archives are refused ---------------------------------------------------
 
 
 def _pdf(info: str, page_text: str = "") -> bytes:
@@ -757,39 +748,61 @@ def _pdf(info: str, page_text: str = "") -> bytes:
     ("docs/a.md", "Salama Zafy".encode(), True, 1),
     ("docs/a.md", b"\xef\xbb\xbfSalama Zafy", True, 1),  # UTF-8 BOM
     ("docs/a.md", "Salama Zafy".encode("utf-16"), True, 1),  # UTF-16 with its BOM
+    ("docs/a.md", "Salama\tZafy\r\n".encode(), True, 1),  # tab, CR and LF are text
     ("docs/a.md", "Salama Zafy".encode("utf-16-le"), False, 0),  # no BOM: NUL bytes
     ("docs/a.md", "Salama Zafy caf\u00e9".encode("latin-1"), False, 0),  # not UTF-8: no guessing
+    ("docs/a.md", b"Salama Zafy\x07", False, 0),  # a control character: binary posing as text
+    ("docs/a.md", "Salama Zafy\u0085".encode(), False, 0),  # a C1 control character
     ("assets/logo.png", b"\x89PNG\r\n\x1a\nZafy", False, 0),  # not a text type
+    ("paper/main.pdf", b"%PDF-1.4 Zafy", False, 0),  # a PDF is not text: the paper ships as its .tex
     ("LICENSE", b"Apache", True, 0),
     ("data/a.txt.gz", b"Zafy", False, 0),  # an archive is never read (and is refused before the scan)
 ])
-def test_only_known_text_types_are_read(tmp_path, name, data, readable, hits):
-    path = tmp_path / PurePath(name).name
-    path.write_bytes(data)
-    text = release.read_text(path)
+def test_only_known_text_types_are_read(name, data, readable, hits):
+    text = release.text_of(name, data)
     assert (text is not None) == readable
     assert count_name_hits(text or "", NAMES) == hits
 
 
-needs_poppler = pytest.mark.skipif(not all(map(shutil.which, ("pdftotext", "pdfinfo", "pdfdetach"))),
-                                   reason="poppler not installed (a PDF is then unscannable and fails the check)")
+BINARY_TAILS = {  # synthetic: archive magic then filler, hidden after a text file or a PDF's %%EOF
+    "rar": b"Rar!\x1a\x07\x01\x00 filler", "7z": b"7z\xbc\xaf\x27\x1c filler", "png": b"\x89PNG\r\n\x1a\n",
+}
 
 
-@needs_poppler
-def test_pdf_metadata_is_scanned(tmp_path):
-    path = tmp_path / "paper.pdf"
-    path.write_bytes(_pdf("<< /Author (Zafy Bodo) /Title (notes) >>"))
-    assert count_name_hits(release.read_text(path), NAMES) == 2
+@pytest.mark.parametrize(("name", "data"), [
+    ("assets/logo.png", b"\x89PNG\r\n\x1a\n"),
+    ("paper/main.pdf", _pdf("<< /Title (notes) >>")),
+    ("docs/old.md", "caf\u00e9 notes".encode("latin-1")),
+    ("docs/wide.md", "notes".encode("utf-16-le")),
+    ("docs/bell.md", b"notes\x07"),
+    ("bin/tool", b"\x7fELF filler"),
+    *((f"docs/{kind}-after-text.md", b"# notes\nplain text\n" + tail) for kind, tail in BINARY_TAILS.items()),
+    *((f"paper/{kind}-after-eof.pdf", _pdf("<< /Title (notes) >>") + tail) for kind, tail in BINARY_TAILS.items()),
+], ids=lambda value: value if isinstance(value, str) else "")
+def test_a_non_text_file_is_refused_before_anything_is_written(tmp_path, capsys, name, data):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, name: data})
+    out = tmp_path / "public"
+    with pytest.raises(RefusedError, match="1 non-text files") as error:
+        snap(repo, out, make_export(tmp_path))
+    assert PurePath(name).stem not in str(error.value)  # counted, never named: a path may hold a name
+    assert not out.exists() and not _leftovers(tmp_path)
+    (tmp_path / "cli").mkdir()
+    assert cli.main([*cli_args(tmp_path / "cli", repo, out), "--results", str(tmp_path / "r.json")]) == 2
+    assert not out.exists() and not (tmp_path / "r.json").exists()
+    assert PurePath(name).stem not in capsys.readouterr().err
 
 
-@needs_poppler
-@pytest.mark.parametrize("where", ["metadata", "page"])
-def test_chat_text_in_a_pdf_fails(tmp_path, where):
-    copied = _run(FAKE_CHAT_WORDS[:8])
-    pdf = _pdf(f"<< /Title ({copied}) >>") if where == "metadata" else _pdf("<< /Title (notes) >>", copied)
-    repo = make_repo(tmp_path, {**CLEAN_FILES, "paper/main.pdf": pdf})
-    report = snap(repo, tmp_path / "public", make_export(tmp_path))
-    assert report.chat_text_hits == ["paper/main.pdf"] and not report.unscannable and not report.ok
+def test_the_paper_pdf_never_ships_and_its_source_does():
+    assert "fym1.tex" in release.exclusion_reason("paper/fym1.pdf")
+    assert not release.exclusion_reason("paper/fym1.tex")
+    assert not any(path.endswith(".pdf") for path in release.AUTHOR_FILES)
+    assert not any(path.endswith(".pdf") for path, _ in release.INNER_NAME_ALLOWED)
+
+
+def test_every_shipped_file_is_text():
+    shipped = [p for p in tracked() if not release.exclusion_reason(p)]
+    assert shipped
+    assert [p for p in shipped if release.text_of(p, (REPO_ROOT / p).read_bytes()) is None] == []
 
 
 @pytest.mark.parametrize("path", ["data/a.zip", "data/a.txt.gz", "dist/x.tar.gz", "dist/x.TGZ", "vendor/x.whl",
@@ -858,14 +871,6 @@ def test_a_pdf_with_an_appended_zip_fails_before_anything_is_written(tmp_path):
 ])
 def test_has_archive_magic(data, archive):
     assert release.has_archive_magic(data) == archive
-
-
-def test_unscannable_files_fail_end_to_end(tmp_path):
-    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/old.md": "caf\u00e9 Zafy".encode("latin-1"),
-                                "assets/logo.png": b"\x89PNG\r\n"})
-    report = snap(repo, tmp_path / "public", make_export(tmp_path))
-    assert sorted(report.unscannable) == ["assets/logo.png", "docs/old.md"]
-    assert not report.ok
 
 
 # ---- no partial output ----------------------------------------------------------------------------------------
@@ -959,5 +964,5 @@ def test_author_string_passes_end_to_end_and_is_counted(tmp_path, monkeypatch):
 
 
 def test_the_real_author_string_is_in_every_author_file():
-    for path in release.AUTHOR_FILES - {"paper/fym1.pdf"}:
+    for path in release.AUTHOR_FILES:
         assert release.without_author(path, (REPO_ROOT / path).read_text("utf-8"))[1] >= 1, path

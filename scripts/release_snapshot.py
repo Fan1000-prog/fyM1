@@ -11,15 +11,17 @@ name lists and searched for in every file but the lists a script builds from pub
 gate reads words (case changes, spaced-out letters, digits typed for letters, hidden characters, escapes). Any
 file sharing an 8-word run with the export's message texts or with the turns of the anonymised chats file
 (--chats: fake names, joined messages) fails (copied chat text, counted per file, never shown); then a secret
-scan runs. Only known text types and PDFs (text and metadata) are read; any other file fails, and any archive
-(zip, gz, tar, whl, ...) is refused before anything is written. Writes the counts report to --results
+scan runs. The release ships text files only (known text types, decoded in full, no control characters): any
+other file (image, PDF, binary data hidden after a text file) and any archive (zip, gz, tar, whl, ...) is refused
+before anything is written. The paper ships as paper/fym1.tex; its PDF is built from it. Writes the counts report to --results
 only (never into --out: the report is a private build record).
 --private-ids names a file outside the repo (one private account id per line); any whole-word,
 case-insensitive match in a snapshot file or path fails the check, counted per file, never shown.
 Prints and writes counts and repo paths only, never a name, message text or secret value.
 Exit 0: clean, snapshot in --out.
-Exit 1: name hits, private-id hits, copied chat text, secret hits or an unreadable file; nothing written to --out.
-Exit 2: refused before anything was written (including a missing, unreadable or empty --chats file).
+Exit 1: name hits, private-id hits, copied chat text or secret hits; nothing written to --out.
+Exit 2: refused before anything was written (a non-text file, an archive, or a missing, unreadable or empty
+--chats file, among others).
 """
 
 import argparse
@@ -56,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"ref {report.ref[:9]}: {report.files_copied} files copied, {len(report.excluded)} excluded")
     print(f"name tokens {summary['names']['name_tokens']}, list entries removed "
           f"{summary['names']['list_entries_removed_total']}, name hits {summary['names']['hits_total']} "
-          f"in {len(report.name_hits)} files, unscannable {len(report.unscannable)}")
+          f"in {len(report.name_hits)} files")
     print(f"private ids {report.private_ids}, hits {summary['private_ids']['hits_total']} "
           f"in {len(report.private_id_hits)} files")
     print(f"chat messages {report.chat_messages}, anonymised turns {report.chat_turns}, files sharing an "
