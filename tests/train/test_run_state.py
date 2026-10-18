@@ -10,6 +10,15 @@ def test_config_mismatch_lists_changed_and_missing_keys():
     assert config_mismatch(saved, {"lr": 2e-4, "model": "m"}) == ["epochs: 2 -> None"]
 
 
+def test_config_mismatch_ignores_the_hardware_record_but_not_the_batch_shape():
+    saved = {"batch": 8, "grad_accum": 1,
+             "hardware": {"gpu": "NVIDIA A100-SXM4-40GB", "compute_dtype": "torch.bfloat16"}}
+    other_a100 = {**saved, "hardware": {"gpu": "NVIDIA A100-SXM4-80GB", "compute_dtype": "torch.bfloat16"}}
+    assert config_mismatch(saved, other_a100) == []
+    t4_shape = {**other_a100, "batch": 2, "grad_accum": 4}
+    assert config_mismatch(saved, t4_shape) == ["batch: 8 -> 2", "grad_accum: 1 -> 4"]
+
+
 def test_session_progress_adds_this_session_once():
     assert session_progress(None, 100.4) == {"wall_time_s": 100, "sessions": 1}
     assert session_progress({"wall_time_s": 500, "sessions": 2}, 50) == {"wall_time_s": 550, "sessions": 3}
