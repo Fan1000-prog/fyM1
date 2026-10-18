@@ -1,5 +1,6 @@
 import pytest
 
+from fym1.data.gate import FAKE_STATS_KEYS
 from fym1.data.kept_checks import KEPT_COUNT_KEYS
 from fym1.data.messenger import Message, Thread
 from fym1.data.pipeline import build_records, merge_data_stats
@@ -90,6 +91,7 @@ def test_merge_data_stats_fills_build_counts_and_keeps_later_ones():
         "threads": 3,
         "conversations": 120,
         **dict.fromkeys(KEPT_COUNT_KEYS),
+        **dict.fromkeys(FAKE_STATS_KEYS),
         "approved": 90,
         "identity": 16,
         "formal": None,
@@ -169,9 +171,13 @@ def test_build_records_gate_keeps_prices_drops_numbers_and_replaces_leftover_nam
         "dropped_long_number": 1,
         "dropped_contact": 0,
         "dropped_too_many_unknown": 0,
+        "dropped_too_many_fakes": 0,
         "dropped_hidden_char": 0,
         "kept": 2,
         "tokens_replaced": 1,
+        "words_kept": 8,
+        "fakes_per_kept_median": 0,
+        "fakes_per_kept_max": 1,
     }
     assert result.leftover_names["Bema"] == 1  # the optional sheet still sees pre-gate words
 

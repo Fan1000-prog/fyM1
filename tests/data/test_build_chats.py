@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from fym1.data.gate import FAKE_STATS_KEYS
+
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "build_chats.py"
 spec = importlib.util.spec_from_file_location("build_chats", SCRIPT)
 build_chats = importlib.util.module_from_spec(spec)
@@ -63,14 +65,19 @@ GATE_KEYS = {
     "dropped_long_number",
     "dropped_contact",
     "dropped_too_many_unknown",
+    "dropped_too_many_fakes",
     "dropped_hidden_char",
     "kept",
     "cleared_mg_common",
     "cleared_mg_wiki",
+    "cleared_mg_corpus",
     "cleared_known_names",
     "cleared_fr",
     "cleared_en",
     "tokens_replaced",
+    "words_kept",
+    "fakes_per_kept_median",
+    "fakes_per_kept_max",
 }
 
 
@@ -157,6 +164,7 @@ def test_full_run_writes_role_and_leak_counts_to_stats(tmp_path, monkeypatch, ca
     leaks = {k: v for k, v in written.items() if k.startswith("leak_")}
     assert len(leaks) == 5 and set(leaks.values()) == {0}
     assert written["approved"] == 7 and written["conversations"] == counts["kept"]
+    assert {k: written[k] for k in FAKE_STATS_KEYS} == {k: counts[k] for k in FAKE_STATS_KEYS}
     assert all(v is None or isinstance(v, int) for v in written.values())
 
 

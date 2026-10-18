@@ -3,10 +3,11 @@
 Runs on the owner's laptop only. Prints counts, never text. After anonymising, the strict gate
 (src/fym1/data/gate.py) replaces every unknown capitalised word with a fake name and drops every
 conversation with a 7+ digit number that is not a price, an email/link/@handle, or more than 30%
-of its words replaced. Nobody reads the text. The gate counts
+of its words (or more than 5 words) replaced. Nobody reads the text. The gate counts
 (counts only) go to data_gate.json next to --out; --gate-results also copies them into the repo.
 --stats (results/data_stats.json) gets the kept messages per role and post-run leak checks on the
-kept chats (7+ digit runs, emails, @, links; each must be 0), from fym1.data.kept_checks.
+kept chats (7+ digit runs, emails, @, links; each must be 0), from fym1.data.kept_checks, and the gate's
+fake counts (conversations dropped for too many fakes, fakes per kept conversation).
 
 --sheet (a 100-sample review page) and --leftover-sheet (leftover capitalised words with counts)
 are optional extras, off by default. --blocklist still replaces listed words everywhere.
@@ -26,6 +27,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from fym1.data.gate import FAKE_STATS_KEYS
 from fym1.data.kept_checks import kept_counts
 from fym1.data.leftovers import read_blocklist, render_leftover_sheet
 from fym1.data.messenger import Thread, load_threads
@@ -146,7 +148,8 @@ def main() -> None:
         leftover_sheet.write_text(render_leftover_sheet(result.leftover_names), encoding="utf-8")
 
     existing = json.loads(args.stats.read_text()) if args.stats.exists() else {}
-    stats = merge_data_stats(existing, threads=len(threads), conversations=len(result.records), **kept)
+    fakes = {key: result.gate[key] for key in FAKE_STATS_KEYS}
+    stats = merge_data_stats(existing, threads=len(threads), conversations=len(result.records), **kept, **fakes)
     args.stats.write_text(json.dumps(stats, indent=2) + "\n")
     print(json.dumps(counts))
 

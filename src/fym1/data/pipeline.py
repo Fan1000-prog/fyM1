@@ -8,7 +8,7 @@ from dataclasses import replace
 from typing import NamedTuple
 
 from fym1.data.anonymize import Anonymizer, assign_fake_names
-from fym1.data.gate import pool_names_in, strict_gate
+from fym1.data.gate import FAKE_STATS_KEYS, pool_names_in, strict_gate
 from fym1.data.kept_checks import KEPT_COUNT_KEYS
 from fym1.data.leftovers import leftover_names
 from fym1.data.messenger import Thread
@@ -17,10 +17,12 @@ from fym1.data.segment import Conversation, to_conversations
 MIN_MALAGASY_SHARE = 0.5
 # results/data_stats.json, read by paper/make_numbers.py. Counts only, never text.
 # KEPT_COUNT_KEYS: messages per role and post-run leak checks on the kept chats (fym1.data.kept_checks).
+# FAKE_STATS_KEYS: conversations dropped for too many fakes, fakes per kept conversation (fym1.data.gate).
 DATA_STATS_KEYS = (
     "threads",
     "conversations",
     *KEPT_COUNT_KEYS,
+    *FAKE_STATS_KEYS,
     "approved",
     "identity",
     "formal",

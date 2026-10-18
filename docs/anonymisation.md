@@ -107,10 +107,14 @@ replaced. Any other pool name ("Mialy" where nobody got that fake) is replaced l
   checked in this order; the first list that has it gets the count (`cleared_<list>`):
   1. `mg_common`: the anonymiser's common Malagasy words that `mg_wiki` also has, plus short texting words.
   2. `mg_wiki` (`mg_wiki_words.txt`): words Malagasy Wikipedia types in lower case 3+ times.
-  3. `known_names` (`mg_known_names.txt`): a short hand list of places, brands, religious, family,
+  3. `mg_corpus` (`mg_corpus_words.txt`): the 50,000 words Malagasy web text (HPLT 2.0) types in
+     lower case most often, 3+ times, and capitalises mid-sentence at most a quarter as often as in
+     lower case (stricter than `mg_wiki`: web text types given names such as "riana" or "nambinina" in
+     lower case too). It adds everyday and texting spellings Wikipedia lacks. Never built from our chats.
+  4. `known_names` (`mg_known_names.txt`): a short hand list of places, brands, religious, family,
      calendar and title words and texting words that are not person names (Tana, Mvola, Jesoa, Neny,
      Dada, Zoky, Zoma, Alatsinainy, Desambra, Krismasy, Rtoa, Dr, Andao, ...).
-  4. `fr`, `en` (`fr_words.txt`, `en_words.txt`): the 30,000 most frequent French and English words from `wordfreq`.
+  5. `fr`, `en` (`fr_words.txt`, `en_words.txt`): the 30,000 most frequent French and English words from `wordfreq`.
 - **Cleared mid-sentence or after a person marker** (`i`, `ry`, `ra`, `n'i`, `an'i`, `amin'i`,
   `tamin'i`) only by the hand list `known_names` ("any Tana", "i Neny"). "tonga ny Fiara",
   "hoy Bonjour" are replaced.
@@ -120,7 +124,11 @@ replaced. Any other pool name ("Mialy" where nobody got that fake) is replaced l
   word typed in lower case elsewhere does not clear it.
 - **Replaced** otherwise, by a fake first name from the anonymiser's pool: the same fake for the
   same word within one conversation, never a word already in that conversation. Counted as
-  `tokens_replaced` (kept conversations only).
+  `tokens_replaced` (kept conversations only), with `fakes_per_kept_median` / `fakes_per_kept_max`.
+  A conversation with more than 5 replaced words is dropped (`too_many_fakes`, lead decision
+  AUTO-DECISIONS 22): trained on chats full of fakes, the model would sprinkle random names into
+  replies. More than 30% replaced is dropped too (`too_many_unknown`). The fake counts also go to
+  `results/data_stats.json`.
 
 Also replaced, the same way:
 
@@ -135,7 +143,7 @@ Also replaced, the same way:
   "mdr"), and names that are also everyday words (`name_deny_list.txt`, `wordlike_first_names.txt`,
   the fallback "olona": "mila vola", "soa ve", "une rose", "tia"). Lists miss some everyday words too
   (colloquial Malagasy, some French and English words Wikipedia mostly capitalises): those are
-  replaced as well, which is over-masking, and can push a conversation over the 30% drop line.
+  replaced as well, which is over-masking, and can push a conversation over a drop line.
   After a person marker, a person name or a word no list knows ("ry hasina", "ry hery"; "ry namana",
   "i dada" stay). Any `ra-` hyphenated word, and a first name hyphen-joined to another
   ("jean-pierre", "marie-claire").
@@ -144,8 +152,8 @@ Words match folded (lower case, no accents). Stretched letters are collapsed onl
 stretching, a letter typed 3+ times ("Bonjouuur" -> "bonjour"), and never into a person name: double
 letters are spelling ("Anne" does not match "âne"), and "Mariiie" does not match "mariée".
 
-`scripts/build_known_words.py` (needs `uv sync --group data`) builds `first_names.txt`, `mg_wiki`, `fr`
-and `en`. It drops from the last three every person name (`first_names.txt`, the fake-name pool, the
+`scripts/build_known_words.py` (needs `uv sync --group data`) builds `first_names.txt`, `mg_wiki`,
+`mg_corpus`, `fr` and `en` (`--corpus-only` rebuilds `mg_corpus` alone). It drops from the last four every person name (`first_names.txt`, the fake-name pool, the
 deny list) and any word Wikipedia writes capitalised mid-sentence 3+ times and more than 3x as often as
 in lower case in Malagasy Wikipedia (French and English Wikipedia capitalise everyday words in titles,
 so they would drop "Bonjour"). The floor of 3 matches the lower-case floor for a word; it was 10, which
@@ -155,7 +163,9 @@ clear a person's name.
 `first_names.txt` is every French first name given 1,000+ times since 1900 (English ones
 common in France included), minus first names Malagasy Wikipedia types in lower case 150+ times
 (everyday words: "tia", "mila", "amin") and the hand list. The Wikipedia revision and the INSEE file's
-hash are pinned in the script. Every list file starts with a `#` source line.
+hash are pinned in the script, and so is the HPLT revision. `mg_corpus` streams the two HPLT parquet
+files one row group at a time (nothing saved) and cuts links, bare domains, emails and @handles before
+counting, since web addresses hold names in lower case ("fb.com/rakoto.jean"). Every list file starts with a `#` source line.
 It also builds `wordlike_first_names.txt`: INSEE first names that wordfreq's top 30k
 French/English or Malagasy Wikipedia has, and that the same language's Wikipedia types in lower case
 3+ times and does not mostly capitalise (the 3x name filter). French and English Wikipedia are read
@@ -171,6 +181,8 @@ off by default; `--blocklist` still replaces listed words everywhere.
 
 - `mg_wiki_words.txt`, and the name filter: derived from Malagasy Wikipedia (`wikimedia/wikipedia`,
   `20231101.mg`), text under CC BY-SA 4.0, by Wikipedia contributors. Only a word list is kept.
+- `mg_corpus_words.txt`: derived from HPLT 2.0 cleaned (`HPLT/HPLT2.0_cleaned`, `plt_Latn`), released
+  under CC0 1.0 (web text crawled from Internet Archive and Common Crawl). Only a word list is kept.
 - `first_names.txt`: derived from the INSEE "fichier des prénoms" (édition 2022, national file),
   Licence Ouverte / Etalab 2.0. Only folded names over the threshold are kept.
 - `wordlike_first_names.txt`: INSEE names (Licence Ouverte) filtered with wordfreq and French, English
