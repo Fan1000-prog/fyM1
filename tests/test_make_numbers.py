@@ -210,3 +210,56 @@ def test_cli_strict_fails_on_rejected_leak_run(results_dir, tmp_path):
     run = run_cli("--results", str(results_dir), "--out", str(tmp_path / "n.tex"), "--strict")
     assert run.returncode != 0
     assert "release is blocked" in run.stderr
+
+
+def test_lookup_picks_list_items_and_dotted_names():
+    data = {"candidates": [{"model": "a/x", "v": 1}, {"model": "b/y.z", "v": 2}], "models": {"y.z": {"n": 3}}}
+    assert numbers.lookup(data, ("candidates", numbers.Pick("model", "b/y.z"), "v")) == 2
+    assert numbers.lookup(data, ("models", "y.z", "n")) == 3
+    assert numbers.lookup(data, ("candidates", numbers.Pick("model", "nope"), "v")) is None
+    assert numbers.lookup(data, ("models", numbers.Pick("model", "a/x"))) is None  # a pick on a dict misses
+    assert numbers.key_text(("candidates", numbers.Pick("model", "a/x"), "v")) == "candidates[model=a/x].v"
+
+
+def test_candidate_and_greeting_numbers_come_from_selection_and_gate(tmp_path):
+    (tmp_path / "model_selection.json").write_text(
+        json.dumps({"candidates": [{"model": numbers.QWEN, "chrf_eng_plt": 49.73, "sec_per_step": 83.3}]})
+    )
+    key = numbers.GREETING_KEYS[numbers.GEMMA4]
+    (tmp_path / "greeting_gate.json").write_text(
+        json.dumps({"models": {key: {"judge_mean": 2.8500001, "is_malagasy_rate": 0.9, "n": 20}}})
+    )
+    tex = numbers.render_tex(resolve(tmp_path))
+    assert macro(tex, "sel-qwen-chrf-en-mg") == "49.7"
+    assert macro(tex, "sel-qwen-sec-step") == "83.3"
+    assert macro(tex, "greet-gemma4-mean") == "2.85"
+    assert macro(tex, "greet-gemma4-malagasy") == r"90.0\%"
+    assert macro(tex, "sel-gemma4-chrf-en-mg") == r"\textbf{pending}"
+
+
+def test_comparison_values_do_not_block_strict_but_the_base_does(tmp_path):
+    (tmp_path / "model_selection.json").write_text(
+        json.dumps(
+            {
+                "chosen": "org/base",
+                "candidates": [
+                    {"model": "org/base", "license": "MIT", "tokens_per_word": 2.0},
+                    {"model": "org/other", "license": "MIT", "greeting_gate": "pending"},
+                ],
+            }
+        )
+    )
+    resolved = resolve(tmp_path)
+    assert "model_selection.json: candidates[0].chrf_eng_plt" in resolved.missing
+    assert "model_selection.json: candidates[1].chrf_eng_plt" not in resolved.missing
+    assert "model_selection.json: candidates[1].greeting_gate.judge_mean" in resolved.missing_keys
+    gemma4 = f"model_selection.json: candidates[model={numbers.GEMMA4}].chrf_eng_plt"
+    assert gemma4 not in resolved.missing  # comparison row: may stay pending
+    assert f"model_selection.json: candidates[model={numbers.QWEN}].chrf_eng_plt" in resolved.missing
+    assert resolved.rows[1][-1] is None  # a "pending" string is not a judge mean
+
+
+def test_data_gate_counts_are_cited(tmp_path):
+    (tmp_path / "data_gate.json").write_text(json.dumps({"conversations_before_gate": 260, "kept": 192}))
+    values = resolve(tmp_path).values
+    assert (values["gate-before"], values["gate-kept"], values["gate-dropped"]) == ("260", "192", None)

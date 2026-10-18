@@ -12,10 +12,15 @@ Usage: uv run python paper/make_numbers.py [--results results] [--out paper/numb
                                            [--markdown README.md MODEL_CARD.md] [--strict]
 
 Expected files (keys are dotted paths below):
-  data_stats.json        threads, conversations, approved, identity, formal, synthetic, train_examples
+  data_stats.json        threads, conversations, kept_messages, approved, identity, formal, synthetic,
+                         train_examples
+  data_gate.json         conversations_before_gate, kept, dropped, dropped_{long_number, contact,
+                         too_many_unknown, too_many_fakes}, tokens_replaced, fakes_per_kept_{median, max}
+  synth_stats.json       raw, kept, generator, generator_licence
   model_selection.json   chosen (HF repo id), chosen_size (e.g. "8B"), license, hf_license (HF license id),
-                         candidates[{model, license, belebele_acc, chrf_plt_eng, chrf_eng_plt,
-                         tokens_per_word, sniff_natural}]
+                         candidates[{model, license, belebele_acc, belebele_chat_acc, chrf_plt_eng,
+                         chrf_eng_plt, tokens_per_word, sec_per_step, greeting_gate.judge_mean}]
+  greeting_gate.json     models.<model key>.{judge_mean, is_malagasy_rate, n}
   train_log.json         gpu, steps, epochs, wall_time_s, final_train_loss, best_eval_loss,
                          config.{lora_r, lora_alpha, lr, lr_scheduler, max_seq_len, effective_batch}
   eval/scores.json       n_prompts, {base,fym1}.{drift_rate, leak_rate, perplexity,
@@ -116,11 +121,59 @@ def model_repo(size: Any) -> str:
 
 
 @dataclass(frozen=True)
+class Pick:
+    """A key step into a list: the first item whose `field` equals `value` (e.g. a candidate by model id)."""
+
+    field: str
+    value: str
+
+    def __str__(self) -> str:
+        return f"[{self.field}={self.value}]"
+
+
+# A dotted path ("base.drift_rate"), or a tuple of steps when a step holds a dot or picks from a list.
+Key = str | tuple[str | Pick, ...]
+
+
+@dataclass(frozen=True)
 class Number:
     name: str  # human-readable id, e.g. "drift-fym1"; becomes the macro \fyDriftFymOne
     file: str  # path under results/
-    key: str  # dotted path inside the JSON file
+    key: Key  # path inside the JSON file
     fmt: Callable[[Any], str]
+    required: bool = True  # False: a comparison value that may stay pending at release (--strict ignores it)
+
+
+QWEN = "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1"
+GEMMA4 = "google/gemma-4-12B-it"
+GEMMA3 = "google/gemma-3-12b-it"
+# Model keys in greeting_gate.json (results/baseline/ file stems).
+GREETING_KEYS = {QWEN: "afriqueqwen3.5-9b-instruct", GEMMA4: "gemma-4-12b-it", GEMMA3: "gemma-3-12b-it"}
+# Short names for macro ids: qwen -> \fySelQwen..., gemma4 -> \fySelGemmaFour...
+SHORT = {QWEN: "qwen", GEMMA4: "gemma4", GEMMA3: "gemma3"}
+
+
+def candidate_numbers() -> list[Number]:
+    """Per-candidate values the paper's selection section cites. Only the base's are required at release."""
+    columns = [
+        ("belebele", "belebele_acc", percent),
+        ("belebele-chat", "belebele_chat_acc", percent),
+        ("chrf-mg-en", "chrf_plt_eng", fixed(1)),
+        ("chrf-en-mg", "chrf_eng_plt", fixed(1)),
+        ("sec-step", "sec_per_step", fixed(1)),
+    ]
+    out = [
+        Number(f"sel-{SHORT[m]}-{label}", "model_selection.json", ("candidates", Pick("model", m), key), fmt, m == QWEN)
+        for m in SHORT
+        for label, key, fmt in columns
+    ]
+    out += [
+        Number(f"greet-{SHORT[m]}-{label}", "greeting_gate.json", ("models", GREETING_KEYS[m], key), fmt)
+        for m in SHORT
+        for label, key, fmt in [("mean", "judge_mean", fixed(2)), ("malagasy", "is_malagasy_rate", percent)]
+    ]
+    out.append(Number("greet-answers", "greeting_gate.json", ("models", GREETING_KEYS[QWEN], "n"), count))
+    return out
 
 
 # fmt: off
@@ -133,6 +186,23 @@ NUMBERS: list[Number] = [
     Number("data-formal", "data_stats.json", "formal", count),
     Number("data-synthetic", "data_stats.json", "synthetic", count),
     Number("data-train-examples", "data_stats.json", "train_examples", count),
+    Number("data-kept-messages", "data_stats.json", "kept_messages", count),
+    # strict automatic data gate (counts only)
+    Number("gate-before", "data_gate.json", "conversations_before_gate", count),
+    Number("gate-kept", "data_gate.json", "kept", count),
+    Number("gate-dropped", "data_gate.json", "dropped", count),
+    Number("gate-dropped-number", "data_gate.json", "dropped_long_number", count),
+    Number("gate-dropped-contact", "data_gate.json", "dropped_contact", count),
+    Number("gate-dropped-unknown", "data_gate.json", "dropped_too_many_unknown", count),
+    Number("gate-dropped-fakes", "data_gate.json", "dropped_too_many_fakes", count),
+    Number("gate-replaced", "data_gate.json", "tokens_replaced", count),
+    Number("gate-fakes-median", "data_gate.json", "fakes_per_kept_median", count),
+    Number("gate-fakes-max", "data_gate.json", "fakes_per_kept_max", count),
+    # synthetic chats (counts and run settings only)
+    Number("synth-raw", "synth_stats.json", "raw", count),
+    Number("synth-kept", "synth_stats.json", "kept", count),
+    Number("synth-generator", "synth_stats.json", "generator", text),
+    Number("synth-licence", "synth_stats.json", "generator_licence", text),
     # model selection
     Number("base-model", "model_selection.json", "chosen", text),
     Number("model-size", "model_selection.json", "chosen_size", text),
@@ -190,6 +260,7 @@ NUMBERS: list[Number] = [
     Number("gguf-after", "shrink.json", "gguf_bytes_after", gigabytes),
     Number("tps-before", "shrink.json", "tokens_per_sec_before", fixed(1)),
     Number("tps-after", "shrink.json", "tokens_per_sec_after", fixed(1)),
+    *candidate_numbers(),
 ]
 # fmt: on
 
@@ -206,13 +277,16 @@ README_ROWS: list[tuple[str, str | None, str]] = [
 
 SELECTION_FILE = "model_selection.json"
 RESULT_FILES = sorted({n.file for n in NUMBERS} | {SELECTION_FILE})
-SELECTION_COLUMNS = ["belebele_acc", "chrf_plt_eng", "chrf_eng_plt", "tokens_per_word", "sniff_natural"]
+SELECTION_COLUMNS = [
+    "belebele_acc", "belebele_chat_acc", "chrf_plt_eng", "chrf_eng_plt", "tokens_per_word", "greeting_gate.judge_mean",
+]  # fmt: skip
 SELECTION_FORMATS: dict[str, Callable[[Any], str]] = {
     "belebele_acc": percent,
+    "belebele_chat_acc": percent,
     "chrf_plt_eng": fixed(1),
     "chrf_eng_plt": fixed(1),
     "tokens_per_word": fixed(2),
-    "sniff_natural": fixed(1),
+    "greeting_gate.judge_mean": fixed(2),
 }
 
 
@@ -221,7 +295,7 @@ class Resolved:
     values: dict[str, str | None]  # number name -> formatted plain text, None when not measured
     rows: list[list[str | None]]  # model-selection table
     missing_keys: list[str]  # "file: key" for keys absent from a file that exists
-    missing: list[str]  # "file: key" for every value not measured (what --strict fails on)
+    missing: list[str]  # "file: key" for every required value not measured (what --strict fails on)
 
 
 def leak_gate_problems(results: dict[str, Any]) -> list[str]:
@@ -262,12 +336,25 @@ def load_results(results_dir: Path) -> dict[str, Any]:
     return loaded
 
 
-def lookup(data: Any, key: str) -> Any:
-    """Follow a dotted key; None if any step is missing."""
-    for part in key.split("."):
-        if not isinstance(data, dict) or part not in data:
+def key_text(key: Key) -> str:
+    """("candidates", Pick("model", "m"), "x") -> "candidates[model=m].x"."""
+    if isinstance(key, str):
+        return key
+    return "".join(str(p) if isinstance(p, Pick) else ("." if i else "") + p for i, p in enumerate(key))
+
+
+def lookup(data: Any, key: Key) -> Any:
+    """Follow a key; None if any step is missing."""
+    for part in key.split(".") if isinstance(key, str) else key:
+        if isinstance(part, Pick):
+            items = data if isinstance(data, list) else []
+            data = next((i for i in items if isinstance(i, dict) and i.get(part.field) == part.value), None)
+        elif isinstance(data, dict):
+            data = data.get(part)
+        else:
             return None
-        data = data[part]
+        if data is None:
+            return None
     return data
 
 
@@ -276,30 +363,36 @@ def resolve(results: dict[str, Any], numbers: list[Number] = NUMBERS) -> Resolve
     missing_keys: list[str] = []
     missing: list[str] = []
 
-    def note_missing(file: str, key: str) -> None:
+    def note_missing(file: str, key: str, required: bool = True) -> None:
         where = f"{file}: {key}"
         if file in results:
             missing_keys.append(where)
-        missing.append(where)
+        if required:
+            missing.append(where)
 
     for number in numbers:
         raw = lookup(results.get(number.file), number.key)
         if raw is None:
-            note_missing(number.file, number.key)
+            note_missing(number.file, key_text(number.key), number.required)
             values[number.name] = None
         else:
             values[number.name] = number.fmt(raw)
 
     rows = []
-    candidates = lookup(results.get(SELECTION_FILE), "candidates")
+    selection = results.get(SELECTION_FILE)
+    candidates = lookup(selection, "candidates")
     if candidates is None:
         note_missing(SELECTION_FILE, "candidates")
     for i, candidate in enumerate(candidates or []):
+        # Comparison rows may stay pending at release; the chosen base's row must be complete.
+        is_base = lookup(candidate, "model") == lookup(selection, "chosen")
         row: list[str | None] = []
         for col in ["model", "license", *SELECTION_COLUMNS]:
             raw = lookup(candidate, col)
+            if not isinstance(raw, (int, float, str)) or isinstance(raw, bool):
+                raw = None  # e.g. greeting_gate "pending" on a dropped row is a string, not a dict
             if raw is None:
-                note_missing(SELECTION_FILE, f"candidates[{i}].{col}")
+                note_missing(SELECTION_FILE, f"candidates[{i}].{col}", is_base)
             row.append(None if raw is None else SELECTION_FORMATS.get(col, text)(raw))
         rows.append(row)
     return Resolved(values, rows, missing_keys, missing)
