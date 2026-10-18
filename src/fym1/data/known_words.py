@@ -32,6 +32,7 @@ stretching, a letter typed 3+ times ("Bonjouuur" -> "bonjour"), and never when t
 is a person name: collapsing double letters would let "Anne" match "âne", and "Mariiie" match "marie".
 """
 
+import errno
 import re
 from collections.abc import Iterable
 from importlib.resources import files
@@ -60,7 +61,11 @@ def word_list(words: Iterable[str]) -> WordList:
 
 
 def _words(name: str) -> list[str]:
-    lines = files("fym1.data").joinpath(name).read_text("utf-8").splitlines()
+    path = files("fym1.data").joinpath(name)
+    if not path.is_file():  # the public snapshot ships without the lists build_known_words.py writes
+        raise FileNotFoundError(errno.ENOENT, f"word list {name} is missing; build it with "
+                                "`uv sync --group data && uv run python scripts/build_known_words.py`", str(path))
+    lines = path.read_text("utf-8").splitlines()
     return [line.strip() for line in lines if line.strip() and not line.startswith("#")]
 
 

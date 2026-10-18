@@ -2,25 +2,33 @@
 
 The public repo is a fresh single-commit repo built from this snapshot, so private git history never ships.
 Release blocker (lead decision 21): the export's sender names are read at run time, removed from the hand-written
-name lists, and searched for in every file except the lists a script rebuilds from public data. Everything
+name lists, and searched for in every file except the lists a script rebuilds from public data alone. The lists
+scripts/build_known_words.py builds from public data minus the hand lists do not ship (REBUILT_LISTS). Everything
 this module reports is a count or a repo path; it never returns a sender name, a message text, a private id
 or a matched secret value.
 """
 
 import fnmatch
+import hashlib
+import html
 import io
 import json
 import re
 import shutil
 import subprocess
 import tarfile
+import tempfile
+import unicodedata
+import urllib.parse
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from fym1.data.anonymize import MIN_NAME_PREFIX, NAME_SUFFIXES, compare_key, is_everyday_word, normalise
+from fym1.data.anonymize import MIN_NAME_PREFIX, NAME_SUFFIXES, compare_key, fold, is_everyday_word, normalise
 from fym1.data.gate import PERSON_MARKER_WORDS, is_hidden_char
+from fym1.data.gate import tokens as gate_tokens
+from fym1.data.known_words import KNOWN_WORDS, known_by
 from fym1.data.messenger import load_threads
 
 
@@ -30,11 +38,28 @@ class Exclude:
     reason: str
 
 
+# Lists scripts/build_known_words.py writes. It builds them from public data MINUS the hand lists' names, and the
+# repo's copies were built from the unstripped hand lists: a rebuild from the shipped (stripped) hand lists and a diff
+# would show exactly the names the snapshot removed. So they never ship; anyone rebuilds them from the shipped hand
+# lists with REBUILD_COMMAND (large downloads: Wikipedia, INSEE, HPLT).
+REBUILD_COMMAND = "uv sync --group data && uv run python scripts/build_known_words.py"
+_NOT_SHIPPED = f"built from the unstripped hand lists (a rebuild + diff would show the removed names); rebuild with " \
+               f"`{REBUILD_COMMAND}`"
+REBUILT_LISTS: tuple[str, ...] = tuple(f"src/fym1/data/{name}" for name in (
+    "en_words.txt", "fr_words.txt", "first_names.txt", "wordlike_first_names.txt", "mg_wiki_words.txt",
+    "mg_corpus_words.txt",
+))
+
+# The release tooling itself: private build tooling, and its exact (file, word) allow-lists are a private build
+# record (lead decision 32). Nothing that ships imports it (tests/test_release.py checks this).
+RELEASE_TOOLING: tuple[str, ...] = ("src/fym1/release.py", "scripts/release_snapshot.py", "tests/test_release.py")
+_RELEASE_TOOLING = "private release tooling: builds and checks this snapshot; its allow-lists are a private build record"
+
 EXCLUDES: tuple[Exclude, ...] = (
-    Exclude("AGENTS.md", "agent-team rules for the private build; points at the owner's private handoff"),
+    Exclude("AGENTS.md", "agent-team rules for the private build; points at the owner's private notes"),
     Exclude("CLAUDE.md", "same agent-team rules as AGENTS.md, for one tool"),
-    Exclude("docs/project-update.md", "internal status and team pickup notes; points at the private operator handoff "
-                                      "that names accounts and machines"),
+    Exclude("docs/project-update.md", "internal status and team pickup notes; points at the private operator notes "
+                                      "that name accounts and machines"),
     Exclude("docs/colab_operator.md", "operator-only: the owner's personal Google account rules and the HF token "
                                       "hand-off steps for Playwright"),
     Exclude("docs/kaggle_operator.md", "operator-only: the owner's Kaggle account setup and run steps against "
@@ -45,6 +70,8 @@ EXCLUDES: tuple[Exclude, ...] = (
     Exclude("tests/test_serve_hf_token_once.py", "tests the excluded scripts/serve_hf_token_once.py"),
     Exclude("results/release_check.json", "this tool's own counts report: a private build record of what the "
                                           "snapshot checked"),
+    *(Exclude(path, _RELEASE_TOOLING) for path in RELEASE_TOOLING),
+    *(Exclude(path, _NOT_SHIPPED) for path in REBUILT_LISTS),
 )
 
 # Word/name lists, shipped under their own licences (see NOTICE).
@@ -56,42 +83,80 @@ HAND_LISTS: dict[str, str] = {
     "src/fym1/data/mg_known_names.txt": "hand-edited places, brands and other non-person words",
     "src/fym1/data/name_deny_list.txt": "hand-edited Malagasy given names that are also everyday words",
 }
-# Lists a script writes from public data. They are shipped exactly as built and the name scan skips them:
-# anyone can rebuild one and diff it, so a removed entry would point at a sender, and a common word in one
-# reveals nothing about the export. Secrets and private ids are still checked in them.
-_KNOWN_WORDS = "reproducible from public data by scripts/build_known_words.py"
+# Shipped lists a script writes from public data alone (no hand list goes in). They are shipped exactly as built
+# and the name scan skips them: anyone can rebuild one and diff it, so a removed entry would point at a sender, and
+# a common word in one reveals nothing about the export. Secrets and private ids are still checked in them.
 GENERATED_LISTS: dict[str, str] = {
-    "src/fym1/data/en_words.txt": f"{_KNOWN_WORDS} (wordfreq)",
-    "src/fym1/data/fr_words.txt": f"{_KNOWN_WORDS} (wordfreq)",
-    "src/fym1/data/first_names.txt": f"{_KNOWN_WORDS} (INSEE)",
-    "src/fym1/data/wordlike_first_names.txt": f"{_KNOWN_WORDS} (INSEE, wordfreq, Wikipedia)",
-    "src/fym1/data/mg_wiki_words.txt": f"{_KNOWN_WORDS} (Malagasy Wikipedia)",
-    "src/fym1/data/mg_corpus_words.txt": f"{_KNOWN_WORDS} (HPLT 2.0)",
     "src/fym1/data/mg_common_words.txt": "reproducible from public data by scripts/build_common_words.py "
                                          "(Malagasy Wikipedia)",
 }
 DATA_LICENCES: dict[str, str] = {
-    "src/fym1/data/en_words.txt": "derived from wordfreq 3.1 by Robyn Speer (https://github.com/rspeer/wordfreq); "
-                                  "word data CC BY-SA 4.0",
-    "src/fym1/data/fr_words.txt": "derived from wordfreq 3.1 by Robyn Speer (https://github.com/rspeer/wordfreq); "
-                                  "word data CC BY-SA 4.0",
-    "src/fym1/data/wordlike_first_names.txt": "INSEE fichier des prenoms (Licence Ouverte / Etalab 2.0) filtered "
-                                              "with wordfreq (CC BY-SA 4.0) and Wikipedia (CC BY-SA 4.0); "
-                                              "CC BY-SA 4.0",
-    "src/fym1/data/first_names.txt": "INSEE fichier des prenoms 2022, Licence Ouverte / Etalab 2.0",
     "src/fym1/data/mg_common_words.txt": "derived from Malagasy Wikipedia (wikimedia/wikipedia 20231101.mg); "
                                          "CC BY-SA 4.0",
-    "src/fym1/data/mg_wiki_words.txt": "derived from Malagasy Wikipedia (wikimedia/wikipedia 20231101.mg); "
-                                       "CC BY-SA 4.0",
-    "src/fym1/data/mg_corpus_words.txt": "word list from HPLT 2.0 cleaned, Malagasy plt_Latn (packaging CC0 1.0); "
-                                         "no text kept",
     "src/fym1/data/mg_first_names.txt": "hand list, this repo (Apache-2.0)",
     "src/fym1/data/mg_known_names.txt": "hand list, this repo (Apache-2.0)",
     "src/fym1/data/name_deny_list.txt": "hand list, this repo (Apache-2.0)",
 }
 NOTICE_NAME = "NOTICE"
 
+# The only files read as text; any other type is unscannable and fails the check (PDF has a reader).
+TEXT_SUFFIXES = frozenset({".py", ".md", ".txt", ".json", ".jsonl", ".ipynb", ".toml", ".yml", ".yaml", ".lock",
+                           ".jinja", ".tex", ".bib", ".cfg", ".ini", ".csv", ".tsv", ".sh"})
+TEXT_NAMES = frozenset({"LICENSE", "NOTICE", ".gitignore", ".gitkeep", ".gitattributes", ".python-version"})
+BOMS = ((b"\xef\xbb\xbf", "utf-8"), (b"\xff\xfe\x00\x00", "utf-32-le"), (b"\x00\x00\xfe\xff", "utf-32-be"),
+        (b"\xff\xfe", "utf-16-le"), (b"\xfe\xff", "utf-16-be"))
+# The public tree holds no archives, so the release refuses any file with one of these suffixes before anything is
+# written (lead call on review findings 10/11): an archive's member names, comments and gaps are not read.
+ARCHIVE_SUFFIXES = frozenset({".zip", ".gz", ".tar", ".tgz", ".7z", ".rar", ".whl", ".jar", ".bz2", ".xz", ".zst",
+                              ".lz", ".lzma", ".tbz2", ".txz", ".egg", ".war"})
+# A renamed archive ("notes.md" that is really a zip) is caught by its bytes, not its name (review findings 10/11).
+ARCHIVE_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00", b"7z\xbc\xaf\x27\x1c",
+                 b"Rar!\x1a\x07", b"\x28\xb5\x2f\xfd")
+TAR_MAGIC, TAR_MAGIC_OFFSET = b"ustar", 257
+# Zip readers find the archive from its end, so a zip appended to a PDF or a text file still opens as a zip.
+ZIP_MARKERS = (b"PK\x03\x04", b"PK\x05\x06")
+
+# The owner chose to publish the paper and the citations under their own name (lead decision 31), and the owner is a
+# sender in the export. So exactly that author string, two words, one space, as written, passes the name scan, and
+# only in these files; any other form, any other file, or either word alone is still a hit. Kept as a hash so this
+# file does not hold the name.
+AUTHOR_SHA256 = "44c9ff23a0c635faa8d70a28269daac1dcffa04e70ee5156c06ef7cbf3e453de"
+AUTHOR_FILES = frozenset({"README.md", "MODEL_CARD.md", "paper/fym1.tex", "paper/fym1.pdf",
+                          "tests/test_public_name.py"})
+_WORD_START = re.compile(r"(?<![^\W\d_])[^\W\d_]")
+_TWO_WORDS = re.compile(r"(?<![^\W\d_])[^\W\d_]+ [^\W\d_]+(?![^\W\d_])")
+
 MIN_NAME_TOKEN = 3  # shorter tokens ("ny", initials) are everyday words or letters; counted as skipped
+# A MIN_NAME_PREFIX+ letter name is a hit anywhere inside a word no known-word list has ("xbodozafyx"). The only
+# exceptions are these exact (file, word) pairs of everyday words the inner rule would otherwise flag, each with its
+# reason. A pair covers that word (as compare_key reads it) in that file's text only, never in a path or another
+# file. This module does not ship (RELEASE_TOOLING), so no entry here names a file of the release tooling.
+REASON_RANDOM = "the everyday English word 'random' (random seeds, random.Random); no person is named"
+INNER_NAME_ALLOWED: dict[tuple[str, str], str] = {
+    ("docs/anonymisation.md", "random"): REASON_RANDOM,
+    ("notebooks/00_baseline.ipynb", "random"): REASON_RANDOM,
+    ("notebooks/01_train.ipynb", "random"): REASON_RANDOM,
+    ("notebooks/03_trim.ipynb", "random"): REASON_RANDOM,
+    ("paper/fym1.pdf", "random"): REASON_RANDOM,
+    ("paper/fym1.tex", "random"): REASON_RANDOM,
+    ("scripts/build_formal.py", "random"): REASON_RANDOM,
+    ("scripts/build_notebooks.py", "random"): REASON_RANDOM,
+    ("scripts/build_pairs.py", "random"): REASON_RANDOM,
+    ("spaces/arena/README.md", "random"): REASON_RANDOM,
+    ("spaces/arena/app.py", "random"): REASON_RANDOM,
+    ("spaces/arena/votes.py", "random"): REASON_RANDOM,
+    ("src/fym1/data/formal.py", "random"): REASON_RANDOM,
+    ("src/fym1/data/gate.py", "random"): REASON_RANDOM,
+    ("src/fym1/data/review_sheet.py", "random"): REASON_RANDOM,
+    ("src/fym1/data/synth.py", "random"): REASON_RANDOM,
+    ("src/fym1/eval/arena.py", "random"): REASON_RANDOM,
+    ("src/fym1/eval/scoring.py", "random"): REASON_RANDOM,
+    ("tests/data/test_anonymize_dates.py", "random"): REASON_RANDOM,
+    ("tests/data/test_anonymize_marks.py", "random"): REASON_RANDOM,
+    ("tests/data/test_formal.py", "random"): REASON_RANDOM,
+    ("tests/eval/test_arena.py", "random"): REASON_RANDOM,
+    ("tests/spaces/test_votes.py", "random"): REASON_RANDOM,
+}
 # Meta's label for a deleted or unknown account: not a person's name.
 PLACEHOLDER_SENDERS = frozenset({"facebook user", "utilisateur de facebook", "instagram user", "meta user"})
 PRIVATE_HF_ID = "Fan1000-Prog/" + "fyM1-"  # split so test_public_name does not see a Hub id
@@ -114,19 +179,23 @@ SECRET_PATTERNS: dict[str, re.Pattern[str]] = {
     ),
 }
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
-ALLOWED_EMAILS: dict[str, str] = {
-    "x@y.mg": "placeholder example in scripts/build_known_words.py, not an address",
-}
-# Under tests/ only: the made-up domains the synthetic fixtures use.
-TEST_EMAIL_DOMAINS: dict[str, str] = {
-    "example.mg": "made-up domain of the synthetic anonymiser and gate probes",
-    "mail.example": "reserved .example domain, release tests",
-    "mail.mg": "made-up domain of a synthetic known-words probe",
-    "t.invalid": "reserved .invalid domain, the git identity of synthetic test repos",
-}
-# Test files whose synthetic probes need a real provider's shape (plus-tags, upper case) to test email masking.
-EMAIL_PROBE_FILES: dict[str, str] = {
-    "tests/data/test_anonymize_probes.py": "synthetic anonymiser probes at real providers' domains",
+# An address on a reserved test domain (RFC 2606/6761) is never a person's, anywhere in the snapshot.
+RESERVED_EMAIL_TLDS = (".example", ".invalid", ".test")
+# Every other address must be listed here, exactly, for the one file that holds it, with its reason. Any other
+# address in any file is a secret hit. Stored as (local part, domain), case-folded, so this file holds no address.
+EMAIL_PROBE_FILES: dict[str, frozenset[tuple[str, str]]] = {
+    # "x@y.mg": a placeholder in a comment showing the shape of one non-space run; one-letter host, no person.
+    "scripts/build_known_words.py": frozenset({("x", "y.mg")}),
+    # the same placeholder as a synthetic chat line that the synth filter must drop.
+    "tests/data/test_synth.py": frozenset({("x", "y.mg")}),
+    # synthetic address in a synthetic chat line the anonymiser must mask; host "example.mg".
+    "tests/data/test_anonymize.py": frozenset({("hanta.r", "example.mg")}),
+    # synthetic address the kept-checks leak scan must flag; host "example.mg".
+    "tests/data/test_kept_checks.py": frozenset({("rabe.sample", "example.mg")}),
+    # "olona" is the Malagasy word for "person": a synthetic address the gate must refuse; host "example.mg".
+    "tests/data/test_gate.py": frozenset({("olona", "example.mg")}),
+    # synthetic address in a link-and-handle line that known_words must not read as words.
+    "tests/data/test_known_words.py": frozenset({("fanja", "mail.mg")}),
 }
 SECRET_FILE_NAMES = frozenset({".env", "kaggle.json", "access_token", "id_rsa", "id_ed25519", ".netrc"})
 SECRET_FILE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
@@ -135,7 +204,8 @@ _LETTERS = re.compile(r"[^\W\d_]+")
 _LETTERS_AND_DIGITS = re.compile(r"[^\W_]+")
 # Digits typed for the letters they look like ("H4nt4", "Rak0to"): the name scan also reads them as letters.
 DIGIT_LETTERS = str.maketrans("140357", "iaoest")
-_ESCAPES = re.compile(r"\\(?:u([0-9a-fA-F]{4})|[nrt\"])")
+_ESCAPES = re.compile(r"\\(?:x([0-9a-fA-F]{2})|u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8})|[nrt\"'\\])")
+MAX_UNESCAPE_ROUNDS = 5
 
 
 class RefusedError(Exception):
@@ -151,6 +221,8 @@ class Report:
     name_tokens: int = 0
     short_tokens_skipped: int = 0
     placeholder_senders_skipped: int = 0
+    author_strings_allowed: int = 0
+    inner_name_words_allowed: int = 0
     list_entries_removed: dict[str, int] = field(default_factory=dict)
     name_hits: dict[str, int] = field(default_factory=dict)
     private_ids: int = 0
@@ -176,6 +248,8 @@ class Report:
                 "name_tokens": self.name_tokens,
                 "short_tokens_skipped": self.short_tokens_skipped,
                 "placeholder_senders_skipped": self.placeholder_senders_skipped,
+                "author_strings_allowed": self.author_strings_allowed,
+                "inner_name_words_allowed": self.inner_name_words_allowed,
                 "list_entries_removed": self.list_entries_removed,
                 "list_entries_removed_total": sum(self.list_entries_removed.values()),
                 "hits_per_file": self.name_hits,
@@ -200,41 +274,71 @@ class Report:
 # ---- names ----------------------------------------------------------------------------------------------------
 
 
-def visible(text: str) -> str:
-    """`text` normalised as the anonymiser does, then without any invisible or combining character the gate
-    flags (a spacing mark or Hangul filler inside a name, "Za\u0903fy"), so a split name reads whole."""
-    return "".join(c for c in normalise(text) if not is_hidden_char(c))
+def readings(text: str) -> tuple[str, str]:
+    """`text` with escapes decoded (`_unescape`) and normalised as the anonymiser does, read two ways: every
+    invisible or combining character the gate flags taken as a word break ("Bodo\u200bzafy" -> "Bodo zafy"), and
+    taken out ("Za\u0903fy" -> "Zafy"). A name found in either reading counts."""
+    text = _unescape(text)
+    split = normalise("".join(" " if is_hidden_char(c) else c for c in unicodedata.normalize("NFC", text)))
+    joined = "".join(c for c in normalise(text) if not is_hidden_char(c))
+    return split, joined
+
+
+def _forms(word: str) -> list[str]:
+    """Letter runs of one gate token; a token with digits inside ("Rak0to") is also read with DIGIT_LETTERS."""
+    forms = _LETTERS.findall(word)
+    if any(c.isdigit() for c in word):
+        forms += _LETTERS.findall(word.translate(DIGIT_LETTERS))
+    return forms
+
+
+def _reading_words(reading: str) -> list[str]:
+    """Words of one reading, split by the strict gate's own tokeniser (`fym1.data.gate.tokens`)."""
+    return [form for token in gate_tokens(reading) for form in _forms(token.word)]
 
 
 def words(text: str) -> list[str]:
-    """Letter runs as the anonymiser compares them: visible, folded, stretched letters collapsed ("Zafyyy")."""
-    return [compare_key(run) for run in _LETTERS.findall(visible(text))]
+    """Compare keys (folded, stretched letters collapsed) of the gate's words in both `readings` of `text`."""
+    return [compare_key(word) for reading in dict.fromkeys(readings(text)) for word in _reading_words(reading)]
 
 
-def is_name_word(word: str, names: frozenset[str]) -> bool:
-    """`word` (a `words()` key) is a name, alone or with a glued person marker ("iZafy", "n'iZafy" reads "izafy",
-    "ryZafy") and/or a glued possessive ending ("Zafyko"), the anonymiser's suffix list, or starts with a 4+ letter
-    name ("zafybodo"). Like the anonymiser, only an exact name match counts for an everyday word."""
-    if word in names:
-        return True
-    if is_everyday_word(word):  # checked first, as the anonymiser does: "farany" is not "Fara" + "-ny"
+def is_name_word(word: str, names: frozenset[str], allowed: frozenset[str] = frozenset()) -> bool:
+    """`word` (as typed) is a name, alone or with a glued person marker ("izafy", "n'izafy" reads "izafy", "ryzafy")
+    and/or a glued possessive ending ("Zafyko"), the anonymiser's suffix list, or holds a 4+ letter name: at its start
+    ("zafybodo") or, when no known-word list has the word and its compare key is not in `allowed` (the file's
+    INNER_NAME_ALLOWED words), anywhere inside ("xzafyx"). Like the anonymiser, only an exact name match counts for
+    an everyday word. A word under MIN_NAME_TOKEN letters is never a name, so a short name's collapsed key
+    ("Ann" -> "an") does not match the everyday word "an"."""
+    if len(fold(word)) < MIN_NAME_TOKEN:
         return False
-    stems = {word} | {word[len(m):] for m in PERSON_MARKER_WORDS if word.startswith(m)}
+    key = compare_key(word)
+    if key in names:
+        return True
+    if is_everyday_word(key):  # checked first, as the anonymiser does: "farany" is not "Fara" + "-ny"
+        return False
+    stems = {key} | {key[len(m):] for m in PERSON_MARKER_WORDS if key.startswith(m)}
     stems |= {stem[: -len(s)] for stem in stems for s in NAME_SUFFIXES if stem.endswith(s)}
-    long_names = [name for name in names if len(name) >= MIN_NAME_PREFIX]
-    return not stems.isdisjoint(names) or any(stem.startswith(n) for stem in stems for n in long_names)
+    if not stems.isdisjoint(names):
+        return True
+    if any(stem.startswith(n) for stem in stems for n in names if len(n) >= MIN_NAME_PREFIX):
+        return True
+    inner = [n for n in names if len(n) >= MIN_NAME_PREFIX and n in key]
+    return bool(inner) and key not in allowed and known_by(word, KNOWN_WORDS) is None
 
 
 def name_tokens(senders: Iterable[str]) -> tuple[frozenset[str], int, int]:
-    """Name tokens of `senders`, plus how many short tokens and placeholder senders were skipped."""
+    """Name tokens of `senders` (compare keys of the gate's words in both readings), plus how many short tokens
+    (under MIN_NAME_TOKEN letters as typed, before stretched letters collapse) and placeholder senders were skipped.
+    """
     tokens, short, placeholders = set(), set(), 0
     placeholder_keys = {" ".join(words(label)) for label in PLACEHOLDER_SENDERS}
     for sender in set(senders):
         if " ".join(words(sender)) in placeholder_keys:
             placeholders += 1
             continue
-        for token in words(sender):
-            (tokens if len(token) >= MIN_NAME_TOKEN else short).add(token)
+        for reading in readings(sender):
+            for word in _reading_words(reading):
+                (tokens if len(fold(word)) >= MIN_NAME_TOKEN else short).add(compare_key(word))
     return frozenset(tokens), len(short - tokens), placeholders
 
 
@@ -249,24 +353,58 @@ def export_senders(export: Path) -> list[str]:
     return [p for thread in threads for p in [*thread.participants, *(m.sender for m in thread.messages)]]
 
 
-def count_name_hits(text: str, names: frozenset[str]) -> int:
-    """Whole-word, case/accent-insensitive matches of `names`; JSON/Python escapes are read as characters.
+def count_name_hits(text: str, names: frozenset[str], allowed: frozenset[str] = frozenset()) -> int:
+    """Case/accent-insensitive name matches (`is_name_word`, with `allowed` compare keys spared the inside-a-word
+    rule) in the gate's words of `text`, in whichever of its two `readings` finds more. Escapes are decoded first; a
+    run of letters and digits with no name in its gate words is read again with DIGIT_LETTERS ("B0d0", "Z4fy2")."""
+    return max(_reading_hits(reading, names, allowed) for reading in readings(text))
 
-    A run of letters and digits with no name in its letter runs is read again with DIGIT_LETTERS ("Z4fy").
-    """
-    return sum(_run_hits(run, names) for run in _LETTERS_AND_DIGITS.findall(visible(_unescape(text))))
+
+def inner_allowed(path: str) -> frozenset[str]:
+    """Compare keys of the INNER_NAME_ALLOWED words for the file at `path` (its text only, never its path)."""
+    return frozenset(compare_key(word) for file, word in INNER_NAME_ALLOWED if file == path)
 
 
-def _run_hits(run: str, names: frozenset[str]) -> int:
-    hits = sum(is_name_word(compare_key(word), names) for word in _LETTERS.findall(run))
-    if hits or run.isalpha() or not any(c.isalpha() for c in run):
-        return hits
-    return sum(is_name_word(compare_key(word), names) for word in _LETTERS.findall(run.translate(DIGIT_LETTERS)))
+def _token_hits(text: str, names: frozenset[str], allowed: frozenset[str]) -> list[tuple[int, int]]:
+    """Spans of the gate tokens in `text` that hold a name."""
+    return [(t.start, t.end) for t in gate_tokens(text)
+            if any(is_name_word(f, names, allowed) for f in _forms(t.word))]
+
+
+def _reading_hits(reading: str, names: frozenset[str], allowed: frozenset[str]) -> int:
+    spans = _token_hits(reading, names, allowed)
+    hits = len(spans)
+    for run in _LETTERS_AND_DIGITS.finditer(reading):
+        word = run.group()
+        if word.isalpha() or not any(c.isalpha() for c in word):
+            continue
+        if not any(start < run.end() and end > run.start() for start, end in spans):
+            hits += len(_token_hits(word.translate(DIGIT_LETTERS), names, allowed))
+    return hits
 
 
 def _unescape(text: str) -> str:
-    """JSON/Python `\\n` and `\\uXXXX` escapes read as the characters they stand for."""
-    return _ESCAPES.sub(lambda m: chr(int(m.group(1), 16)) if m.group(1) else " ", text)
+    """`text` with escapes read as the characters they stand for, repeated until nothing changes (escapes inside
+    escapes): JSON/Python `\\n`, `\\xXX`, `\\uXXXX`, `\\UXXXXXXXX`, HTML entities (`&#90;`, `&amp;`) and URL
+    percent escapes (`%5A`)."""
+    for _ in range(MAX_UNESCAPE_ROUNDS):
+        decoded = _ESCAPES.sub(_escape_char, text)
+        decoded = html.unescape(decoded)
+        decoded = urllib.parse.unquote(decoded, errors="replace")
+        if decoded == text:
+            break
+        text = decoded
+    return text
+
+
+def _escape_char(match: re.Match) -> str:
+    code = next((g for g in match.groups() if g), None)
+    if code is None:  # \n \r \t \" \' \\: a break between words
+        return " "
+    try:
+        return chr(int(code, 16))
+    except (ValueError, OverflowError):  # past U+10FFFF: not a character
+        return " "
 
 
 def strip_list(text: str, names: frozenset[str]) -> tuple[str, int]:
@@ -278,6 +416,21 @@ def strip_list(text: str, names: frozenset[str]) -> tuple[str, int]:
         else:
             kept.append(line)
     return "".join(kept), removed
+
+
+def without_author(path: str, text: str) -> tuple[str, int]:
+    """`text` with each exact author string (AUTHOR_SHA256) blanked when `path` is in AUTHOR_FILES, and how many."""
+    if path not in AUTHOR_FILES:
+        return text, 0
+    pieces, pos, found = [], 0, 0
+    for start in (m.start() for m in _WORD_START.finditer(text)):  # every word start: "Dr A B" also tries "A B"
+        if start < pos:
+            continue
+        match = _TWO_WORDS.match(text, start)
+        if match and hashlib.sha256(match.group().encode("utf-8")).hexdigest() == AUTHOR_SHA256:
+            pieces += [text[pos:start], " " * len(match.group())]
+            pos, found = match.end(), found + 1
+    return "".join(pieces) + text[pos:], found
 
 
 # ---- private ids ----------------------------------------------------------------------------------------------
@@ -327,11 +480,9 @@ def secret_hits(path: str, text: str) -> Counter:
 
 
 def email_allowed(path: str, email: str) -> bool:
-    """`email` is a known placeholder, or a synthetic test address on a made-up domain or the probe list."""
-    address = email.casefold()
-    if address in ALLOWED_EMAILS:
-        return True
-    return path in EMAIL_PROBE_FILES or (path.startswith("tests/") and address.rsplit("@", 1)[1] in TEST_EMAIL_DOMAINS)
+    """`email` is on a reserved test domain, or listed exactly for `path` in EMAIL_PROBE_FILES."""
+    local, domain = email.casefold().rsplit("@", 1)
+    return domain.endswith(RESERVED_EMAIL_TLDS) or (local, domain) in EMAIL_PROBE_FILES.get(path, frozenset())
 
 
 def allowed_email_count(path: str, text: str) -> int:
@@ -382,13 +533,15 @@ def check_inputs(repo: Path, ref: str, out: Path) -> tuple[Path, str]:
     return root, sha
 
 
-def copy_tracked(root: Path, sha: str, out: Path) -> tuple[list[str], list[dict]]:
-    """Write the commit's regular files into `out`, skipping EXCLUDES; returns kept paths and excluded entries."""
+def tracked_files(root: Path, sha: str) -> tuple[dict[str, tuple[bytes, int]], list[dict]]:
+    """The commit's regular files minus EXCLUDES, as path -> (bytes, mode), and the excluded entries.
+
+    Every refusal is raised here, before anything is written.
+    """
     archive = subprocess.run(["git", "-C", str(root), "archive", "--format=tar", sha],
                              check=True, capture_output=True).stdout
-    kept, excluded = [], []
+    files, excluded, unsafe = {}, [], 0
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as tar:
-        members, unsafe = [], 0
         for member in tar.getmembers():
             if member.isdir() or member.name == "pax_global_header":
                 continue
@@ -396,20 +549,39 @@ def copy_tracked(root: Path, sha: str, out: Path) -> tuple[list[str], list[dict]
                 excluded.append({"path": member.name, "reason": reason})
                 continue
             path = PurePosixPath(member.name)
-            unsafe += path.is_absolute() or ".." in path.parts or not member.isfile()  # symlinks too: fail closed
-            members.append(member)
-        if unsafe:  # counted, not named: a path may hold a name
-            raise RefusedError(f"{unsafe} unsafe or non-regular archive entries (symlink, absolute or ../ path)")
-        if any(member.name == NOTICE_NAME for member in members):
-            raise RefusedError(f"{NOTICE_NAME} already tracked; merge the licence notes by hand")
-        out.mkdir(parents=True, exist_ok=True)
-        for member in members:
-            dest = out / member.name
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(tar.extractfile(member).read())
-            dest.chmod(0o755 if member.mode & 0o111 else 0o644)
-            kept.append(member.name)
-    return sorted(kept), excluded
+            if path.is_absolute() or ".." in path.parts or not member.isfile():  # symlinks too: fail closed
+                unsafe += 1
+                continue
+            files[member.name] = (tar.extractfile(member).read(), member.mode)
+    if unsafe:  # counted, not named: a path may hold a name
+        raise RefusedError(f"{unsafe} unsafe or non-regular archive entries (symlink, absolute or ../ path)")
+    if archives := sum(is_archive(path) or has_archive_magic(data) for path, (data, _) in files.items()):  # counted
+        raise RefusedError(f"{archives} archive files; the release ships no archives (their members are not read)")
+    if NOTICE_NAME in files:
+        raise RefusedError(f"{NOTICE_NAME} already tracked; merge the licence notes by hand")
+    return files, excluded
+
+
+def is_archive(path: str) -> bool:
+    """`path` has an ARCHIVE_SUFFIXES suffix anywhere in its file name ("a.tar.gz", "x.zip"), any case."""
+    return not ARCHIVE_SUFFIXES.isdisjoint(s.lower() for s in PurePosixPath(path).suffixes)
+
+
+def has_archive_magic(data: bytes) -> bool:
+    """`data` starts like an archive or a compressed stream, is a tar, or holds a zip record anywhere."""
+    return (data.startswith(ARCHIVE_MAGIC)
+            or data[TAR_MAGIC_OFFSET:TAR_MAGIC_OFFSET + len(TAR_MAGIC)] == TAR_MAGIC
+            or any(marker in data for marker in ZIP_MARKERS))
+
+
+def write_files(files: dict[str, tuple[bytes, int]], out: Path) -> list[str]:
+    """Write `files` under `out`; returns their paths, sorted."""
+    for name, (data, mode) in files.items():
+        dest = out / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+        dest.chmod(0o755 if mode & 0o111 else 0o644)
+    return sorted(files)
 
 
 def notice_text() -> str:
@@ -420,10 +592,16 @@ def notice_text() -> str:
         "",
         *(f"- {path}: {licence}" for path, licence in sorted(DATA_LICENCES.items())),
         "",
-        "wordfreq (https://github.com/rspeer/wordfreq) is by Robyn Speer. Its word frequency data is licensed",
-        "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); the lists derived from it above are shared",
-        "under the same licence. Changes: lists were reduced to the most frequent words and folded to lower case",
-        "without accents. Regenerate the lists with `uv run python scripts/build_known_words.py`.",
+        "The strict gate's other word lists are not included. Build them before using fym1.data.gate or",
+        f"fym1.data.known_words: `{REBUILD_COMMAND}`.",
+        "It writes:",
+        "",
+        *(f"- {path}" for path in REBUILT_LISTS),
+        "",
+        "from Malagasy, French and English Wikipedia (CC BY-SA 4.0), wordfreq by Robyn Speer",
+        "(https://github.com/rspeer/wordfreq; word data CC BY-SA 4.0), the INSEE fichier des prenoms 2022",
+        "(Licence Ouverte / Etalab 2.0) and HPLT 2.0 cleaned (CC0 1.0). Lists derived from CC BY-SA data are",
+        "shared under the same licence (https://creativecommons.org/licenses/by-sa/4.0/).",
         "",
     ]
     return "\n".join(lines)
@@ -433,17 +611,53 @@ def notice_text() -> str:
 
 
 def read_text(path: Path) -> str | None:
-    """A file's text: UTF-8, PDF via pdftotext, else Latin-1 bytes. None if a PDF cannot be read."""
-    if path.suffix.lower() == ".pdf":
-        if not shutil.which("pdftotext"):
-            return None
-        done = subprocess.run(["pdftotext", "-q", str(path), "-"], capture_output=True)
-        return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else None
-    data = path.read_bytes()
+    """The text the checks read from one snapshot file, or None when it cannot be read in full (fails the check)."""
+    return _read(path.name, path.read_bytes())
+
+
+def _read(name: str, data: bytes) -> str | None:
+    """Text of a file called `name`: a TEXT_SUFFIXES/TEXT_NAMES file in UTF-8 (UTF-8/16/32 with a BOM) or a PDF's
+    text and metadata. Anything else (archives included) or a NUL byte is None: an unknown file type is never
+    guessed at."""
+    suffix = PurePosixPath(name).suffix.lower()
+    if suffix == ".pdf":
+        return _pdf_text(data)
+    if suffix not in TEXT_SUFFIXES and name not in TEXT_NAMES:
+        return None
+    return _decode(data)
+
+
+def _decode(data: bytes) -> str | None:
+    for bom, codec in BOMS:
+        if data.startswith(bom):
+            data, encoding = data[len(bom):], codec
+            break
+    else:
+        encoding = "utf-8"
     try:
-        return data.decode("utf-8")
+        text = data.decode(encoding)
     except UnicodeDecodeError:
-        return data.decode("latin-1")
+        return None
+    return None if "\x00" in text else text  # NULs: UTF-16 without a BOM, or binary posing as text
+
+
+def _pdf_text(data: bytes) -> str | None:
+    """A PDF's page text, document info and XMP metadata (poppler), or None: tools missing, a tool failed, or the
+    PDF carries embedded files."""
+    if not all(shutil.which(tool) for tool in ("pdftotext", "pdfinfo", "pdfdetach")):
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        pdf = Path(tmp) / "file.pdf"
+        pdf.write_bytes(data)
+        runs = [subprocess.run(cmd, capture_output=True) for cmd in (
+            ["pdftotext", "-q", str(pdf), "-"], ["pdfinfo", str(pdf)], ["pdfinfo", "-meta", str(pdf)],
+            ["pdfdetach", "-list", str(pdf)])]
+    if any(run.returncode for run in runs):
+        return None
+    texts = [_decode(run.stdout) for run in runs]
+    if any(text is None for text in texts) or not re.match(r"0 embedded files\b", texts[3]):
+        return None
+    return "\n".join(texts[:3])
 
 
 def is_list_file(path: str) -> bool:
@@ -451,16 +665,40 @@ def is_list_file(path: str) -> bool:
 
 
 def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: Path) -> Report:
-    """Make the snapshot in `out` and check it. Raises RefusedError before copying anything unsafe."""
+    """Make the snapshot and check it. `out` is written only when every check passes.
+
+    Every RefusedError is raised before anything is written. The snapshot is built in a staging folder next to
+    `out` and moved into place only when the report is ok; on a failed check or any error the staging folder is
+    deleted, so `out` never holds a partial or failing snapshot.
+    """
     root, sha = check_inputs(repo, ref, out)
     ids, id_count = load_private_ids(private_ids, worktrees(root))
     names, short, placeholders = name_tokens(export_senders(export))
     if not names:
         raise RefusedError("export gave no sender name tokens")
-    kept, excluded = copy_tracked(root, sha, out)
-    report = Report(ref=sha, files_copied=len(kept), excluded=excluded, name_tokens=len(names),
-                    short_tokens_skipped=short, placeholder_senders_skipped=placeholders,
-                    private_ids=id_count)
+    files, excluded = tracked_files(root, sha)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{out.name}.partial-", dir=out.parent))
+    try:
+        report = _write_and_check(files, excluded, staging, names, ids)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    report.ref, report.name_tokens, report.private_ids = sha, len(names), id_count
+    report.short_tokens_skipped, report.placeholder_senders_skipped = short, placeholders
+    if not report.ok:
+        shutil.rmtree(staging)
+        return report
+    if out.exists():
+        out.rmdir()  # check_inputs made sure it is empty
+    staging.rename(out)
+    return report
+
+
+def _write_and_check(files: dict[str, tuple[bytes, int]], excluded: list[dict], out: Path, names: frozenset[str],
+                     ids: re.Pattern[str]) -> Report:
+    kept = write_files(files, out)
+    report = Report(ref="", files_copied=len(kept), excluded=excluded)
     matched = {exclusion_entry(e["path"]) for e in excluded}
     report.excludes_unmatched = [entry.path for entry in EXCLUDES if entry.path not in matched]
     (out / NOTICE_NAME).write_text(notice_text(), encoding="utf-8")
@@ -476,8 +714,15 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
         text = read_text(out / path)
         if text is None:
             report.unscannable.append(path)
-            continue
-        if hits := (0 if path in GENERATED_LISTS else count_name_hits(text, names)) + count_name_hits(path, names):
+            text = ""  # the path itself is still checked
+        name_text, authors = without_author(path, text)
+        report.author_strings_allowed += authors
+        text_hits = 0
+        if path not in GENERATED_LISTS:
+            text_hits = count_name_hits(name_text, names, allowed := inner_allowed(path))
+            if allowed:
+                report.inner_name_words_allowed += count_name_hits(name_text, names) - text_hits
+        if hits := text_hits + count_name_hits(path, names):  # a path never uses the allow-list
             report.name_hits[path] = hits
         if id_hits := count_private_ids(text, ids) + count_private_ids(path, ids):
             report.private_id_hits[path] = id_hits
@@ -498,8 +743,10 @@ def _redact_named_paths(report: Report, names: frozenset[str], ids: re.Pattern[s
     aliases: dict[str, str] = {}
 
     def alias(path: str) -> str:
-        # Redaction is cheap, so a name anywhere inside a path word counts here ("bodozafy").
-        if any(name in word for word in words(path) for name in names) or count_private_ids(path, ids):
+        # Read through the same escapes and readings as the scan. Redaction is cheap, so a name anywhere inside
+        # a path word counts here, known word or not ("bodozafy").
+        if (any(name in word for word in words(path) for name in names) or count_name_hits(path, names)
+                or count_private_ids(path, ids)):
             return aliases.setdefault(path, f"<redacted path {len(aliases) + 1}>")
         return path
 

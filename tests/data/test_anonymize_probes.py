@@ -121,8 +121,8 @@ def test_links_become_url(text):
 @pytest.mark.parametrize(
     "text",
     [
-        "hanta+tag@gmail.com", "hanta.rk+fy@yahoo.fr", "hanta @ gmail . com", "hanta[at]gmail.com",
-        "hanta@gmail", "HANTA@GMAIL.COM", "hery.rakotobe[at]gmail.com", "hery (at) yahoo (dot) fr",
+        "hanta+tag@mail.example", "hanta.rk+fy@post.test", "hanta @ gmail . com", "hanta[at]gmail.com",
+        "hanta@gmail", "HANTA@MAIL.EXAMPLE", "hery.rakotobe[at]gmail.com", "hery (at) yahoo (dot) fr",
     ],
 )  # fmt: skip
 def test_emails_become_email(text):
@@ -366,7 +366,7 @@ def test_name_forms_do_not_leak(text, leaked):
 @pytest.mark.parametrize(
     "text, expected",
     [
-        ("Marie-Claire.Rasoanaivo@gmail.com", "<EMAIL>"),
+        ("Marie-Claire.Rasoanaivo@mail.invalid", "<EMAIL>"),
         ("https://www.facebook.com/profile.php?id=100012345678", "<URL>"),
     ],
 )
