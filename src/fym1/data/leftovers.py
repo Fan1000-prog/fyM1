@@ -1,6 +1,6 @@
 """After anonymising: capitalised words that survived, which may be missed names.
 
-`fym1.data.gate` drops every conversation that still holds one. The optional sheet shows
+`fym1.data.gate` replaces the ones no known-word list has. The optional sheet shows
 tokens and counts only (never sentences); a saved blocklist.txt fed back to build_chats.py
 replaces those words everywhere, so fewer conversations are dropped.
 """

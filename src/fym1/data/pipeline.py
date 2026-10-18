@@ -58,8 +58,9 @@ def build_records(
 
     `owner=None` makes every sender the assistant in turn (see `to_conversations`).
 
-    Identical conversations are kept once. Then the strict gate drops every conversation
-    with an unresolved name, long number or contact (`fym1.data.gate.strict_gate`).
+    Identical conversations are kept once. Then the strict gate replaces unknown capitalised
+    words with fake names and drops every conversation with a long number, a contact or too
+    many replaced words (`fym1.data.gate.strict_gate`).
     """
     names = _fake_names(threads, blocklist)
     anonymize = Anonymizer(names)

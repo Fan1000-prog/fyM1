@@ -61,9 +61,16 @@ GATE_KEYS = {
     "conversations_before_gate",
     "dropped",
     "dropped_long_number",
-    "dropped_leftover_name",
     "dropped_contact",
+    "dropped_too_many_unknown",
     "kept",
+    "cleared_mg_common",
+    "cleared_mg_wiki",
+    "cleared_known_names",
+    "cleared_fr",
+    "cleared_en",
+    "cleared_seen_lowercase",
+    "tokens_replaced",
 }
 
 
@@ -85,19 +92,18 @@ def test_dry_run_prints_segment_and_gate_counts_and_writes_nothing(tmp_path, mon
     assert sorted(p.name for p in tmp_path.iterdir()) == ["group.json"]
 
 
-def test_dry_run_gate_counts_drop_numbers_and_names(tmp_path, monkeypatch, capsys):
+def test_dry_run_gate_counts_drop_numbers_and_replace_names(tmp_path, monkeypatch, capsys):
     export = _flat_export(tmp_path / "group.json")
     data = json.loads(export.read_text())
     data["messages"][1]["text"] = "antsoy amin'ny 12 34 567 aho"  # odd grouping: phone-ish digits
-    data["messages"][3]["text"] = "miaraka amin'i Zandry"
+    data["messages"][3]["text"] = "miaraka amin'i Bemazava"
     export.write_text(json.dumps(data))
 
     counts = _main(monkeypatch, capsys, "--export", str(export), "--owner", "Owner", "--dry-run")
 
-    assert counts["dropped_long_number"] + counts["dropped_leftover_name"] == 2
-    assert counts["dropped_leftover_name"] == 1
-    assert counts["kept"] == 0
-    assert "Zandry" not in json.dumps(counts)
+    assert counts["dropped"] == counts["dropped_long_number"] == 1
+    assert counts["kept"] == 1 and counts["tokens_replaced"] == 1
+    assert "Bemazava" not in json.dumps(counts)
 
 
 def test_dry_run_still_checks_the_owner(tmp_path):

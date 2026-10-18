@@ -81,21 +81,58 @@ tests `tests/data/test_gate.py`). It drops a whole conversation if any turn stil
 | Reason | Caught | Kept |
 |---|---|---|
 | `long_number` | 7+ digits in one run across space, no-break spaces, `. - / ,` and unicode dashes (`12 34 567`, `15/03/2026`) | a price: clean 3-digit groups or no separator, then `Ar`, `Ariary`, `fmg`, `€`, `euro(s)`, `eur` (`1 500 000 Ar`) |
-| `leftover_name` | a capitalised word that is not a common Malagasy word, a fake name, a placeholder or a currency word | a word capitalised only at sentence starts that the corpus also has in lower case |
 | `contact` | an email, a link with a path or query, an `@handle`, a private-use mark from a failed replacement | `<EMAIL>`, `<URL>`, a bare `host.com` |
+| `too_many_unknown` | more than 30% of the conversation's words would be replaced as names (below) | 30% or less |
+
+Every other capitalised word (2+ letters, not one of our fake names, the fake-name pool, a
+placeholder or a currency word) is either cleared or replaced:
+
+- **Cleared** if a known-word list has it (`src/fym1/data/known_words.py`), checked in this order;
+  the first list that has it gets the count (`cleared_<list>`):
+  1. `mg_common`: the anonymiser's common Malagasy words that `mg_wiki` also has, plus short texting words.
+  2. `mg_wiki` (`mg_wiki_words.txt`): words Malagasy Wikipedia types in lower case 3+ times.
+  3. `known_names` (`mg_known_names.txt`): a short hand list of places, brands and religious words
+     that are not person names (Tana, Antananarivo, Mvola, Jirama, Jesoa, Andriamanitra, ...).
+  4. `fr`, `en` (`fr_words.txt`, `en_words.txt`): the 30,000 most frequent French and English words from `wordfreq`.
+
+  Or (`cleared_seen_lowercase`) if it is capitalised only at sentence starts and the corpus also
+  has it in lower case.
+- **Replaced** otherwise, by a fake first name from the anonymiser's pool: the same fake for the
+  same word within one conversation, never a word already in that conversation. Counted as
+  `tokens_replaced` (kept conversations only).
+
+Words match folded (lower case, no accents). Stretched letters are collapsed only when the word has
+some ("Bonjouuur" -> "bonjour"); always collapsing would let "Marie" match "mariée".
+
+`scripts/build_known_words.py` (needs `uv sync --group data`) builds `mg_wiki`, `fr` and `en`. It drops
+from all three any word Malagasy Wikipedia writes capitalised mid-sentence 10+ times and more than 3x as
+often as in lower case. `wordfreq` and the common-word list ignore case, so without this "marie", "jean"
+or "david" would clear a person's name.
 
 Counts only (never text or words) go to `data_gate.json` next to `--out`; `--gate-results
 results/data_gate.json` copies them into the repo. `--dry-run` prints the same counts and writes nothing.
 The 100-sample review sheet (`--sheet`) and the leftover-words list (`--leftover-sheet`) are optional and
-off by default; `--blocklist` still replaces listed words everywhere, so fewer conversations are dropped.
+off by default; `--blocklist` still replaces listed words everywhere.
+
+### Word list sources and licences
+
+- `mg_wiki_words.txt`, and the name filter: derived from Malagasy Wikipedia (`wikimedia/wikipedia`,
+  `20231101.mg`), text under CC BY-SA 4.0, by Wikipedia contributors. Only a word list is kept.
+- `fr_words.txt`, `en_words.txt`: derived from `wordfreq` 3.1 by Robyn Speer (code Apache-2.0, word
+  frequency data CC BY-SA 4.0). `wordfreq` is a build-time dependency only (`data` group).
 
 When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit reference number `<TEL>`.
 
 ## Known limits — the strict gate is the backstop
 
 - **Third-party names typed as plain text** (someone not in the chat, no `@`) are not detected
-  automatically; that needs named-entity recognition. Capitalised ones make the strict gate drop
-  the conversation; lower-case ones are not caught.
+  automatically; that needs named-entity recognition. Capitalised ones are replaced by the strict
+  gate unless they are also an ordinary word; lower-case ones are not caught.
+- **A name that is also a word** passes the gate: Malagasy names are often words ("Hery", "Soa",
+  "Vola", "Fitia"), and French or English ones may be too ("Rose", "Victoire"). The name filter
+  only drops words Wikipedia mostly capitalises.
+- Capitalised ordinary words in no list (rare words, typos, places) are replaced by a fake name:
+  over-masking, not a leak.
 - A real name that is also on the fake-name pool ("Mamy", "Rabe") passes the strict gate: the
   pool is allowed because `@mentions` get fakes from it.
 - Names spelled out or disguised: "Ni-ri-na", "N i r i n a", "N1r1na".

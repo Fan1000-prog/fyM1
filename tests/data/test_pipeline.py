@@ -150,7 +150,7 @@ def test_build_records_every_sender_drops_exact_duplicates():
     assert len(records) == 1  # Tojo as assistant, twice -> once; Nirina and Hery yield nothing
 
 
-def test_build_records_gate_keeps_prices_drops_numbers_and_leftover_names():
+def test_build_records_gate_keeps_prices_drops_numbers_and_replaces_leftover_names():
     threads = [
         chat([("Nirina Rakoto", "ohatrinona?"), ("Tojo Randria", "1 500 000 Ar")]),
         chat([("Nirina Rakoto", "inona ny ref?"), ("Tojo Randria", "ref 123-4567")]),
@@ -159,14 +159,16 @@ def test_build_records_gate_keeps_prices_drops_numbers_and_leftover_names():
 
     result = build_records(threads, owner="Tojo Randria", is_malagasy=says_malagasy)
 
-    assert all_text(result.records) == "ohatrinona? 1 500 000 Ar"
-    assert result.gate == {
+    assert "ohatrinona? 1 500 000 Ar" in all_text(result.records)
+    assert "Bema" not in all_text(result.records) and "hoy i " in all_text(result.records)
+    assert {k: v for k, v in result.gate.items() if not k.startswith("cleared_")} == {
         "conversations_before_gate": 3,
-        "dropped": 2,
+        "dropped": 1,
         "dropped_long_number": 1,
-        "dropped_leftover_name": 1,
         "dropped_contact": 0,
-        "kept": 1,
+        "dropped_too_many_unknown": 0,
+        "kept": 2,
+        "tokens_replaced": 1,
     }
     assert result.leftover_names["Bema"] == 1  # the optional sheet still sees pre-gate words
 

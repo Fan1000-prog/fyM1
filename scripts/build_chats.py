@@ -1,8 +1,9 @@
 """Messenger export -> anonymised Malagasy conversations (JSONL), through a strict automatic gate.
 
 Runs on the owner's laptop only. Prints counts, never text. After anonymising, the strict gate
-(src/fym1/data/gate.py) drops every conversation with a leftover capitalised name, a 7+ digit
-number that is not a price, or an email/link/@handle. Nobody reads the text. The gate counts
+(src/fym1/data/gate.py) replaces every unknown capitalised word with a fake name and drops every
+conversation with a 7+ digit number that is not a price, an email/link/@handle, or more than 30%
+of its words replaced. Nobody reads the text. The gate counts
 (counts only) go to data_gate.json next to --out; --gate-results also copies them into the repo.
 
 --sheet (a 100-sample review page) and --leftover-sheet (leftover capitalised words with counts)

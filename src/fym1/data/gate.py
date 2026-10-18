@@ -6,23 +6,33 @@ No person reads the anonymised text. Instead a whole conversation is dropped if 
   `. - / ,`, unicode dashes). A price is kept: clean 3-digit groups (or no separator) followed
   by a currency word (`1 500 000 Ar`, `2500000 ariary`, `1 250 000,50 €`). A full date
   (`15/03/2026`, 8 digits) counts as a long number too.
-- `leftover_name`: a capitalised word that is not a common Malagasy word, a placeholder or a
-  fake name (`fym1.data.leftovers`). A word capitalised only at the start of a sentence is
-  ordinary if the corpus also has it in lower case ("Zazakely tonga." + "ilay zazakely").
 - `contact`: an email, a link with a path or query, an `@handle`, or a private-use mark the
   anonymiser leaves only when a replacement failed.
+- `too_many_unknown`: more than 30% of its words would be replaced as names (below).
+
+Capitalised words (not our fake names, placeholders or currency words) are then sorted:
+
+- cleared: in a known-word list (`fym1.data.known_words`), or capitalised only at sentence
+  starts and also typed in lower case somewhere in the corpus ("Zazakely tonga." + "ilay zazakely").
+- replaced: anything else becomes a fake first name from the anonymiser's pool, the same fake
+  for the same word within one conversation, never a word already in that conversation.
 
 Only counts leave this module; never text or words.
 """
 
+import hashlib
 import re
-from collections.abc import Iterable
+from collections import Counter
+from collections.abc import Iterable, Iterator
 from typing import NamedTuple
 
 from fym1.data.anonymize import EMAIL, FALLBACK_NAME, FIRST_NAMES, SURNAMES, compare_key
-from fym1.data.leftovers import LETTERS, fake_name_keys, leftover_matches
+from fym1.data.known_words import KNOWN_WORDS, Lexicon, known_by
+from fym1.data.leftovers import LETTERS, MIN_LETTERS, fake_name_keys
 
-GATE_REASONS = ("long_number", "leftover_name", "contact")
+GATE_REASONS = ("long_number", "contact", "too_many_unknown")
+SEEN_LOWERCASE = "seen_lowercase"  # cleared: capitalised only at sentence starts, typed in lower case too
+MAX_REPLACED_SHARE = 0.3
 
 MIN_NUMBER_DIGITS = 7
 _SEPARATORS = " \u00a0\u202f.,/\\-\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
@@ -64,54 +74,112 @@ def _sentence_initial(text: str, start: int) -> bool:
     return not before or before[-1] in SENTENCE_END
 
 
-def _turns(records: Iterable[dict]) -> Iterable[str]:
-    return (turn["content"] for record in records for turn in record["messages"])
+def _is_capitalised(word: str, fake_keys: set[str]) -> bool:
+    return word[0].isupper() and len(word) >= MIN_LETTERS and compare_key(word) not in fake_keys
 
 
-def _name_noise(texts: list[str], fake_keys: set[str]) -> set[str]:
-    """Keys of leftover words capitalised only at sentence starts and also seen in lower case."""
+def _capitalised(text: str, fake_keys: set[str]) -> Iterator[re.Match]:
+    return (m for m in LETTERS.finditer(text) if _is_capitalised(m.group(), fake_keys))
+
+
+def _seen_lowercase(texts: list[str], fake_keys: set[str], lexicon: Lexicon) -> set[str]:
+    """Keys of unknown words capitalised only at sentence starts and also seen in lower case."""
     lower = {compare_key(w) for text in texts for w in LETTERS.findall(text) if w[0].islower()}
     initial_only: dict[str, bool] = {}
     for text in texts:
-        for match in leftover_matches(text, fake_keys):
+        for match in _capitalised(text, fake_keys):
             key = compare_key(match.group())
-            initial_only[key] = initial_only.get(key, True) and _sentence_initial(text, match.start())
-    return {key for key, only in initial_only.items() if only and key in lower}
+            if key in lower and known_by(match.group(), lexicon) is None:
+                initial_only[key] = initial_only.get(key, True) and _sentence_initial(text, match.start())
+    return {key for key, only in initial_only.items() if only}
 
 
-def _reasons(texts: list[str], fake_keys: set[str], noise: set[str]) -> set[str]:
+def _fake_for(key: str, taken: set[str]) -> str:
+    """A pool first name picked from `key`, so the same word gets the same fake; none of `taken`."""
+    free = [name for name in FIRST_NAMES if compare_key(name) not in taken] or [FALLBACK_NAME]
+    number = int.from_bytes(hashlib.sha256(key.encode("utf-8")).digest()[:4], "big")
+    return free[number % len(free)]
+
+
+class _Names(NamedTuple):
+    texts: list[str]  # with unknown capitalised words replaced
+    words: int
+    replaced: int
+    cleared: Counter  # list name -> capitalised words it cleared
+
+
+def _clear_or_replace(texts: list[str], fake_keys: set[str], lexicon: Lexicon, seen_lower: set[str]) -> _Names:
+    """One conversation's turns with every unknown capitalised word swapped for a fake first name."""
+    taken = {compare_key(w) for text in texts for w in LETTERS.findall(text)}
+    fakes: dict[str, str] = {}
+    cleared, replaced = Counter(), 0
+
+    def swap(match: re.Match) -> str:
+        nonlocal replaced
+        word = match.group()
+        if not _is_capitalised(word, fake_keys):
+            return word
+        key = compare_key(word)
+        source = known_by(word, lexicon) or (SEEN_LOWERCASE if key in seen_lower else None)
+        if source:
+            cleared[source] += 1
+            return word
+        if key not in fakes:
+            fakes[key] = _fake_for(key, taken)
+            taken.add(compare_key(fakes[key]))
+        replaced += 1
+        return fakes[key]
+
+    new_texts = [LETTERS.sub(swap, text) for text in texts]
+    words = sum(len(LETTERS.findall(text)) for text in texts)
+    return _Names(new_texts, words, replaced, cleared)
+
+
+def _with_texts(record: dict, texts: list[str]) -> dict:
+    messages = [{**turn, "content": text} for turn, text in zip(record["messages"], texts, strict=True)]
+    return {**record, "messages": messages}
+
+
+def strict_gate(records: list[dict], fake_names: Iterable[str], lexicon: Lexicon = KNOWN_WORDS) -> GateResult:
+    """Records with nothing unresolved and unknown names replaced, plus counts.
+
+    `fake_names` are the participants' fakes; the whole fake-name pool is allowed too, since
+    @mentions get fakes from it, and so are currency words ("Ar"). A conversation dropped for
+    two reasons counts under both. `cleared_*` counts capitalised words in every conversation
+    before the gate; `tokens_replaced` counts words replaced in kept conversations.
+    """
+    allowed = [*fake_names, *FIRST_NAMES, *SURNAMES, FALLBACK_NAME, *CURRENCY_WORDS]
+    fake_keys = fake_name_keys(allowed)
+    seen_lower = _seen_lowercase([turn["content"] for r in records for turn in r["messages"]], fake_keys, lexicon)
+    kept, dropped, cleared, replaced = [], dict.fromkeys(GATE_REASONS, 0), Counter(), 0
+    for record in records:
+        texts = [turn["content"] for turn in record["messages"]]
+        names = _clear_or_replace(texts, fake_keys, lexicon, seen_lower)
+        cleared += names.cleared
+        reasons = _reasons(texts)
+        if names.replaced > MAX_REPLACED_SHARE * names.words:
+            reasons.add("too_many_unknown")
+        for reason in reasons:
+            dropped[reason] += 1
+        if not reasons:
+            kept.append(_with_texts(record, names.texts))
+            replaced += names.replaced
+    counts = {
+        "conversations_before_gate": len(records),
+        "dropped": len(records) - len(kept),
+        **{f"dropped_{reason}": n for reason, n in dropped.items()},
+        "kept": len(kept),
+        **{f"cleared_{source}": cleared[source] for source in (*lexicon, SEEN_LOWERCASE)},
+        "tokens_replaced": replaced,
+    }
+    return GateResult(kept, counts)
+
+
+def _reasons(texts: list[str]) -> set[str]:
     reasons = set()
     for text in texts:
         if has_long_number(text):
             reasons.add("long_number")
         if contact_left(text):
             reasons.add("contact")
-        if any(compare_key(m.group()) not in noise for m in leftover_matches(text, fake_keys)):
-            reasons.add("leftover_name")
     return reasons
-
-
-def strict_gate(records: list[dict], fake_names: Iterable[str]) -> GateResult:
-    """Records with nothing unresolved, plus per-reason drop counts.
-
-    `fake_names` are the participants' fakes; the whole fake-name pool is allowed too, since
-    @mentions get fakes from it, and so are currency words ("Ar"). A conversation dropped for
-    two reasons counts under both.
-    """
-    allowed = [*fake_names, *FIRST_NAMES, *SURNAMES, FALLBACK_NAME, *CURRENCY_WORDS]
-    fake_keys = fake_name_keys(allowed)
-    noise = _name_noise(list(_turns(records)), fake_keys)
-    kept, dropped = [], dict.fromkeys(GATE_REASONS, 0)
-    for record in records:
-        reasons = _reasons([turn["content"] for turn in record["messages"]], fake_keys, noise)
-        for reason in reasons:
-            dropped[reason] += 1
-        if not reasons:
-            kept.append(record)
-    counts = {
-        "conversations_before_gate": len(records),
-        "dropped": len(records) - len(kept),
-        **{f"dropped_{reason}": n for reason, n in dropped.items()},
-        "kept": len(kept),
-    }
-    return GateResult(kept, counts)

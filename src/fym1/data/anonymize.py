@@ -382,7 +382,8 @@ COMMON_WORDS = tuple(files("fym1.data").joinpath("mg_common_words.txt").read_tex
 _COMMON_KEYS = {compare_key(w) for w in COMMON_WORDS}
 # Short words a short name part ("Ny", "Fa") must never replace: the most widespread
 # Wikipedia words plus texting words Wikipedia lacks.
-PROTECTED_SHORT_WORDS = {compare_key(w) for w in COMMON_WORDS[:300]} | {"ve", "eh", "e", "ah", "ahn", "aho", "ry", "o", "ok"}
+TEXTING_WORDS = frozenset({"ve", "eh", "e", "ah", "ahn", "aho", "ry", "o", "ok"})
+PROTECTED_SHORT_WORDS = {compare_key(w) for w in COMMON_WORDS[:300]} | TEXTING_WORDS
 
 
 def is_everyday_word(word: str) -> bool:
