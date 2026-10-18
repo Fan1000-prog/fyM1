@@ -227,3 +227,17 @@ def test_sender_that_is_not_a_string_fails_loud(tmp_path, sender):
 
     with pytest.raises(ValueError, match=r"group\.json: message 1 has no sender name"):
         load_threads(tmp_path)
+
+
+@pytest.mark.parametrize("participants", [[{"name": "Alpha"}], "Alpha", ["Alpha", 7]])
+def test_participants_written_another_way_fail_loud(tmp_path, participants):
+    """A participant that is not a name string is refused, never dropped (release finding 14)."""
+    _write(tmp_path / "group.json", [_msg(1, "Bravo", "eny", "2026-07-01T10:00:00")], participants=participants)
+    with pytest.raises(ValueError, match="participants must be a list of names"):
+        load_threads(tmp_path)
+
+
+def test_null_participants_fall_back_to_senders(tmp_path):
+    _write(tmp_path / "group.json", [_msg(1, "Bravo", "eny", "2026-07-01T10:00:00")], participants=None)
+    [thread] = load_threads(tmp_path)
+    assert thread.participants == ["Bravo"]

@@ -9,7 +9,9 @@ Every chat is checked by code; a chat with any of DROP_REASONS is dropped, never
   any case, spaced-out letters, digits for letters, a name glued to a marker or ending).
 - `unknown_name`: a capitalised word no known-word list clears and not a fake-pool name (lead decision 30).
 - `long_number`, `contact`, `hidden_char`: the strict data gate's checks (`fym1.data.gate`).
-- `leak_8gram`: any turn shares an 8-word run with a raw export message. Any such match also fails the gate.
+- `leak_8gram`: any turn holds copied raw chat text (`fym1.data.name_scan.ChatIndex`): an 8-word run of a raw
+  conversation (runs may cross from one message into the next) or a whole short raw message with 4+ distinctive
+  words, words compared as the name scan compares them. Any such match also fails the gate.
 - `drift`: an assistant turn with no Malagasy (full French/English). User turns may be French: counted, not dropped.
 - `identity`: an assistant turn that claims to be, or names, another assistant (`fym1.eval.identity_check`).
 
@@ -29,7 +31,6 @@ from fym1.data.gate import contact_left, has_hidden_char, has_long_number, repla
 from fym1.data.leftovers import leftover_names
 from fym1.data.synth import FAKE_POOL, MAX_TURNS, MIN_TURNS, PLACEHOLDER, record_id
 from fym1.eval.identity_check import self_claims, unexcused_mentions
-from fym1.eval.metrics import NgramIndex
 
 DROP_REASONS = ("broken", "real_name", "unknown_name", "long_number", "contact", "hidden_char", "leak_8gram",
                 "drift", "identity")  # fmt: skip
@@ -53,10 +54,11 @@ AUTO_DECISIONS = (
 
 @dataclass(frozen=True)
 class RawReference:
-    """What the gate compares against in the raw export: name tokens and 8-word runs. Never written anywhere."""
+    """What the gate compares against in the raw export: name tokens and copied-chat-text runs. Never written
+    anywhere."""
 
     names: frozenset[str]
-    leaks: NgramIndex
+    leaks: name_scan.ChatIndex
 
 
 @dataclass(frozen=True)
@@ -65,12 +67,13 @@ class GateResult:
     report: dict
 
 
-def raw_reference(senders: Iterable[str], texts: list[str]) -> RawReference:
-    """Name tokens of every sender/participant and 8-word runs of every message text of the raw export."""
+def raw_reference(senders: Iterable[str], conversations: Iterable[list[str]]) -> RawReference:
+    """Name tokens of every sender/participant and the chat-text index of every conversation (its message texts,
+    in order) of the raw export."""
     names, _, _ = name_scan.name_tokens(senders)
     if not names:  # an empty name set would clear every chat of real_name, so refuse
         raise name_scan.RefusedError("export gave no sender name tokens")
-    return RawReference(names, name_scan.chat_text_index(texts, "raw export"))
+    return RawReference(names, name_scan.ChatIndex(conversations, "raw export"))
 
 
 def _turns(record: object) -> list | None:

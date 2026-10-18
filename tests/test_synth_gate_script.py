@@ -25,7 +25,7 @@ def chat(user, reply):
     return {"id": record_id(messages), "messages": messages}
 
 
-def run(tmp_path, records, raw=(["Zebulon Quixbert"], [RAW_LINE]), private=None):
+def run(tmp_path, records, raw=(["Zebulon Quixbert"], [[RAW_LINE]]), private=None):
     filtered = tmp_path / "hub" / "filtered.ndjson"
     filtered.parent.mkdir(parents=True)
     filtered.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")

@@ -4,7 +4,7 @@ An open AI model that chats in everyday Malagasy — the way people really text,
 
 "fy" means sweet or pleasant in Malagasy. M is for Malagasy. 1 is the first version.
 
-**[Try it](#try-it)** · [Paper](paper/fym1.pdf) · [Model card](MODEL_CARD.md) ·
+**[Try it](#try-it)** · [Paper](paper/fym1.tex) · [Model card](MODEL_CARD.md) ·
 [Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)
 
 > **Status: v0.1.** *pending* means not measured yet. Coming in v0.2: the full panel's blind human
@@ -34,7 +34,7 @@ everyday Malagasy chat, trained for $0 and shared under an open licence.
 - **Download the model:** <!-- n:model-repo -->Fan1000-Prog/fy-m1-9B<!-- /n --> on
   [Hugging Face](https://huggingface.co/Fan1000-Prog).
   The GGUF file runs with llama.cpp and Ollama.
-- **Read the paper:** [paper/fym1.pdf](paper/fym1.pdf)
+- **Read the paper:** [paper/fym1.tex](paper/fym1.tex) (LaTeX source; build the PDF with `tectonic`, see [How to reproduce](#how-to-reproduce))
 - **Help us rate (native speakers):** [fy-m1-arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena) —
   read two answers, pick the more natural one. No login.
 

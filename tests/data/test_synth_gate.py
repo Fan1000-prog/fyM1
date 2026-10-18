@@ -15,7 +15,7 @@ from fym1.data.synth_gate import (
 
 SENDERS = ["Zebulon Quixbert", "Facebook User"]
 RAW_LINE = "Aza adino ny mitondra ilay boky manga rahampitso maraina fa ilaina any am-pianarana"
-RAW_TEXTS = [RAW_LINE, "ok"]
+RAW_CONVERSATIONS = [[RAW_LINE, "ok"]]
 
 
 def says_malagasy(text):
@@ -35,7 +35,7 @@ def clean_chat(tag="tsara"):
 
 @pytest.fixture
 def raw():
-    return raw_reference(SENDERS, RAW_TEXTS)
+    return raw_reference(SENDERS, RAW_CONVERSATIONS)
 
 
 def reasons(record, raw):
@@ -50,7 +50,7 @@ def test_raw_reference_holds_name_tokens_and_leak_runs(raw):
 
 def test_raw_reference_refuses_an_export_with_no_name_tokens():
     with pytest.raises(name_scan.RefusedError, match="no sender name tokens"):
-        raw_reference(["Facebook User"], RAW_TEXTS)
+        raw_reference(["Facebook User"], RAW_CONVERSATIONS)
 
 
 def test_clean_chat_has_no_reasons(raw):

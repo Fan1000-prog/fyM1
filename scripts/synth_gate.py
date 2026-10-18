@@ -48,10 +48,10 @@ def download_filtered(revision: str) -> Path:
     return Path(hf_hub_download(DATA_REPO, FILTERED, repo_type="dataset", revision=revision))
 
 
-def read_raw(export: Path) -> tuple[list[str], list[str]]:
-    """(every sender and participant, every message text) of the raw export."""
+def read_raw(export: Path) -> tuple[list[str], list[list[str]]]:
+    """(every sender and participant, each conversation's message texts in order) of the raw export."""
     threads = name_scan.read_export(export.expanduser())
-    return name_scan.export_senders(threads), name_scan.export_texts(threads)
+    return name_scan.export_senders(threads), name_scan.export_conversations(threads)
 
 
 def read_records(path: Path) -> list[dict]:
@@ -60,7 +60,7 @@ def read_records(path: Path) -> list[dict]:
 
 
 def main(argv: list[str] | None = None, download: Callable[[str], Path] = download_filtered,
-         load_raw: Callable[[Path], tuple[list[str], list[str]]] = read_raw,
+         load_raw: Callable[[Path], tuple[list[str], list[list[str]]]] = read_raw,
          is_malagasy: Callable[[str], bool] | None = None) -> int:  # fmt: skip
     args = parse_args(argv)
     if is_malagasy is None:

@@ -166,15 +166,11 @@ def _load_dyi_thread(thread_dir: Path) -> Thread:
     )
 
 
-def load_dyi_threads(export_dir: Path) -> list[Thread]:
-    """Threads from the standard "Download your information" JSON export."""
-    thread_dirs = sorted(
-        {
-            page.parent
-            for folder in DYI_FOLDERS
-            for page in export_dir.glob(f"**/messages/{folder}/*/message_*.json")
-        }
-    )
+def load_dyi_threads(export_dir: Path, folders: Iterable[str] | None = DYI_FOLDERS) -> list[Thread]:
+    """Threads from the standard "Download your information" JSON export, in `folders` only; `folders=None` reads
+    every folder of thread pages anywhere under `export_dir` (message_requests and filtered_threads too)."""
+    patterns = ["**/message_*.json"] if folders is None else [f"**/messages/{f}/*/message_*.json" for f in folders]
+    thread_dirs = sorted({page.parent for pattern in patterns for page in export_dir.glob(pattern)})
     return [_load_dyi_thread(d) for d in thread_dirs]
 
 
@@ -230,6 +226,17 @@ def _flat_text(raw: dict) -> str | None:
     return text
 
 
+def _flat_participants(conversation: dict, path: Path) -> list[str]:
+    """`conversation.participants`: absent or null is none listed; anything but a list of names (strings) raises, so
+    a name written another way (`[{"name": ...}]`, one bare string) is never dropped silently."""
+    listed = conversation.get("participants")
+    if listed is None:
+        return []
+    if not isinstance(listed, list) or not all(isinstance(p, str) for p in listed):
+        raise ValueError(f"{path}: conversation participants must be a list of names (strings).")
+    return listed
+
+
 def _load_flat_thread(path: Path, data: dict) -> Thread:
     conversation = data["conversation"]
     zone = _flat_zone(conversation, path)
@@ -238,8 +245,7 @@ def _load_flat_thread(path: Path, data: dict) -> Thread:
         for index, raw in enumerate(data["messages"])
         if (text := _flat_text(raw)) is not None
     ]
-    listed = conversation.get("participants")
-    listed = [p for p in listed if isinstance(p, str)] if isinstance(listed, list) else []
+    listed = _flat_participants(conversation, path)
     senders = [raw["sender"] for raw in data["messages"]]
     participants = list(dict.fromkeys([*listed, *senders]))
     nicknames, unharvested = _harvest_nicknames(

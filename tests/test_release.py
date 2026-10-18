@@ -6,12 +6,17 @@ import importlib.util
 import json
 import shutil
 import subprocess
+from dataclasses import replace
 from pathlib import Path, PurePath
 
 import pytest
 
 from fym1 import release
 from fym1.data import name_scan
+from fym1.data.anonymize import fold
+from fym1.data.known_words import PERSON_NAMES
+from fym1.data.messenger import Message, load_threads
+from fym1.eval.metrics import NgramIndex
 from fym1.release import RefusedError, build_snapshot, count_name_hits, name_tokens, secret_hits, strip_list
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -242,9 +247,7 @@ def test_every_inner_name_allow_list_entry_has_a_reason_and_its_word_is_in_its_f
     for (path, word), reason in release.INNER_NAME_ALLOWED.items():
         assert reason.strip() and "\n" not in reason, (path, word)
         assert word == release.compare_key(word) and word.isalpha(), (path, word)
-        if path.endswith(".pdf") and not all(map(shutil.which, ("pdftotext", "pdfinfo", "pdfdetach"))):
-            continue  # poppler missing (CI): the PDF cannot be read here
-        text = release.read_text(REPO_ROOT / path)
+        text = release.text_of(path, (REPO_ROOT / path).read_bytes())
         assert text is not None and word in release.words(text), (path, word)
 
 
@@ -516,7 +519,7 @@ def _imports_release(source: str) -> bool:
 
 
 def test_nothing_shipped_imports_or_describes_the_release_tooling():
-    shipped = {p: release.read_text(REPO_ROOT / p) for p in tracked() if not release.exclusion_reason(p)}
+    shipped = {p: release.text_of(p, (REPO_ROOT / p).read_bytes()) for p in tracked() if not release.exclusion_reason(p)}
     assert shipped
     for path, text in shipped.items():
         assert text is not None, path
@@ -528,12 +531,623 @@ def test_nothing_shipped_imports_or_describes_the_release_tooling():
 def test_release_uses_the_shared_name_scan_unchanged():
     """The snapshot and the synth gate run the same scan: release re-uses fym1.data.name_scan, it keeps no copy."""
     shared = ["RefusedError", "count_name_hits", "name_tokens", "is_name_word", "words", "readings", "read_export",
-              "export_senders", "export_texts", "chat_text_index", "has_chat_text", "CHAT_TEXT_NGRAM"]
+              "export_files", "export_senders", "export_conversations", "ChatIndex", "chat_words", "is_distinctive",
+              "has_chat_text", "CHAT_TEXT_NGRAM", "SHORT_MESSAGE_DISTINCTIVE"]
     assert all(getattr(release, n) is getattr(name_scan, n) for n in shared)
 
 
 def test_no_inner_name_allow_list_entry_names_an_unshipped_file():
     assert not any(release.exclusion_reason(path) for path, _ in release.INNER_NAME_ALLOWED)
+
+# ---- every sender in the export (review finding 14) -------------------------------------------------------------
+
+
+def _dyi_page(participants: list[str], messages: list[dict]) -> str:
+    return json.dumps({"title": "t", "participants": [{"name": p} for p in participants], "messages": messages})
+
+
+def make_dyi_export(tmp_path: Path) -> Path:
+    """A synthetic "Download your information" export: the inbox thread holds the 8-word chat; each other name
+    appears only where the conversation loader never looks, or only in what it drops."""
+    messages = tmp_path / "raw" / "your_facebook_activity" / "messages"
+    pages = {
+        "inbox/zafytest_1": _dyi_page(["Zafy Test", "Bodo Fakenaina"], [
+            {"sender_name": "Zafy Test", "timestamp_ms": 2, "content": FAKE_CHAT,
+             "reactions": [{"reaction": "x", "actor": "Lalaofake Reacting"}]},
+            {"sender_name": "Velofake Unsent", "timestamp_ms": 3, "content": "", "is_unsent": True},
+            {"sender_name": "Bodo Fakenaina", "timestamp_ms": 1, "content": "salama"},
+        ]),
+        "message_requests/stranger_2": _dyi_page(["Kotofake Requesting", "Bodo Fakenaina"], [
+            {"sender_name": "Kotofake Requesting", "timestamp_ms": 1, "content": "salama"}]),
+        "filtered_threads/spam_3": _dyi_page(["Bodo Fakenaina"], [
+            {"sender_name": "Ranofake Filtered", "timestamp_ms": 1, "content": "salama"}]),
+        "some_new_folder/other_4": _dyi_page(["Soafake Elsewhere"], []),
+    }
+    for folder, page in pages.items():
+        (messages / folder).mkdir(parents=True)
+        (messages / folder / "message_1.json").write_text(page, encoding="utf-8")
+    return tmp_path / "raw"
+
+
+HIDDEN_SENDERS = ["Lalaofake", "Velofake", "Kotofake", "Ranofake", "Soafake"]
+
+
+def export_names(export: Path) -> list[str]:
+    return release.scan_export(export).names
+
+
+def test_export_names_reads_every_folder_and_every_raw_sender(tmp_path):
+    export = make_dyi_export(tmp_path)
+    names = name_tokens(export_names(export))[0]
+    loaded = {p for t in load_threads(export) for p in [*t.participants, *(m.sender for m in t.messages)]}
+    for sender in HIDDEN_SENDERS:
+        assert release.compare_key(sender) in names, sender
+        assert not any(sender in p for p in loaded), sender  # the conversation loader alone misses it
+
+
+def test_export_names_reads_the_one_file_format(tmp_path):
+    assert set(export_names(make_export(tmp_path))) == set(FAKE_SENDERS)
+
+
+def test_a_sender_only_in_message_requests_is_caught_end_to_end(tmp_path):
+    files = {**CLEAN_FILES, **{f"docs/{i}.md": f"Thanks {name}!\n" for i, name in enumerate(HIDDEN_SENDERS)}}
+    report = snap(make_repo(tmp_path, files), tmp_path / "public", make_dyi_export(tmp_path))
+    assert report.name_hits == {f"docs/{i}.md": 1 for i in range(len(HIDDEN_SENDERS))} and not report.ok
+
+
+def test_chat_text_from_a_message_request_is_caught(tmp_path):
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/message_requests/stranger_2/message_1.json"
+    page.write_text(_dyi_page(["Kotofake Requesting"], [
+        {"sender_name": "Kotofake Requesting", "timestamp_ms": 1, "content": FAKE_TURN}]), encoding="utf-8")
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/copied.md": _run(FAKE_TURN_WORDS[3:11])})
+    report = build_snapshot(repo, "HEAD", tmp_path / "public", export, make_ids(tmp_path),
+                            make_chats(tmp_path, turns=["eny"] * 2 + [_run(FAKE_CHAT_WORDS)]))
+    assert report.chat_text_hits == ["docs/copied.md"]
+
+
+@pytest.mark.parametrize("page", ["not json", "[]", '{"messages": []}', '{"participants": [{"name": 7}]}'])
+def test_an_unreadable_thread_page_is_refused(tmp_path, page):
+    export = make_dyi_export(tmp_path)
+    (export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json").write_text(page)
+    with pytest.raises(RefusedError, match="export could not be read") as error:
+        snap(make_repo(tmp_path, CLEAN_FILES), tmp_path / "public", export)
+    assert "spam" not in str(error.value)
+
+
+def _flat_export(sender: str, title: str = "t", chat: str = "salama") -> str:
+    message = {"id": "1", "sender": sender, "text": chat, "timestamp": "2026-01-01T10:00:00"}
+    return json.dumps({"conversation": {"title": title}, "messages": [message]})
+
+
+def test_a_one_file_export_at_any_depth_is_read(tmp_path):
+    export = make_dyi_export(tmp_path)
+    nested = export / "sub" / "deeper" / "chat.json"
+    nested.parent.mkdir(parents=True)
+    nested.write_text(_flat_export("Nestfake Deep", chat=FAKE_TURN), encoding="utf-8")
+    assert release.compare_key("Nestfake") in name_tokens(export_names(export))[0]
+    assert any("Nestfake Deep" in t.participants for t in release.read_export(export))
+    files = {**CLEAN_FILES, "docs/thanks.md": "Thanks Nestfake!\n", "docs/copied.md": _run(FAKE_TURN_WORDS[3:11])}
+    report = build_snapshot(make_repo(tmp_path, files), "HEAD", tmp_path / "public", export, make_ids(tmp_path),
+                            make_chats(tmp_path, turns=["eny"] * 2 + [_run(FAKE_CHAT_WORDS)]))
+    assert report.name_hits == {"docs/thanks.md": 1} and report.chat_text_hits == ["docs/copied.md"]
+
+
+@pytest.mark.parametrize("unread", ["your_facebook_activity/messages/inbox/zafytest_1/message_1.html",
+                                    "your_facebook_activity/messages/inbox/zafytest_1/notes_secretname.txt",
+                                    "chat.json.bak"])
+def test_a_file_no_reader_consumes_refuses_the_export(tmp_path, capsys, unread):
+    export = make_dyi_export(tmp_path)
+    (export / unread).write_text("<p>Hiddenfake Sender: salama</p>", encoding="utf-8")
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    out = tmp_path / "public"
+    for read in (release.scan_export, release.read_export):
+        with pytest.raises(RefusedError, match="1 files no reader consumes") as error:
+            read(export)
+        assert PurePath(unread).stem not in str(error.value) and "Hiddenfake" not in str(error.value)
+    (tmp_path / "cli").mkdir()
+    args = [*cli_args(tmp_path / "cli", repo, out), "--results", str(tmp_path / "r.json")]
+    args[args.index("--export") + 1] = str(export)
+    assert cli.main(args) == 2
+    assert not out.exists() and not (tmp_path / "r.json").exists()
+    printed = capsys.readouterr()
+    assert "Hiddenfake" not in printed.out + printed.err and PurePath(unread).stem not in printed.err
+
+
+def test_a_symlinked_folder_in_the_export_is_refused(tmp_path):
+    export = make_dyi_export(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "message_1.json").write_text(_dyi_page(["Linkfake Name"], []), encoding="utf-8")
+    (export / "linked").symlink_to(elsewhere, target_is_directory=True)
+    with pytest.raises(RefusedError, match="1 files no reader consumes"):
+        export_names(export)
+
+
+def test_every_name_field_of_a_thread_page_is_read(tmp_path):
+    """A name only in a member event's `users`, or in any `*_name` key, is a sender name too."""
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(_dyi_page(["Bodo Fakenaina"], [
+        {"sender_name": "Bodo Fakenaina", "timestamp_ms": 1, "content": "nanampy olona", "type": "Subscribe",
+         "users": [{"name": "Usersfake Added"}]},
+        {"sender_name": "Bodo Fakenaina", "timestamp_ms": 2, "share": {"original_content_owner_name": "Ownerfake"}},
+    ]), encoding="utf-8")
+    names = name_tokens(export_names(export))[0]
+    assert {release.compare_key(n) for n in ("Usersfake", "Ownerfake")} <= names
+    loaded = {p for t in load_threads(export) for p in [*t.participants, *(m.sender for m in t.messages)]}
+    assert not any("Usersfake" in p or "Ownerfake" in p for p in loaded)  # the conversation loader alone misses them
+
+
+def test_a_name_field_that_is_not_text_is_refused(tmp_path):
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(_dyi_page(["Bodo Fakenaina"], [{"sender_name": "Bodo Fakenaina", "users": [{"name": 7}]}]))
+    with pytest.raises(RefusedError, match="export could not be read"):
+        export_names(export)
+
+
+@pytest.mark.parametrize("flat", [True, False])
+def test_the_distinctive_words_of_a_conversation_title_are_names(tmp_path, flat):
+    title = "famille Zokifake"
+    if flat:
+        export = tmp_path / "raw"
+        export.mkdir()
+        (export / "export.json").write_text(_flat_export("Zafy Test", title=title), encoding="utf-8")
+    else:
+        export = make_dyi_export(tmp_path)
+        page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+        page.write_text(json.dumps({"title": title, "participants": [{"name": "Bodo Fakenaina"}], "messages": []}))
+    names = name_tokens(export_names(export))[0]
+    assert release.compare_key("Zokifake") in names
+    assert release.compare_key("famille") not in names  # an everyday word names nobody
+
+
+# ---- every key of a one-file export (review finding 14, round 2) ---------------------------------------------------
+
+
+def _flat_file(tmp_path: Path, conversation: dict | None = None, message: dict | None = None) -> Path:
+    """A one-file export with FAKE_CHAT from "Zafy Test", plus `conversation` keys and `message` keys on it."""
+    export = tmp_path / "raw"
+    export.mkdir()
+    msg = {"id": 1, "sender": "Zafy Test", "text": FAKE_CHAT, "timestamp": "2026-01-01T10:00:00", **(message or {})}
+    data = {"conversation": {"title": "t", **(conversation or {})}, "messages": [msg]}
+    (export / "chat.json").write_text(json.dumps(data), encoding="utf-8")
+    return export
+
+
+@pytest.mark.parametrize(("conversation", "message"), [
+    ({"participants": [{"name": "Dictfake Person"}]}, None),  # a participant written as an object
+    ({"participants": "Barefake Person"}, None),  # one bare string
+    ({"participants": ["Zafy Test", 7]}, None),
+    (None, {"reactions": {"Keyfake Person": "x"}}),  # a name as a dict key
+    (None, {"reactions": [{"actor": 7}]}),  # a name that is not text
+    ({"notes": {"text": "x"}}, None),  # free text that is an object
+    ({"message_count": ["Listfake Person"]}, None),  # a data field holding a list
+])
+def test_a_one_file_export_field_of_the_wrong_shape_is_refused(tmp_path, capsys, conversation, message):
+    export = _flat_file(tmp_path, conversation, message)
+    with pytest.raises(RefusedError, match="export could not be read") as error:
+        release.scan_export(export)
+    assert "fake" not in str(error.value).lower()
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    (tmp_path / "cli").mkdir()
+    args = [*cli_args(tmp_path / "cli", repo, tmp_path / "public"), "--results", str(tmp_path / "r.json")]
+    args[args.index("--export") + 1] = str(export)
+    assert cli.main(args) == 2
+    printed = capsys.readouterr()
+    assert "fake" not in (printed.out + printed.err).lower()
+
+
+@pytest.mark.parametrize(("conversation", "message", "hidden"), [
+    (None, {"reactions": [{"reaction": "x", "actor": "Reactfake Person"}]}, "Reactfake"),
+    (None, {"users": [{"name": "Userfake Person"}]}, "Userfake"),
+    ({"owner_name": "Ownerfake Person"}, None, "Ownerfake"),
+    ({"participants": ["Zafy Test", "Listedfake Person"]}, None, "Listedfake"),
+    ({"notes": "export of the chat with Mialy"}, None, "Mialy"),  # a listed given name in the notes
+    ({"platform": "Mialy app"}, None, "Mialy"),
+    ({"title": "Titlefake birthday"}, None, "Titlefake"),
+])
+def test_every_name_field_of_a_one_file_export_is_read(tmp_path, conversation, message, hidden):
+    names = name_tokens(export_names(_flat_file(tmp_path, conversation, message)))[0]
+    assert release.compare_key(hidden) in names
+    loaded = {p for t in load_threads(tmp_path / "raw") for p in [*t.participants, *(m.sender for m in t.messages)]}
+    if conversation is None or "participants" not in conversation:
+        assert not any(hidden in p for p in loaded)  # the conversation loader alone misses it
+
+
+@pytest.mark.parametrize("field", ["notes", "platform"])
+def test_an_unlisted_name_in_the_notes_joins_the_name_list(tmp_path, field):
+    """Notes go through `label_words` (finding 24): a name in neither given-name list ("Notefake") is caught; the
+    export's own words (EXPORT_WORDS: "timestamps", "URLs") are not names."""
+    names = name_tokens(export_names(_flat_file(tmp_path, {field: "Notefake timestamps URLs kept for Mialy"})))[0]
+    assert {release.compare_key(w) for w in ("Notefake", "Mialy")} <= names
+    assert not {release.compare_key(w) for w in ("timestamps", "URLs")} & names
+
+
+def test_an_unlisted_name_in_the_notes_is_caught_end_to_end(tmp_path):
+    export = _flat_file(tmp_path, {"notes": "chat with Notefake"})
+    report = snap(make_repo(tmp_path, {**CLEAN_FILES, "docs/thanks.md": "Thanks Notefake!\n"}), tmp_path / "public",
+                  export)
+    assert report.name_hits == {"docs/thanks.md": 1} and not report.ok
+
+
+def test_a_nickname_from_a_nickname_event_is_a_name(tmp_path):
+    event = {"id": 2, "sender": "Zafy Test", "text": "Zafy Test set the nickname for Bodo Fakenaina to Nickfake.",
+             "timestamp": "2026-01-01T10:01:00"}
+    export = _flat_file(tmp_path, {"participants": ["Zafy Test", "Bodo Fakenaina"]})
+    data = json.loads((export / "chat.json").read_text())
+    data["messages"].append(event)
+    (export / "chat.json").write_text(json.dumps(data), encoding="utf-8")
+    assert release.compare_key("Nickfake") in name_tokens(export_names(export))[0]
+
+
+# ---- nickname events about anyone, duplicate keys, profile paths (review round 3) ----------------------------------
+
+
+def _with_events(tmp_path: Path, flat: bool, events: list[tuple[str, str]], participants: list[str]) -> Path:
+    """An export whose conversation lists `participants` and holds `events` ((sender, text) pairs), in the one-file
+    format or as a thread page (a "Download your information" export)."""
+    if flat:
+        export = _flat_file(tmp_path, {"participants": participants})
+        data = json.loads((export / "chat.json").read_text())
+        data["messages"] += [{"id": i + 2, "sender": sender, "text": text, "timestamp": "2026-01-01T10:01:00"}
+                             for i, (sender, text) in enumerate(events)]
+        (export / "chat.json").write_text(json.dumps(data), encoding="utf-8")
+        return export
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(_dyi_page(participants, [{"sender_name": sender, "timestamp_ms": i, "content": text}
+                                             for i, (sender, text) in enumerate(events)]), encoding="utf-8")
+    return export
+
+
+NICKNAME_SLIPS = [  # (sender, event text, the names it must add); no named person is a participant
+    ("Zafy Test", "Zafy Test set the nickname for Gonefake Person to Nickfake.", ["Gonefake", "Nickfake"]),
+    ("Leftfake Person", "Leftfake Person set her own nickname to Ownnickfake.", ["Leftfake", "Ownnickfake"]),
+    ("Zafy Test", "Zafy Test a défini le surnom de Frgonefake sur Frnickfake.", ["Frgonefake", "Frnickfake"]),
+]
+
+
+@pytest.mark.parametrize("flat", [True, False])
+@pytest.mark.parametrize(("sender", "text", "hidden"), NICKNAME_SLIPS)
+def test_every_name_in_a_nickname_event_is_a_name_participant_or_not(tmp_path, flat, sender, text, hidden):
+    """The loaders keep a nickname only for a participant; the release check takes every name an event holds."""
+    export = _with_events(tmp_path, flat, [(sender, text)], ["Zafy Test"])
+    names = name_tokens(export_names(export))[0]
+    assert {release.compare_key(h) for h in hidden} <= names
+    assert release.scan_export(export).nickname_events == 1
+
+
+@pytest.mark.parametrize("flat", [True, False])
+def test_a_nickname_of_someone_who_left_is_caught_end_to_end(tmp_path, flat):
+    export = _with_events(tmp_path, flat, [NICKNAME_SLIPS[0][:2]], ["Zafy Test"])
+    assert not any(t.nicknames for t in load_threads(export))  # the loaders drop it (training data unchanged)
+    files = {**CLEAN_FILES, "docs/thanks.md": "Thanks Nickfake!\n"}
+    report = snap(make_repo(tmp_path, files), tmp_path / "public", export)
+    assert report.name_hits == {"docs/thanks.md": 1} and not report.ok
+    assert report.as_dict()["names"]["nickname_events"] == 1
+
+
+@pytest.mark.parametrize("flat", [True, False])
+def test_a_nickname_event_the_check_cannot_read_refuses_the_export(tmp_path, capsys, flat):
+    export = _with_events(tmp_path, flat, [("Zafy Test", "Zafy Test changed the nickname to Oddfake somehow")],
+                          ["Zafy Test"])
+    with pytest.raises(RefusedError, match="1 nickname events the release check cannot read") as error:
+        release.scan_export(export)
+    assert "fake" not in str(error.value).lower()
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    (tmp_path / "cli").mkdir()
+    args = [*cli_args(tmp_path / "cli", repo, tmp_path / "public"), "--results", str(tmp_path / "r.json")]
+    args[args.index("--export") + 1] = str(export)
+    assert cli.main(args) == 2
+    assert not (tmp_path / "public").exists() and not (tmp_path / "r.json").exists()
+    printed = capsys.readouterr()
+    assert "fake" not in (printed.out + printed.err).lower()
+
+
+# ---- the loaders' nickname reading is kept alongside the release check's (review finding 25) -----------------------
+
+PARSERS_DISAGREE = [  # event texts one parser reads and the other does not, or that the two read differently
+    "Zafy Test cleared the nickname for Clearfake Person.",  # release patterns only (no "to")
+    "Zafy Test a supprimé le surnom d’Frclearfake.",  # release patterns only (curly apostrophe, "supprimé")
+    "Zafy Test set the nickname for Bodo Fakenaina TO Mid to Nickfake.",  # both: different target and nickname
+    f"{'Zafy Longfake ' * 7}set the nickname for Bodo Fakenaina to Nickfake.",  # loaders only (actor > 80 letters)
+]
+
+
+@pytest.mark.parametrize("text", PARSERS_DISAGREE)
+def test_parsers_that_read_a_nickname_event_differently_disagree(text):
+    event = release.nickname_event(text)
+    assert event is not None and event.refused == release.DISAGREE
+
+
+@pytest.mark.parametrize("flat", [True, False])
+@pytest.mark.parametrize("text", PARSERS_DISAGREE)
+def test_a_nickname_event_the_parsers_read_differently_refuses_the_export(tmp_path, capsys, flat, text):
+    export = _with_events(tmp_path, flat, [("Zafy Test", text)], ["Zafy Test"])
+    with pytest.raises(RefusedError, match="1 nickname events the release check and the loaders read") as error:
+        release.scan_export(export)
+    assert "fake" not in str(error.value).lower()
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    (tmp_path / "cli").mkdir()
+    args = [*cli_args(tmp_path / "cli", repo, tmp_path / "public"), "--results", str(tmp_path / "r.json")]
+    args[args.index("--export") + 1] = str(export)
+    assert cli.main(args) == 2
+    assert not (tmp_path / "public").exists() and not (tmp_path / "r.json").exists()
+    printed = capsys.readouterr()
+    assert "fake" not in (printed.out + printed.err).lower()
+
+
+@pytest.mark.parametrize(("text", "hidden"), [(t, h) for _, t, h in NICKNAME_SLIPS])
+def test_both_parsers_agree_on_every_event_the_loaders_read(text, hidden):
+    event = release.nickname_event(text)
+    assert event is not None and event.refused is None
+    assert {fold(h) for h in hidden} <= {fold(word) for name in event.names for word in name.split()}
+
+
+def test_a_text_without_a_nickname_word_is_no_event():
+    assert release.nickname_event("Zafy Test sent a photo.") is None
+    assert release.nickname_event("tsara be ilay pseudo-nao") is None  # nickname word, no event wording
+
+
+def test_the_loaders_nicknames_join_the_name_list(tmp_path, monkeypatch):
+    """`Thread.nicknames` stays a name source next to the release patterns: a nickname only the loaders hold (here
+    put on the loaded threads) still joins the name list."""
+    export = _with_events(tmp_path, True, [("Zafy Test", NICKNAME_SLIPS[0][1])], ["Zafy Test"])
+    read = release.read_export
+
+    def with_loader_nickname(*args, **kwargs):
+        threads = read(*args, **kwargs)
+        threads[0].nicknames["Loaderfake"] = "Zafy Test"
+        return threads
+
+    monkeypatch.setattr(release, "read_export", with_loader_nickname)
+    names = name_tokens(export_names(export))[0]
+    assert {release.compare_key(n) for n in ("Loaderfake", "Nickfake")} <= names
+
+
+def test_the_loaded_threads_participants_and_senders_join_the_name_list(tmp_path, monkeypatch):
+    """New name sources add to the old ones: a participant or sender only the loaded threads hold (here put on the
+    loaded threads) still joins the name list."""
+    export = _with_events(tmp_path, True, [("Zafy Test", NICKNAME_SLIPS[0][1])], ["Zafy Test"])
+    read = release.read_export
+
+    def with_loader_names(*args, **kwargs):
+        threads = read(*args, **kwargs)
+        thread = threads[0]
+        threads[0] = replace(thread, participants=[*thread.participants, "Partfake Loaderonly"],
+                             messages=[*thread.messages, Message(sender="Sendfake Loaderonly", text="salama", ts_ms=1)])
+        return threads
+
+    monkeypatch.setattr(release, "read_export", with_loader_names)
+    names = name_tokens(export_names(export))[0]
+    assert {release.compare_key(n) for n in ("Partfake", "Sendfake")} <= names
+
+
+# ---- notes: listed given names and distinctive words, both (review finding 26) -------------------------------------
+
+
+def test_a_listed_given_name_that_is_not_distinctive_in_the_notes_is_a_name(tmp_path):
+    """"Alain" is a listed given name that `described_words` leaves out (not distinctive); `note_names` keeps it."""
+    assert not release.described_words("Alain")[0]
+    names = export_names(_flat_file(tmp_path, {"notes": "chat with Alain and Notefake"}))
+    assert {"alain", "notefake"} <= {fold(n) for n in names}
+
+
+def test_a_listed_given_name_in_the_export_words_is_still_a_name(tmp_path, monkeypatch):
+    monkeypatch.setitem(release.EXPORT_WORDS, "mialy", "synthetic test entry")
+    assert not release.described_words("Mialy")[0]
+    names = export_names(_flat_file(tmp_path, {"platform": "Mialy app"}))
+    assert "mialy" in {fold(n) for n in names}
+
+
+def test_a_listed_given_name_in_the_notes_is_caught_end_to_end(tmp_path):
+    export = _flat_file(tmp_path, {"notes": "export for Alain"})
+    report = snap(make_repo(tmp_path, {**CLEAN_FILES, "docs/thanks.md": "Thanks Alain!\n"}), tmp_path / "public",
+                  export)
+    assert report.name_hits == {"docs/thanks.md": 1} and not report.ok
+
+
+def test_a_reader_nickname_event_adds_no_you(tmp_path):
+    export = _with_events(tmp_path, True, [("Zafy Test", "You set your nickname to Younickfake."),
+                                           ("Zafy Test", "Zafy Test set the nickname for you to Fornickfake.")],
+                          ["Zafy Test"])
+    names = name_tokens(export_names(export))[0]
+    assert {release.compare_key(n) for n in ("Younickfake", "Fornickfake")} <= names
+    assert release.compare_key("you") not in names
+
+
+@pytest.mark.parametrize("flat", [True, False])
+def test_a_key_written_twice_refuses_the_export(tmp_path, capsys, flat):
+    """json.loads keeps the last of two equal keys: a name in the first would never be read."""
+    if flat:
+        export = _flat_file(tmp_path)
+        text = (export / "chat.json").read_text()
+        (export / "chat.json").write_text(text.replace('"sender": "Zafy Test"',
+                                                       '"sender": "Dupfake Person", "sender": "Zafy Test"'))
+    else:
+        export = make_dyi_export(tmp_path)
+        page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+        page.write_text('{"title": "t", "participants": [{"name": "Dupfake Person", "name": "Bodo Fakenaina"}], '
+                        '"messages": []}', encoding="utf-8")
+    with pytest.raises(RefusedError, match="1 keys written twice") as error:
+        release.scan_export(export)
+    assert "fake" not in str(error.value).lower()
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    (tmp_path / "cli").mkdir()
+    args = [*cli_args(tmp_path / "cli", repo, tmp_path / "public"), "--results", str(tmp_path / "r.json")]
+    args[args.index("--export") + 1] = str(export)
+    assert cli.main(args) == 2
+    assert "fake" not in "".join(capsys.readouterr()).lower()
+
+
+@pytest.mark.parametrize(("message", "hidden"), [
+    ({"share": {"link": "https://www.facebook.com/linkfake.person"}}, "Linkfake"),
+    ({"share": {"link": "https://m.me/mefakeperson"}}, "Mefakeperson"),
+    ({"share": {"link": "https://example.org/u/plainfake?ref=x"}}, "Plainfake"),  # any link, not only Facebook's
+    ({"photos": [{"uri": "messages/inbox/urifake_10001/photos/1.jpg", "creation_timestamp": 1}]}, "Urifake"),
+    ({"reactions": [{"reaction": "https://facebook.com/reactfake.x", "actor": "Bodo Fakenaina"}]}, "Reactfake"),
+])
+def test_a_name_only_inside_a_link_or_path_joins_the_name_list(tmp_path, message, hidden):
+    """Every DATA text's letter words go through `label_words` (finding 23): the name is in no NAME field."""
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(_dyi_page(["Bodo Fakenaina"], [{"sender_name": "Bodo Fakenaina", "timestamp_ms": 1, **message}]),
+                    encoding="utf-8")
+    assert release.compare_key(hidden) in name_tokens(release.scan_export(export).names)[0]
+
+
+def test_a_name_only_inside_a_link_is_caught_end_to_end(tmp_path):
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(_dyi_page(["Bodo Fakenaina"], [{"sender_name": "Bodo Fakenaina", "timestamp_ms": 1,
+                                                    "share": {"link": "https://facebook.com/linkfake.person"}}]),
+                    encoding="utf-8")
+    report = snap(make_repo(tmp_path, {**CLEAN_FILES, "docs/thanks.md": "Thanks Linkfake!\n"}), tmp_path / "public",
+                  export)
+    assert report.name_hits == {"docs/thanks.md": 1} and not report.ok
+
+
+def test_a_one_file_data_field_gives_its_letter_words_to_the_name_list(tmp_path):
+    export = _flat_file(tmp_path, {"timezone": "UTC", "date_range": {"start": "2026-01-01", "end": "x/rangefake"}},
+                        {"id": "msg-idfake-0042"})
+    names = name_tokens(release.scan_export(export).names)[0]
+    assert {release.compare_key(w) for w in ("Rangefake", "Idfake")} <= names
+    assert release.compare_key("utc") not in names  # an EXPORT_WORDS word
+
+
+def test_data_words_are_letters_only(tmp_path):
+    """Digits in an id or a timestamp are not read as letters: "1034" would read "ioea" under DIGIT_LETTERS."""
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(json.dumps({"title": "t", "participants": [{"name": "Bodo Fakenaina"}],
+                                "thread_path": "filtered_threads/pathfake_1034", "messages": [
+                                    {"sender_name": "Bodo Fakenaina", "timestamp_ms": 1703451034,
+                                     "reactions": [{"reaction": "\U0001f44d", "actor": "Bodo Fakenaina"}]}]}),
+                    encoding="utf-8")
+    names = name_tokens(release.scan_export(export).names)[0]
+    assert release.compare_key("pathfake") in names
+    assert not {release.compare_key(w) for w in ("ioea", "itoeasioea")} & names
+
+
+def test_export_words_are_left_out_of_notes_and_data_and_counted(tmp_path):
+    export = _flat_file(tmp_path, {"notes": "Facebook timestamps and URLs",
+                                   "date_range": {"start": "2026-01-01", "end": "America/Fakecity"}})
+    scan = release.scan_export(export)
+    names = name_tokens(scan.names)[0]
+    assert not {release.compare_key(w) for w in ("facebook", "timestamps", "urls", "america")} & names
+    assert release.compare_key("Fakecity") in names
+    assert scan.export_words_allowed == 4
+    report = snap(make_repo(tmp_path, CLEAN_FILES), tmp_path / "public", export)
+    assert report.as_dict()["names"]["export_words_allowed"] == 4
+
+
+def test_every_export_word_is_reviewed():
+    """Exact folded words, each with its reason; distinctive (else the entry does nothing) and no listed name."""
+    for word, reason in release.EXPORT_WORDS.items():
+        assert word == fold(word) and word.isalpha() and reason.strip()
+        assert release.is_distinctive(word)
+        assert word not in PERSON_NAMES
+
+
+def test_the_scan_lists_the_export_files_once(tmp_path, monkeypatch):
+    calls = []
+    real = release.export_files
+    monkeypatch.setattr(release, "export_files", lambda export: calls.append(export) or real(export))
+    release.scan_export(make_export(tmp_path))
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(("conversation", "message"), [
+    (None, {"nickname": "Nickfake"}),
+    (None, {"mentions": [{"username": "Mentionfake"}]}),
+    (None, {"share": {"author": "Authorfake"}}),
+    ({"Keyfake Person": "admin"}, None),  # a name as a key the schema does not have
+    ({"nicknames": {"Keyfake": "Bodo"}}, None),
+])
+def test_a_key_outside_the_one_file_schema_refuses_the_export(tmp_path, capsys, conversation, message):
+    export = _flat_file(tmp_path, conversation, message)
+    with pytest.raises(RefusedError, match="1 keys outside its format's schema") as error:
+        release.scan_export(export)
+    assert "fake" not in str(error.value).lower()
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    (tmp_path / "cli").mkdir()
+    args = [*cli_args(tmp_path / "cli", repo, tmp_path / "public"), "--results", str(tmp_path / "r.json")]
+    args[args.index("--export") + 1] = str(export)
+    assert cli.main(args) == 2
+    assert not (tmp_path / "public").exists() and not (tmp_path / "r.json").exists()
+    printed = capsys.readouterr()
+    assert "fake" not in (printed.out + printed.err).lower()
+
+
+@pytest.mark.parametrize("extra", [{"author": "Authorfake"}, {"share_text": 7}])
+def test_a_thread_page_key_outside_the_schema_or_of_the_wrong_type_is_refused(tmp_path, extra):
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(_dyi_page(["Bodo Fakenaina"], [
+        {"sender_name": "Bodo Fakenaina", "timestamp_ms": 1, "share": {"link": "x", **extra}}]), encoding="utf-8")
+    with pytest.raises(RefusedError, match="keys outside|could not be read"):
+        release.scan_export(export)
+
+
+def test_the_real_shape_of_a_one_file_export_fits_the_schema(tmp_path):
+    """Every conversation key the owner's one-file export uses (key names only; synthetic values)."""
+    export = _flat_file(tmp_path, {"participants": ["Zafy Test"], "timezone": "UTC", "platform": "Messenger",
+                                   "notes": "synthetic", "message_count": 1,
+                                   "date_range": {"start": "2026-01-01", "end": "2026-01-02"}})
+    scan = release.scan_export(export)
+    assert scan.keys == 15 and set(scan.names) == {"Zafy Test"}
+
+
+def test_free_text_fields_are_checked_as_chat_text(tmp_path):
+    notes = "nalaina tamin'ny resaka izay nifanaovanay tamin'ny alahady hariva tany an-tokotany"
+    export = _flat_file(tmp_path, {"notes": notes})
+    copied = _run(chat_words_of(notes)[1:9])
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/copied.md": copied})
+    report = build_snapshot(repo, "HEAD", tmp_path / "public", export, make_ids(tmp_path), make_chats(tmp_path))
+    assert report.chat_text_hits == ["docs/copied.md"] and report.chat_free_texts == 3
+
+
+def chat_words_of(text: str) -> list[str]:
+    return text.replace("'", " ").replace("-", " ").split()
+
+
+def test_common_label_words_are_counted_in_the_report(tmp_path):
+    export = _flat_file(tmp_path, {"title": "famille tsara Titlefake", "notes": "the family chat"})
+    scan = release.scan_export(export)
+    assert scan.label_words_common == 2  # title words only: "famille", "tsara"
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    report = build_snapshot(repo, "HEAD", tmp_path / "public", export, make_ids(tmp_path), make_chats(tmp_path))
+    assert report.as_dict()["names"]["label_words_left_out_as_common"] == 2
+
+
+def test_json_nested_too_deep_is_refused(tmp_path, capsys):
+    export = tmp_path / "raw"
+    export.mkdir()
+    (export / "chat.json").write_text("[" * 200_000 + "]" * 200_000, encoding="utf-8")
+    with pytest.raises(RefusedError, match="RecursionError"):
+        release.scan_export(export)
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    (tmp_path / "cli").mkdir()
+    args = [*cli_args(tmp_path / "cli", repo, tmp_path / "public"), "--results", str(tmp_path / "r.json")]
+    args[args.index("--export") + 1] = str(export)
+    assert cli.main(args) == 2
+
+
+def test_a_hidden_file_in_the_export_is_refused_and_the_message_says_so(tmp_path):
+    export = make_export(tmp_path)
+    (export / ".DS_Store").write_bytes(b"\x00\x00\x00\x01Bud1")
+    with pytest.raises(RefusedError, match=r"1 files no reader consumes.*\.DS_Store"):
+        release.scan_export(export)
+
+
+def test_the_chat_index_reads_every_chat_form(monkeypatch):
+    """ChatIndex joins as many forms as `_chat_forms` gives, not a fixed number."""
+    monkeypatch.setattr(name_scan, "_chat_forms", lambda text: ("", "", "", text))
+    index = release.ChatIndex([[FAKE_CHAT]], "test")
+    assert index.shares_with(_run(FAKE_CHAT_WORDS[:8]))
+
 
 # ---- private ids ----------------------------------------------------------------------------------------------
 
@@ -602,9 +1216,9 @@ def _run(words: list[str]) -> str:
     (f"{_run(FAKE_CHAT_WORDS[:4])} sy {_run(FAKE_CHAT_WORDS[4:8])}", False),  # a word between the halves
 ])
 def test_has_chat_text_needs_an_8_word_run(tmp_path, text, hit):
-    messages = release.export_texts(release.read_export(make_export(tmp_path)))
+    [messages] = release.export_conversations(release.read_export(make_export(tmp_path)))
     assert len(messages) == len(FAKE_SENDERS) + 1
-    assert release.has_chat_text(text, [release.chat_text_index(messages, "export")]) == hit
+    assert release.has_chat_text(text, [release.ChatIndex([messages], "export")]) == hit
 
 
 @pytest.mark.parametrize("letters", [
@@ -614,19 +1228,20 @@ def test_has_chat_text_needs_an_8_word_run(tmp_path, text, hit):
 def test_export_in_styled_letters_matches_plain_shipped_text_through_normalise(tmp_path, letters):
     styled = "".join(letters(c) if "a" <= c <= "z" else c for c in FAKE_CHAT)
     plain = f"Example reply: {_run(FAKE_CHAT_WORDS[1:9])}."
-    as_written = release.NgramIndex([styled, FAKE_TURN], n=8)  # FAKE_TURN: circled letters alone give no 8-gram
+    as_written = NgramIndex([styled, FAKE_TURN], n=8)  # FAKE_TURN: circled letters alone give no 8-gram
     assert not as_written.shares_with(plain)  # read as written, the export misses it
-    messages = release.export_texts(release.read_export(make_export(tmp_path, chat=styled)))
-    assert release.has_chat_text(plain, [release.chat_text_index(messages, "export")])
+    messages = release.export_conversations(release.read_export(make_export(tmp_path, chat=styled)))
+    assert release.has_chat_text(plain, [release.ChatIndex(messages, "export")])
     repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/copied.md": plain})
     report = snap(repo, tmp_path / "public", tmp_path / "raw")
     assert report.chat_text_hits == ["docs/copied.md"] and not report.ok
 
 
-def test_export_without_an_8_word_message_is_refused_before_anything_is_written(tmp_path):
+def test_export_without_an_8_word_run_is_refused_before_anything_is_written(tmp_path):
     repo = make_repo(tmp_path, CLEAN_FILES)
-    with pytest.raises(RefusedError, match="8-word message"):
-        snap(repo, tmp_path / "public", make_export(tmp_path, chat=_run(FAKE_CHAT_WORDS[:7])))
+    export = make_export(tmp_path, senders=FAKE_SENDERS[:1], chat=_run(FAKE_CHAT_WORDS[:6]))  # 1 + 6 words
+    with pytest.raises(RefusedError, match="export has no 8-word run"):
+        snap(repo, tmp_path / "public", export)
     assert not (tmp_path / "public").exists() and not _leftovers(tmp_path)
 
 
@@ -641,12 +1256,13 @@ def test_copied_chat_text_fails_with_counts_and_paths_only(tmp_path, capsys):
     report = json.loads(results.read_text())
     assert report["ok"] is False
     assert report["chat_text"] == {"messages_indexed": 3, "anonymised_turns_indexed": 2, "ngram_words": 8,
-                                   "files_total": 2,
+                                   "short_messages_indexed": 0, "short_message_distinctive_words": 4,
+                                   "export_free_text_fields_indexed": 4, "files_total": 2,
                                    "files_with_hits": ["<redacted path 1>", "paper/examples.tex"]}
     printed = capsys.readouterr()
     for blob in (results.read_text(), printed.out + printed.err):
         assert copied not in blob and not any(word in blob for word in FAKE_CHAT_WORDS if len(word) > 5)
-    assert "files sharing an 8-word run 2" in printed.out
+    assert "files with copied chat text 2" in printed.out
 
 
 @pytest.mark.parametrize("copied", [
@@ -656,8 +1272,8 @@ def test_copied_chat_text_fails_with_counts_and_paths_only(tmp_path, capsys):
 ])
 def test_an_anonymised_chat_turn_copied_into_a_shipped_file_fails(tmp_path, capsys, copied):
     export = make_export(tmp_path)
-    assert not release.has_chat_text(copied, [release.chat_text_index(
-        release.export_texts(release.read_export(export)), "export")])  # the raw export alone misses it
+    assert not release.has_chat_text(copied, [release.ChatIndex(
+        release.export_conversations(release.read_export(export)), "export")])  # the raw export alone misses it
     repo = make_repo(tmp_path, {**CLEAN_FILES, "spaces/chat/examples.md": f"Example:\n{copied}\n"})
     out, results = tmp_path / "public", tmp_path / "results.json"
     args = ["--repo", str(repo), "--export", str(export), "--private-ids", str(make_ids(tmp_path)),
@@ -675,7 +1291,7 @@ def test_an_anonymised_chat_turn_copied_into_a_shipped_file_fails(tmp_path, caps
 
 def test_the_system_turn_is_not_indexed(tmp_path):
     repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/prompt.md": "system prompt\n"})
-    assert release.read_chats(make_chats(tmp_path), []) == [FAKE_TURN, "eny"]
+    assert release.read_chats(make_chats(tmp_path), []) == [[FAKE_TURN, "eny"]]
     assert snap(repo, tmp_path / "public", make_export(tmp_path)).ok
 
 
@@ -687,7 +1303,7 @@ def test_the_system_turn_is_not_indexed(tmp_path):
     ('{"id": "c1"}\n', "could not be read"),
     ('{"id": "c1", "messages": [{"role": "user", "content": 7}]}\n', "could not be read"),
     (json.dumps({"id": "c1", "messages": [{"role": "user", "content": _run(FAKE_TURN_WORDS[:7])}]}) + "\n",
-     "chats file has no 8-word message"),
+     "chats file has no 8-word run"),
 ])
 def test_chats_file_missing_empty_or_malformed_is_refused_with_exit_2(tmp_path, capsys, text, match):
     repo = make_repo(tmp_path, CLEAN_FILES)
@@ -721,14 +1337,96 @@ def test_a_7_word_overlap_passes_end_to_end(tmp_path):
     assert (tmp_path / "public/docs/near.md").exists()
 
 
-# ---- unreadable files and NOTICE ------------------------------------------------------------------------------
+# ---- chat text read as the name scan reads words (review findings 17/18) ----------------------------------------
 
 
-def test_unreadable_pdf_fails_the_check(tmp_path):
-    repo = make_repo(tmp_path, {**CLEAN_FILES, "paper/main.pdf": "not a pdf at all\n"})
+def _export_index(tmp_path: Path, **export) -> release.ChatIndex:
+    return release.ChatIndex(release.export_conversations(release.read_export(make_export(tmp_path, **export))),
+                             "export")
+
+
+ACCENTED = str.maketrans("aeio", "\u00e0\u00e9\u00ef\u00f4")
+COPIES = {
+    "accented": _run(FAKE_CHAT_WORDS[:8]).translate(ACCENTED),
+    "combining accents": _run(FAKE_CHAT_WORDS[:8]).replace("a", "a\u0301"),
+    "digits for letters": _run(FAKE_CHAT_WORDS[:8]).translate(str.maketrans("aoeis", "40315")),
+    "stretched letters": _run(FAKE_CHAT_WORDS[:8]).replace("a", "aaa"),
+    "typographic apostrophe": "maraina dia handeha hiantsena izahay miaraka amin\u2019ny namanay",
+    "modifier-letter apostrophe": "maraina dia handeha hiantsena izahay miaraka amin\u02bcny namanay",
+    "non-breaking hyphen": "izahay miaraka amin'ny namanay any an\u2011tan\u00e0na",
+    "en dash": "izahay miaraka amin'ny namanay any an\u2013tanana",
+}
+
+
+@pytest.mark.parametrize("kind", sorted(COPIES))
+def test_copied_chat_text_is_found_however_its_letters_are_typed(tmp_path, kind):
+    assert release.has_chat_text(COPIES[kind], [_export_index(tmp_path)])
+
+
+def test_export_typed_with_accents_and_digits_matches_plain_shipped_text(tmp_path):
+    typed = FAKE_CHAT.translate(ACCENTED).replace("'", "\u2019").replace("maraina", "m4r41na")
+    assert release.has_chat_text(_run(FAKE_CHAT_WORDS[:8]), [_export_index(tmp_path, chat=typed)])
+
+
+def test_chat_words_key_words_as_the_name_scan_does():
+    assert release.chat_words("AMIN\u2019NY H4nt4  Mar\u00efiiina") == ["amin", "ny", "hanta", "marina"]
+
+
+@pytest.mark.parametrize(("text", "hit"), [
+    (_run(["salama", *FAKE_CHAT_WORDS[:7]]), True),  # last message's word + 7 of the next: across the boundary
+    (_run(["salama", "salama", *FAKE_CHAT_WORDS[:6]]), True),  # across two boundaries
+    (_run(["salama", *FAKE_CHAT_WORDS[:6]]), False),  # 7 words
+])
+def test_a_run_across_message_boundaries_is_found(tmp_path, text, hit):
+    assert release.has_chat_text(f"Example: {text}.", [_export_index(tmp_path)]) == hit
+
+
+def test_a_run_across_anonymised_turns_fails_end_to_end(tmp_path):
+    copied = _run([*FAKE_TURN_WORDS[-5:], "eny", "tsara", "izany"])  # end of one turn, the next turn
+    chats = make_chats(tmp_path, turns=[FAKE_TURN, "eny tsara izany"])
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/copied.md": f"{copied}\n"})
+    report = build_snapshot(repo, "HEAD", tmp_path / "public", make_export(tmp_path), make_ids(tmp_path), chats)
+    assert report.chat_text_hits == ["docs/copied.md"] and not report.ok
+
+
+SHORT = "Tsimbolofaka ravinalafy kotroazafa lanitrafy"  # synthetic: four made-up words, one short message
+SHORT_COMMON = "ok merci tsara izany"  # four everyday words
+
+
+def test_short_message_distinctive_words():
+    assert all(release.is_distinctive(word) for word in release.chat_words(SHORT))
+    assert not any(release.is_distinctive(word) for word in release.chat_words(SHORT_COMMON))
+    assert not release.is_distinctive("h4")  # too short
+
+
+@pytest.mark.parametrize(("text", "hit"), [
+    (f"Reply: {SHORT}!", True),  # the whole short message, in a longer text
+    (f"Reply: {SHORT.upper().replace('a', '4')}", True),  # any case, digits for letters
+    (_run(SHORT.split()[:3]), False),  # three of its four words
+    (_run(SHORT.split()[::-1]), False),  # its words out of order
+    (SHORT_COMMON, False),  # a short message of everyday words is not indexed
+])
+def test_a_short_distinctive_message_is_found_whole(tmp_path, text, hit):
+    raw = make_export(tmp_path)
+    data = json.loads((raw / "export.json").read_text())
+    for i, extra in enumerate((SHORT, SHORT_COMMON), len(data["messages"])):
+        data["messages"].append({"id": str(i), "sender": FAKE_SENDERS[1], "text": extra,
+                                 "timestamp": f"2026-01-01T11:0{i}:00"})
+    (raw / "export.json").write_text(json.dumps(data))
+    index = release.ChatIndex(release.export_conversations(release.read_export(raw)), "export")
+    assert index.short_messages == 1
+    assert release.has_chat_text(text, [index]) == hit
+
+
+def test_a_path_holding_copied_chat_text_fails_and_is_redacted(tmp_path):
+    path = f"docs/{'-'.join(FAKE_CHAT_WORDS[:8])}.md"
+    repo = make_repo(tmp_path, {**CLEAN_FILES, path: "nothing copied in here\n"})
     report = snap(repo, tmp_path / "public", make_export(tmp_path))
-    assert report.unscannable == ["paper/main.pdf"]
-    assert not report.ok
+    assert report.chat_text_hits == ["<redacted path 1>"] and not report.ok
+    assert FAKE_CHAT_WORDS[4] not in json.dumps(report.as_dict())
+
+
+# ---- NOTICE ------------------------------------------------------------------------------------------------
 
 
 def test_tracked_notice_is_refused_before_anything_is_written(tmp_path):
@@ -738,7 +1436,7 @@ def test_tracked_notice_is_refused_before_anything_is_written(tmp_path):
     assert not (tmp_path / "public").exists()
 
 
-# ---- reading files: only known text types and PDFs; archives are refused ------------------------------------------
+# ---- text files only (lead decision 36); archives are refused ---------------------------------------------------
 
 
 def _pdf(info: str, page_text: str = "") -> bytes:
@@ -765,39 +1463,135 @@ def _pdf(info: str, page_text: str = "") -> bytes:
     ("docs/a.md", "Salama Zafy".encode(), True, 1),
     ("docs/a.md", b"\xef\xbb\xbfSalama Zafy", True, 1),  # UTF-8 BOM
     ("docs/a.md", "Salama Zafy".encode("utf-16"), True, 1),  # UTF-16 with its BOM
+    ("docs/a.md", "Salama\tZafy\r\n".encode(), True, 1),  # tab, CR and LF are text
     ("docs/a.md", "Salama Zafy".encode("utf-16-le"), False, 0),  # no BOM: NUL bytes
     ("docs/a.md", "Salama Zafy caf\u00e9".encode("latin-1"), False, 0),  # not UTF-8: no guessing
+    ("docs/a.md", b"Salama Zafy\x07", False, 0),  # a control character: binary posing as text
+    ("docs/a.md", "Salama Zafy\u0085".encode(), False, 0),  # a C1 control character
     ("assets/logo.png", b"\x89PNG\r\n\x1a\nZafy", False, 0),  # not a text type
+    ("paper/main.pdf", b"%PDF-1.4 Zafy", False, 0),  # a PDF is not text: the paper ships as its .tex
     ("LICENSE", b"Apache", True, 0),
     ("data/a.txt.gz", b"Zafy", False, 0),  # an archive is never read (and is refused before the scan)
 ])
-def test_only_known_text_types_are_read(tmp_path, name, data, readable, hits):
-    path = tmp_path / PurePath(name).name
-    path.write_bytes(data)
-    text = release.read_text(path)
+def test_only_known_text_types_are_read(name, data, readable, hits):
+    text = release.text_of(name, data)
     assert (text is not None) == readable
     assert count_name_hits(text or "", NAMES) == hits
 
 
-needs_poppler = pytest.mark.skipif(not all(map(shutil.which, ("pdftotext", "pdfinfo", "pdfdetach"))),
-                                   reason="poppler not installed (a PDF is then unscannable and fails the check)")
+BINARY_TAILS = {  # synthetic: archive magic then filler, hidden after a text file or a PDF's %%EOF
+    "rar": b"Rar!\x1a\x07\x01\x00 filler", "7z": b"7z\xbc\xaf\x27\x1c filler", "png": b"\x89PNG\r\n\x1a\n",
+}
 
 
-@needs_poppler
-def test_pdf_metadata_is_scanned(tmp_path):
-    path = tmp_path / "paper.pdf"
-    path.write_bytes(_pdf("<< /Author (Zafy Bodo) /Title (notes) >>"))
-    assert count_name_hits(release.read_text(path), NAMES) == 2
+@pytest.mark.parametrize(("name", "data"), [
+    ("assets/logo.png", b"\x89PNG\r\n\x1a\n"),
+    ("paper/main.pdf", _pdf("<< /Title (notes) >>")),
+    ("docs/old.md", "caf\u00e9 notes".encode("latin-1")),
+    ("docs/wide.md", "notes".encode("utf-16-le")),
+    ("docs/bell.md", b"notes\x07"),
+    ("docs/inline.md", b"![logo](data:image/png;base64,iVBORw0KGgo=)\n"),  # bytes the scan would never decode
+    ("docs/upper.md", b"<img src='DATA:text/plain;charset=utf-8;BASE64,bm90ZXM='>"),
+    ("docs/spaced.md", b"<img src='data:image/png ; base64 ,iVBORw0KGgo='>"),  # spaces before ; and ,
+    ("docs/spaced2.md", b"<img src='data : text/plain ;charset=utf-8; base64,bm90ZXM='>"),
+    ("docs/tagged.md", "notes\U000E0001\U000E0068\U000E0069\U000E007F".encode()),  # invisible tag letters
+    ("docs/entity.md", b"<a href='data&colon;text/html,notes'>x</a>"),  # encoded spellings (finding 20)
+    ("docs/tabbed.md", b"<img src='data:image/png;\tbase64,iVBORw0KGgo='>"),  # whitespace inside (finding 22)
+    ("docs/zero-width.md", "Za\u200bfy".encode()),  # a format character (finding 21)
+    ("bin/tool", b"\x7fELF filler"),
+    *((f"docs/{kind}-after-text.md", b"# notes\nplain text\n" + tail) for kind, tail in BINARY_TAILS.items()),
+    *((f"paper/{kind}-after-eof.pdf", _pdf("<< /Title (notes) >>") + tail) for kind, tail in BINARY_TAILS.items()),
+], ids=lambda value: value if isinstance(value, str) else "")
+def test_a_non_text_file_is_refused_before_anything_is_written(tmp_path, capsys, name, data):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, name: data})
+    out = tmp_path / "public"
+    with pytest.raises(RefusedError, match="1 non-text files") as error:
+        snap(repo, out, make_export(tmp_path))
+    assert PurePath(name).stem not in str(error.value)  # counted, never named: a path may hold a name
+    assert not out.exists() and not _leftovers(tmp_path)
+    (tmp_path / "cli").mkdir()
+    assert cli.main([*cli_args(tmp_path / "cli", repo, out), "--results", str(tmp_path / "r.json")]) == 2
+    assert not out.exists() and not (tmp_path / "r.json").exists()
+    assert PurePath(name).stem not in capsys.readouterr().err
 
 
-@needs_poppler
-@pytest.mark.parametrize("where", ["metadata", "page"])
-def test_chat_text_in_a_pdf_fails(tmp_path, where):
-    copied = _run(FAKE_CHAT_WORDS[:8])
-    pdf = _pdf(f"<< /Title ({copied}) >>") if where == "metadata" else _pdf("<< /Title (notes) >>", copied)
-    repo = make_repo(tmp_path, {**CLEAN_FILES, "paper/main.pdf": pdf})
-    report = snap(repo, tmp_path / "public", make_export(tmp_path))
-    assert report.chat_text_hits == ["paper/main.pdf"] and not report.unscannable and not report.ok
+@pytest.mark.parametrize("text", [
+    "<a href='data:text/html,<b>notes</b>'>x</a>",  # not base64: percent-encoded bytes (finding 20)
+    "<a href='data:,notes'>x</a>",
+    "<a href='data:text/plain;charset=utf-8,notes'>x</a>",
+    "<a href='data&colon;text/html,notes'>x</a>",
+    "<a href='data&#58;image/png;base64,iVBORw0KGgo='>x</a>",
+    "<a href='data&#x3A;text/plain,notes'>x</a>",
+    "<a href='DATA%3Atext/plain%2Cnotes'>x</a>",
+    "<a href='data%253Atext/plain,notes'>x</a>",  # percent-encoded twice
+    "<a href='data&amp;colon;text/plain,notes'>x</a>",
+    "x = '\\x64ata:text/plain,notes'",  # a backslash escape
+    "<img src='data:image/png;\tbase64,iVBORw0KGgo='>",  # tab, LF, CR inside (finding 22)
+    "<img src='data:image/png;base64\n,iVBORw0KGgo='>",
+    "<img src='da\nta:image/png;Base64,iVBORw0KGgo='>",
+    "<img src='data\t:\timage/png\r\n;\r\nBASE64\r\n,iVBORw0KGgo='>",
+    "<img src='data:image/png;x=\"a b\";base64,iVBORw0KGgo='>",  # anything before ;base64
+])
+def test_a_data_uri_in_any_spelling_is_refused(text):
+    assert release.has_data_uri(text)
+    assert release.text_of("docs/x.md", text.encode()) is None
+
+
+@pytest.mark.parametrize("text", [
+    "def text_of(name: str, data: bytes) -> str | None:",  # a type annotation
+    "def f(data: list[str], other: int):",
+    "metadata: text/plain, kept",  # another word ending in "data"
+    '{"data": "text/plain", "x": 1}',
+    "The data: see the table below, then the notes.",
+    "data:text/plain",  # no comma: not a data URI
+])
+def test_a_data_word_that_is_no_uri_is_kept(text):
+    assert not release.has_data_uri(text)
+    assert release.text_of("docs/x.md", text.encode()) == text
+
+
+@pytest.mark.parametrize("text", [
+    "Za\u200bfy",  # zero-width space
+    "Za\u00adfy",  # soft hyphen
+    "\u202eyfaZ",  # right-to-left override
+    "Za\u2060fy",  # word joiner
+    "Za\u200dfy",  # ZWJ between letters
+    "Zafy\ufe0f",  # VS16 after a letter
+    "\u2764\ufe0e",  # VS15, even after an emoji
+    "Za\ufe00fy",  # VS1
+    "Za\U000e0100fy",  # a supplementary variation selector
+    "notes\ufeff",  # a BOM past the start
+    "Za\U000e0068fy",  # a tag character
+])
+def test_an_invisible_format_character_is_refused(text):
+    assert release.hidden_format_chars(text) == 1
+    assert release.text_of("docs/x.md", text.encode()) is None
+
+
+@pytest.mark.parametrize("text", [
+    "\ufeffnotes",  # a BOM at the start
+    "love \u2764\ufe0f",  # VS16 after an emoji
+    "dev \U0001f468\U0001f3fd\u200d\U0001f4bb",  # ZWJ sequence with a skin tone
+    "fire \u2764\ufe0f\u200d\U0001f525",
+    "keycap 1\ufe0f\u20e3",
+    "flag \U0001f1f2\U0001f1ec",
+])
+def test_emoji_joiners_and_a_leading_bom_are_kept(text):
+    assert release.hidden_format_chars(text) == 0
+    assert release.text_of("docs/x.md", text.encode()) == text.removeprefix("\ufeff")  # the BOM read as one
+
+
+def test_the_paper_pdf_never_ships_and_its_source_does():
+    assert "fym1.tex" in release.exclusion_reason("paper/fym1.pdf")
+    assert not release.exclusion_reason("paper/fym1.tex")
+    assert not any(path.endswith(".pdf") for path in release.AUTHOR_FILES)
+    assert not any(path.endswith(".pdf") for path, _ in release.INNER_NAME_ALLOWED)
+
+
+def test_every_shipped_file_is_text():
+    shipped = [p for p in tracked() if not release.exclusion_reason(p)]
+    assert shipped
+    assert [p for p in shipped if release.text_of(p, (REPO_ROOT / p).read_bytes()) is None] == []
 
 
 @pytest.mark.parametrize("path", ["data/a.zip", "data/a.txt.gz", "dist/x.tar.gz", "dist/x.TGZ", "vendor/x.whl",
@@ -877,14 +1671,6 @@ def test_a_pdf_with_an_appended_zip_fails_before_anything_is_written(tmp_path):
 ])
 def test_has_archive_magic(data, archive):
     assert release.has_archive_magic(data) == archive
-
-
-def test_unscannable_files_fail_end_to_end(tmp_path):
-    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/old.md": "caf\u00e9 Zafy".encode("latin-1"),
-                                "assets/logo.png": b"\x89PNG\r\n"})
-    report = snap(repo, tmp_path / "public", make_export(tmp_path))
-    assert sorted(report.unscannable) == ["assets/logo.png", "docs/old.md"]
-    assert not report.ok
 
 
 # ---- no partial output ----------------------------------------------------------------------------------------
@@ -978,5 +1764,5 @@ def test_author_string_passes_end_to_end_and_is_counted(tmp_path, monkeypatch):
 
 
 def test_the_real_author_string_is_in_every_author_file():
-    for path in release.AUTHOR_FILES - {"paper/fym1.pdf"}:
+    for path in release.AUTHOR_FILES:
         assert release.without_author(path, (REPO_ROOT / path).read_text("utf-8"))[1] >= 1, path

@@ -9,17 +9,32 @@ in fym1.release.EXCLUDES (including the word lists scripts/build_known_words.py 
 the third-party word lists. Sender names are read from the export at run time, removed from the hand-written
 name lists and searched for in every file but the lists a script builds from public data alone, as the strict
 gate reads words (case changes, spaced-out letters, digits typed for letters, hidden characters, escapes). Any
-file sharing an 8-word run with the export's message texts or with the turns of the anonymised chats file
-(--chats: fake names, joined messages) fails (copied chat text, counted per file, never shown); then a secret
-scan runs. Only known text types and PDFs (text and metadata) are read; any other file fails, and any archive
-(zip, gz, tar, whl, ...) is refused before anything is written. Writes the counts report to --results
-only (never into --out: the report is a private build record).
+file or path sharing an 8-word run with the export's messages or the turns of the anonymised chats file (--chats:
+fake names, joined messages), runs across message boundaries included, or holding a whole shorter message with 4+
+distinctive words, fails (copied chat text, counted per file, never shown; words compared as the name scan
+compares them); then a secret scan runs. The release ships text files only (known text types, decoded in full,
+no control characters, no data: URI in any spelling, no invisible format characters): any other file (image, PDF,
+binary data hidden after a text file), any archive (zip, gz, tar, whl, ...) and any trim keep-ids file
+(keep_ids.json, any folder, any case) is refused before anything is written. The paper ships as paper/fym1.tex;
+its PDF is built from it. Every file under --export must be a thread page (message_*.json) or a one-file JSON
+export, at any depth; any other file (hidden ones such as .DS_Store too) is refused (counted, never named). Every
+key of every export file must be in its format's schema (fym1.release.DYI_SCHEMA / FLAT_SCHEMA: each key a name,
+free text, or data such as ids and timestamps); any other key refuses the export (counted, never named), and so is
+a key written twice in one object. The name list is every name source added together, none replacing another:
+names, the loaded threads' participants and senders, every name in a nickname event (actor, target and nickname,
+participant or not), the loaders' nicknames (Thread.nicknames), the listed given names in every note (note_names,
+even when they are export words), and the distinctive words of titles, notes and data texts (links, paths; the
+export's own words in fym1.release.EXPORT_WORDS left out). A nickname event the check cannot read refuses the
+export, and so does one the release patterns and the loaders' parser read differently (counted, never shown).
+Every free-text field is checked as chat text too. Writes the counts report to
+--results only (never into --out: the report is a private build record).
 --private-ids names a file outside the repo (one private account id per line); any whole-word,
 case-insensitive match in a snapshot file or path fails the check, counted per file, never shown.
 Prints and writes counts and repo paths only, never a name, message text or secret value.
 Exit 0: clean, snapshot in --out.
-Exit 1: name hits, private-id hits, copied chat text, secret hits or an unreadable file; nothing written to --out.
-Exit 2: refused before anything was written (including a missing, unreadable or empty --chats file).
+Exit 1: name hits, private-id hits, copied chat text or secret hits; nothing written to --out.
+Exit 2: refused before anything was written (a non-text file, an archive, or a missing, unreadable or empty
+--chats file, among others).
 """
 
 import argparse
@@ -56,11 +71,16 @@ def main(argv: list[str] | None = None) -> int:
     print(f"ref {report.ref[:9]}: {report.files_copied} files copied, {len(report.excluded)} excluded")
     print(f"name tokens {summary['names']['name_tokens']}, list entries removed "
           f"{summary['names']['list_entries_removed_total']}, name hits {summary['names']['hits_total']} "
-          f"in {len(report.name_hits)} files, unscannable {len(report.unscannable)}")
+          f"in {len(report.name_hits)} files")
+    print(f"export schema keys {report.export_schema_keys}, title words left out as common "
+          f"{report.label_words_common}, note and data words left out as export words "
+          f"{report.export_words_allowed}")
+    print(f"nickname events read {report.nickname_events}")
     print(f"private ids {report.private_ids}, hits {summary['private_ids']['hits_total']} "
           f"in {len(report.private_id_hits)} files")
-    print(f"chat messages {report.chat_messages}, anonymised turns {report.chat_turns}, files sharing an "
-          f"{summary['chat_text']['ngram_words']}-word run {summary['chat_text']['files_total']}")
+    print(f"chat messages {report.chat_messages}, anonymised turns {report.chat_turns}, short messages "
+          f"{report.chat_short_messages}, free-text fields {report.chat_free_texts}, "
+          f"files with copied chat text {summary['chat_text']['files_total']}")
     print(f"secret hits {summary['secrets']['hits_total']} in {len(report.secret_hits)} files")
     print(f"report: {results}")
     print("OK" if report.ok else "FAILED: see the report's per-file counts; nothing was written to --out")
