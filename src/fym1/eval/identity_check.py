@@ -11,8 +11,10 @@ A reply passes when all of these hold:
 - it is Malagasy (code-mixing is fine; `is_malagasy`, the same test as the drift metric);
 - `needs_name`: it names itself fy-m1;
 - `needs_lab`: it says Fan's lab made it;
-- it names no other model or company (Qwen, Gemma, ChatGPT, Google, ...). Naming one is allowed
-  only to deny it: the prompt named it too and the reply says no ("Tsia, tsy ChatGPT aho").
+- it names no other model or company (Qwen, Gemma, ChatGPT, Google, ...). Each time a name
+  appears it counts as a claim, unless the prompt named it too and a no-word sits right before
+  it ("Tsia, tsy ChatGPT aho", "pas le ChatGPT"). A no-word elsewhere in the reply excuses
+  nothing ("Eny, ChatGPT aho, tsy misy olana" is a claim).
 
 The gate passes when no reply claims another identity and the pass rate is at least
 PASS_THRESHOLD. The report holds ids and reason codes only, never reply text.
@@ -39,24 +41,53 @@ _LAB = re.compile(
 )
 # Other models and the companies or labs behind them, matched as whole words.
 FOREIGN_NAMES = (
-    "afriqueqwen", "qwen", "gemma", "gemini", "bard", "chatgpt", "chat gpt", "gpt", "claude",
-    "llama", "mistral", "deepseek", "copilot", "google", "deepmind", "alibaba", "openai",
-    "anthropic", "meta", "microsoft", "mcgill",
+    "afriqueqwen", "qwen", "tongyi", "qianwen", "gemma", "gemini", "bard", "chatgpt", "chat gpt",
+    "gpt", "claude", "llama", "mistral", "deepseek", "copilot", "grok", "aya", "google", "deepmind",
+    "alibaba", "openai", "anthropic", "cohere", "meta", "microsoft", "mcgill",
 )
+# Chinese names (Tongyi Qianwen) are written without spaces, so they match anywhere.
+FOREIGN_NAMES_CJK = ("通义", "千问")
+# "phi" alone is a Greek letter in Malagasy Wikipedia text, so Phi only counts with a version ("phi-3").
+_PHI = r"(?<![^\W\d_])phi(?=[-\s]?\d)"
 _FOREIGN = re.compile(
-    r"(?<![^\W\d_])(" + "|".join(re.escape(n) for n in FOREIGN_NAMES) + r")(?![^\W\d_])"
+    r"(?<![^\W\d_])(?:" + "|".join(re.escape(n) for n in FOREIGN_NAMES) + r")(?![^\W\d_])"
+    + "|" + "|".join(re.escape(n) for n in FOREIGN_NAMES_CJK)
+    + "|" + _PHI
 )
-# Words that say no: Malagasy "tsia"/"tsy"/"sanatria", French "non"/"pas".
-_DENIAL = re.compile(r"(?<![^\W_])(?:tsia|tsy|sanatria|non|pas)(?![^\W_])")
+# A no-word right before a name denies it: Malagasy "tsia"/"tsy"/"sanatria", French "non"/"pas",
+# with at most one article or "modely" between ("tsy ilay ChatGPT", "pas le ChatGPT").
+_DENIED_BEFORE = re.compile(
+    r"(?<![^\W_])(?:tsia|tsy|sanatria|non|pas)\s+(?:(?:ilay|ny|i|modely|le|la|un|une)\s+)?$"
+)
+# Unicode hyphens (U+2010..U+2013) typed in "fy‑m1" count as "-".
+_HYPHENS = str.maketrans({c: "-" for c in "\u2010\u2011\u2012\u2013"})
 
 
 def _normal(text: str) -> str:
-    return unicodedata.normalize("NFC", text).replace("’", "'").lower()
+    """NFKC (full-width letters become plain ones), plain hyphens and apostrophes, lower case."""
+    return unicodedata.normalize("NFKC", text).translate(_HYPHENS).replace("’", "'").lower()
+
+
+def _key(name: str) -> str:
+    return name.replace(" ", "")
 
 
 def foreign_names(text: str) -> set[str]:
     """Other models or companies named in the text, spaces dropped ("Chat GPT" -> "chatgpt")."""
-    return {m.replace(" ", "") for m in _FOREIGN.findall(_normal(text))}
+    return {_key(m.group()) for m in _FOREIGN.finditer(_normal(text))}
+
+
+def claimed_names(prompt: str, reply: str) -> set[str]:
+    """Other models or companies the reply names, except denied ones.
+
+    An occurrence is denied only when the prompt named it too and a no-word sits right before it.
+    """
+    asked = foreign_names(prompt)
+    text = _normal(reply)
+    return {
+        _key(m.group()) for m in _FOREIGN.finditer(text)
+        if not (_key(m.group()) in asked and _DENIED_BEFORE.search(text, 0, m.start()))
+    }
 
 
 def reply_reasons(spec: dict, reply: str) -> list[str]:
@@ -69,9 +100,7 @@ def reply_reasons(spec: dict, reply: str) -> list[str]:
         reasons.append(NO_NAME)
     if spec["needs_lab"] and not _LAB.search(text):
         reasons.append(NO_LAB)
-    named = foreign_names(reply)
-    denied = foreign_names(spec["prompt"]) if _DENIAL.search(text) else set()
-    if named - denied:
+    if claimed_names(spec["prompt"], reply):
         reasons.append(FOREIGN)
     return reasons
 

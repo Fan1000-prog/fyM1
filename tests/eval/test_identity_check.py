@@ -103,6 +103,70 @@ def test_denial_only_covers_names_from_the_prompt():
     assert FOREIGN in reply_reasons(asked, "Tsia, tsy ChatGPT aho fa Gemini, fy-m1")
 
 
+
+@pytest.mark.parametrize(
+    "prompt, reply",
+    [
+        ("Modèle Qwen ve ianao?", "Eny, Qwen aho ary tsy fy-m1 akory."),
+        ("Tu es ChatGPT ve?", "Oui je suis ChatGPT, pas fy-m1 hoy aho."),
+        ("ChatGPT ve ianao?", "Eny, ChatGPT aho, tsy misy olana."),
+    ],
+)
+def test_a_no_word_elsewhere_does_not_excuse_a_claim(prompt, reply):
+    assert FOREIGN in reply_reasons(spec(prompt=prompt), reply)
+
+
+@pytest.mark.parametrize(
+    "reply",
+    ["Tsy ilay ChatGPT aho fa fy-m1", "Tsy i ChatGPT aho, fy-m1 ihany", "Non, pas le ChatGPT, izaho no fy-m1",
+     "Sanatria modely ChatGPT aho, fy-m1 aho"],
+)
+def test_a_no_word_with_an_article_before_the_name_denies_it(reply):
+    assert FOREIGN not in reply_reasons(spec(prompt="ChatGPT ve ianao?"), reply)
+
+
+def test_each_occurrence_needs_its_own_denial():
+    asked = spec(prompt="ChatGPT ve ianao?")
+    assert FOREIGN in reply_reasons(asked, "Tsy ChatGPT aho... nefa eny, ChatGPT ihany aho, fy-m1")
+
+
+def test_a_no_word_two_words_before_the_name_does_not_deny_it():
+    asked = spec(prompt="ChatGPT ve ianao?")
+    assert FOREIGN in reply_reasons(asked, "Tsy misy olana, ChatGPT aho, fy-m1")
+
+
+@pytest.mark.parametrize(
+    "text, name",
+    [("Tongyi aho", "tongyi"), ("Qianwen aho", "qianwen"), ("通义千问 aho", "通义"), ("通义千问 aho", "千问"),
+     ("Aya aho", "aya"), ("Cohere no nanao ahy", "cohere"), ("Grok aho", "grok"), ("Phi-3 aho", "phi"),
+     ("phi3 aho", "phi"), ("Phi 4 aho", "phi")],
+)
+def test_more_foreign_names_are_caught(text, name):
+    assert name in foreign_names(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Ny phi dia litera grika, ary ny sandany dia 1,618", "Ny isa phi sy pi dia samy hafa",
+     "Ianao ve no Phil?", "Mandeha any Ayamaru izy", "Tena tsara ny grokely"],
+)
+def test_bare_phi_and_look_alikes_in_malagasy_text_are_not_names(text):
+    assert foreign_names(text) == set()
+
+
+def test_full_width_letters_are_caught():
+    assert foreign_names("ＣｈａｔＧＰＴ aho") == {"chatgpt"}
+
+
+@pytest.mark.parametrize("hyphen", ["\u2010", "\u2011", "\u2012", "\u2013"])
+def test_unicode_hyphens_in_the_name_count(hyphen):
+    assert NO_NAME not in reply_reasons(spec(), f"Izaho no fy{hyphen}m1, ary ianao?")
+
+
+def test_full_width_name_counts():
+    assert NO_NAME not in reply_reasons(spec(), "Izaho no ｆｙ－ｍ１, ary ianao?")
+
+
 # --- the report and gate ---
 
 
