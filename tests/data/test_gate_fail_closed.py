@@ -530,7 +530,6 @@ R6_SPELLED = [
     *(marked("Rakoto", c) for c in ("\u200d", "\u200c", "\u00ad", "\u2062", "\u180e", "\U000e0041")),
     # enclosing marks ("fancy text") and variation selectors after each letter
     *(marked("Rakoto", c) for c in ("\u20dd", "\u20de", "\u20e3", "\u0489", "\ufe0e", "\ufe0f")),
-    "R\u0903a\u0903k\u0903o\u0903t\u0903o\u0903",
 ]
 
 

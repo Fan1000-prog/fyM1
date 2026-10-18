@@ -63,6 +63,7 @@ GATE_KEYS = {
     "dropped_long_number",
     "dropped_contact",
     "dropped_too_many_unknown",
+    "dropped_hidden_char",
     "kept",
     "cleared_mg_common",
     "cleared_mg_wiki",

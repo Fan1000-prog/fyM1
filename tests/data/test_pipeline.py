@@ -169,6 +169,7 @@ def test_build_records_gate_keeps_prices_drops_numbers_and_replaces_leftover_nam
         "dropped_long_number": 1,
         "dropped_contact": 0,
         "dropped_too_many_unknown": 0,
+        "dropped_hidden_char": 0,
         "kept": 2,
         "tokens_replaced": 1,
     }

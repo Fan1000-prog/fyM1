@@ -7,12 +7,17 @@ fine, letting a name or number through is not. A whole conversation is dropped i
   space, `. , / \\ - _ ( ) + ; * | :`, unicode dashes). A price is kept only when it
   is plain digits or clean 3-digit groups, is followed by a currency word (`1 500 000 Ar`,
   `2500000 ariary`, `1 250 000,50 €`), and does not look like a phone: no `+` before it and its
-  digits do not start with `0`, `261` or read `3[2-9]` + 7 digits. A full date (8 digits) counts too.
+  digits do not start with `0`, `261` or read `3[2-9]` + 7 digits. A run of 9-10 digits is a phone's
+  length, so it is a price only with grouped thousands ending `000` or cents ("150 000 000 Ar",
+  "123 456 789,00 €"). A full date (8 digits) counts too.
 - `contact`: an email, a link with a path or query, an `@` before a word or a placeholder (spaces
   allowed: "@ njaka", "njaka@ <URL>"), an `at`/`arobase`/`(at)`/`[at]` before a placeholder or a
   mail host ("njaka at gmail"), or a private-use mark the anonymiser leaves only when a
   replacement failed.
 - `too_many_unknown`: more than 30% of its words would be replaced as names (below).
+- `hidden_char`: an invisible or combining character normalise() left (a spacing mark inside a name,
+  a Hangul filler, a format character not after a letter), unless it builds an emoji (variation
+  selector, ZWJ between emoji, keycap after a digit/#/*, subdivision-flag tags).
 
 Every turn is NFKC-normalised first, so full-width (`＠`, `Ｒ`) and circled (`Ⓡ`) letters are
 checked as plain ones; combining marks NFKC leaves loose (strike-through, underline) and zero-width
@@ -52,11 +57,21 @@ Only counts leave this module; never text or words.
 
 import hashlib
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from typing import NamedTuple
 
-from fym1.data.anonymize import EMAIL, FALLBACK_NAME, FIRST_NAMES, SURNAMES, compare_key, fold, normalise
+from fym1.data.anonymize import (
+    EMAIL,
+    FALLBACK_NAME,
+    FIRST_NAMES,
+    SURNAMES,
+    compare_key,
+    fold,
+    is_variation_selector,
+    normalise,
+)
 from fym1.data.known_words import (
     FIRST_NAME_WORDS,
     KNOWN_WORDS,
@@ -68,7 +83,7 @@ from fym1.data.known_words import (
 )
 from fym1.data.leftovers import MIN_LETTERS, fake_name_keys
 
-GATE_REASONS = ("long_number", "contact", "too_many_unknown")
+GATE_REASONS = ("long_number", "contact", "too_many_unknown", "hidden_char")
 HAND_LIST = "known_names"  # the only list that clears a word mid-sentence or after a marker
 MAX_REPLACED_SHARE = 0.3
 
@@ -80,7 +95,12 @@ CURRENCY_WORDS = ("Ar", "Ariary", "Fmg", "Euro", "Euros", "Eur")  # never a left
 # Clean price shapes: "1 500 000", "1.500.000", "2500000", each with optional cents ",50".
 PRICE = re.compile(r"\d{1,3}(?:([ \u00a0\u202f.,])\d{3})?(?:\1\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?")
 # Digits of a Malagasy phone: trunk 0, country code 261 (or 00261), or a 9-digit mobile without the 0.
-PHONE_DIGITS = re.compile(r"0|261|3[2-9]\d{7}$")
+PHONE_DIGITS = re.compile(r"(?:0|261|3[2-9]\d{7}$)")
+# A phone's length without its trunk 0 or with it (Malagasy mobiles 3x and landlines 2x, French mobiles
+# [67] without the 0, ...). Too many shapes to list, so a run this long fails closed: it is a price only
+# with grouped thousands ending 000 ("150 000 000") or cents ("123 456 789,00").
+PHONE_LENGTHS = (9, 10)
+CENTS = re.compile(r"[.,]\d{1,2}$")
 
 LINK_WITH_PATH = re.compile(r"\b(?:https?://|www\.)\S+|\b(?:[\w-]+\.)+[a-z]{2,}[/?]\S*", re.IGNORECASE)
 _PLACEHOLDER_AFTER = r"<(?:URL|EMAIL|HANDLE)>"
@@ -152,19 +172,70 @@ def _looks_like_a_phone(text: str, run: re.Match) -> bool:
     return after_plus or bool(PHONE_DIGITS.match(digits))
 
 
+def _is_price(text: str, run: re.Match) -> bool:
+    shape = PRICE.fullmatch(run.group())
+    if not shape or not CURRENCY_AFTER.match(text, run.end()) or _looks_like_a_phone(text, run):
+        return False
+    whole = CENTS.sub("", run.group())
+    if sum(c.isdigit() for c in whole) not in PHONE_LENGTHS:
+        return True
+    return whole != run.group() or (shape.group(1) is not None and whole.endswith("000"))
+
+
 def has_long_number(text: str) -> bool:
     """`text` holds 7+ digits in one run that is not a clean price followed by a currency word."""
     for run in DIGIT_RUN.finditer(text):
-        if sum(c.isdigit() for c in run.group()) < MIN_NUMBER_DIGITS:
-            continue
-        is_price = (
-            PRICE.fullmatch(run.group())
-            and CURRENCY_AFTER.match(text, run.end())
-            and not _looks_like_a_phone(text, run)
-        )
-        if not is_price:
+        if sum(c.isdigit() for c in run.group()) >= MIN_NUMBER_DIGITS and not _is_price(text, run):
             return True
     return False
+
+
+# Default-ignorable code points no category check below catches: Hangul fillers are letters (Lo),
+# U+FFF0-FFF8 are unassigned.
+_IGNORABLE_LETTERS = frozenset("\u115f\u1160\u3164\uffa0") | frozenset(map(chr, range(0xFFF0, 0xFFF9)))
+_HIDDEN_CATEGORIES = frozenset({"Cf", "Mn", "Me", "Mc"})
+ZWJ, KEYCAP, BLACK_FLAG = "\u200d", "\u20e3", "\U0001f3f4"
+KEYCAP_BASES = frozenset("0123456789#*")
+
+
+def _is_tag(c: str) -> bool:
+    return "\U000e0020" <= c <= "\U000e007f"
+
+
+def _is_emoji_part(c: str) -> bool:
+    return unicodedata.category(c) in ("So", "Sk") or is_variation_selector(c)
+
+
+def _in_emoji_sequence(text: str, i: int) -> bool:
+    """The invisible character at `text[i]` builds an emoji: VS, ZWJ between emoji, keycap, flag tag."""
+    c = text[i]
+    before = text[i - 1] if i else ""
+    if is_variation_selector(c):  # normalise() already dropped those after a letter
+        return True
+    if c == ZWJ:
+        after = text[i + 1] if i + 1 < len(text) else ""
+        return bool(before and after) and _is_emoji_part(before) and _is_emoji_part(after)
+    if c == KEYCAP:  # "1\u20e3", "1\ufe0f\u20e3"
+        base = text[i - 2] if before == "\ufe0f" and i >= 2 else before
+        return base in KEYCAP_BASES
+    if _is_tag(c):  # subdivision flags: black flag + tag letters + cancel tag
+        j = i - 1
+        while j >= 0 and _is_tag(text[j]):
+            j -= 1
+        return j >= 0 and text[j] == BLACK_FLAG
+    return False
+
+
+def has_hidden_char(text: str) -> bool:
+    """`text` (normalised) still holds an invisible or combining character that is not part of an emoji.
+
+    normalise() drops the ones that hide a letter; anything left (a spacing mark inside a name, a Hangul
+    filler, a format character after a space) fails closed. NFC-composed accents are letters, not marks.
+    """
+    return any(
+        (c in _IGNORABLE_LETTERS or unicodedata.category(c) in _HIDDEN_CATEGORIES) and not _in_emoji_sequence(text, i)
+        for i, c in enumerate(text)
+    )
 
 
 def contact_left(text: str) -> bool:
@@ -323,4 +394,6 @@ def _reasons(texts: list[str]) -> set[str]:
             reasons.add("long_number")
         if contact_left(text):
             reasons.add("contact")
+        if has_hidden_char(text):
+            reasons.add("hidden_char")
     return reasons

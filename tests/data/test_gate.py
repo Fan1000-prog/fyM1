@@ -110,10 +110,11 @@ def test_gate_drops_whole_conversations_for_numbers_and_contacts_only():
         "dropped_long_number": 2,
         "dropped_contact": 1,
         "dropped_too_many_unknown": 1,  # "both": 1 name in 2 words, counted under every reason
+        "dropped_hidden_char": 0,
         "kept": 2,
         "tokens_replaced": 1,
     }
-    assert set(GATE_REASONS) == {"long_number", "contact", "too_many_unknown"}
+    assert set(GATE_REASONS) == {"long_number", "contact", "too_many_unknown", "hidden_char"}
 
 
 def test_unknown_capitalised_word_becomes_a_pool_fake_the_same_one_in_a_conversation():
