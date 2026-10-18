@@ -14,16 +14,19 @@ fake names, joined messages), runs across message boundaries included, or holdin
 distinctive words, fails (copied chat text, counted per file, never shown; words compared as the name scan
 compares them); then a secret scan runs. The release ships text files only (known text types, decoded in full,
 no control characters, no data: URI in any spelling, no invisible format characters): any other file (image, PDF,
-binary data hidden after a text file) and any archive (zip, gz, tar, whl, ...) is refused before anything is
-written. The paper ships
-as paper/fym1.tex; its PDF is built from it. Every file under --export must be a thread page (message_*.json) or a
-one-file JSON export, at any depth; any other file (hidden ones such as .DS_Store too) is refused (counted, never
-named). Every key of every export file must be in its format's schema (fym1.release.DYI_SCHEMA / FLAT_SCHEMA:
-each key a name, free text, or data such as ids and timestamps); any other key refuses the export (counted, never
-named), and so is a key written twice in one object. Names, every name in a nickname event (actor, target and
-nickname, participant or not; an event the check cannot read refuses the export) and the distinctive words of
-titles, notes and data texts (links, paths; the export's own words in fym1.release.EXPORT_WORDS left out) join the
-name list; every free-text field is checked as chat text too. Writes the counts report to
+binary data hidden after a text file), any archive (zip, gz, tar, whl, ...) and any trim keep-ids file
+(keep_ids.json, any folder, any case) is refused before anything is written. The paper ships as paper/fym1.tex;
+its PDF is built from it. Every file under --export must be a thread page (message_*.json) or a one-file JSON
+export, at any depth; any other file (hidden ones such as .DS_Store too) is refused (counted, never named). Every
+key of every export file must be in its format's schema (fym1.release.DYI_SCHEMA / FLAT_SCHEMA: each key a name,
+free text, or data such as ids and timestamps); any other key refuses the export (counted, never named), and so is
+a key written twice in one object. The name list is every name source added together, none replacing another:
+names, the loaded threads' participants and senders, every name in a nickname event (actor, target and nickname,
+participant or not), the loaders' nicknames (Thread.nicknames), the listed given names in every note (note_names,
+even when they are export words), and the distinctive words of titles, notes and data texts (links, paths; the
+export's own words in fym1.release.EXPORT_WORDS left out). A nickname event the check cannot read refuses the
+export, and so does one the release patterns and the loaders' parser read differently (counted, never shown).
+Every free-text field is checked as chat text too. Writes the counts report to
 --results only (never into --out: the report is a private build record).
 --private-ids names a file outside the repo (one private account id per line); any whole-word,
 case-insensitive match in a snapshot file or path fails the check, counted per file, never shown.
