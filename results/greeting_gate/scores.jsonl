@@ -1,0 +1,60 @@
+{"id": "j0001", "naturalness": 1, "correctness": 1, "note": "Echoes the prompt back, no reply."}
+{"id": "j0002", "naturalness": 2, "correctness": 2, "note": "Formal topic menu, too long, truncated."}
+{"id": "j0003", "naturalness": 3, "correctness": 3, "note": "Assistant-style offer instead of a friendly reply."}
+{"id": "j0004", "naturalness": 3, "correctness": 3, "note": "Skips how-are-you, jumps to offering help."}
+{"id": "j0005", "naturalness": 2, "correctness": 3, "note": "Long AI lecture for a casual question."}
+{"id": "j0006", "naturalness": 3, "correctness": 4, "note": "Answers but assistant-like and a bit long."}
+{"id": "j0007", "naturalness": 1, "correctness": 2, "note": "Replies in English."}
+{"id": "j0008", "naturalness": 3, "correctness": 4, "note": "Plays along but adds AI explanation."}
+{"id": "j0009", "naturalness": 1, "correctness": 1, "note": "English, does not recognise the greeting."}
+{"id": "j0010", "naturalness": 1, "correctness": 2, "note": "Mostly English, odd Malagasy opener."}
+{"id": "j0011", "naturalness": 3, "correctness": 4, "note": "Kind but written tone, unasked advice."}
+{"id": "j0012", "naturalness": 3, "correctness": 3, "note": "AI disclaimer, formal, long."}
+{"id": "j0013", "naturalness": 1, "correctness": 1, "note": "Echoes the prompt back."}
+{"id": "j0014", "naturalness": 2, "correctness": 1, "note": "Blog-writing guide, ignores greeting."}
+{"id": "j0015", "naturalness": 2, "correctness": 2, "note": "Lecture on fatigue causes, too long."}
+{"id": "j0016", "naturalness": 2, "correctness": 3, "note": "Broken phrasing ('mbola mbola')."}
+{"id": "j0017", "naturalness": 3, "correctness": 3, "note": "Help menu, odd 'salama tsara ahoana'."}
+{"id": "j0018", "naturalness": 1, "correctness": 1, "note": "Repetition loop, nonsense."}
+{"id": "j0019", "naturalness": 2, "correctness": 1, "note": "Claims not to understand Malagasy."}
+{"id": "j0020", "naturalness": 3, "correctness": 3, "note": "Stiff, offers info instead of chatting."}
+{"id": "j0021", "naturalness": 2, "correctness": 3, "note": "Garbled AI explanation."}
+{"id": "j0022", "naturalness": 4, "correctness": 4, "note": "Friendly, one odd word, slightly assistant-like."}
+{"id": "j0023", "naturalness": 4, "correctness": 5, "note": "Short, fitting, a bit assistant-like."}
+{"id": "j0024", "naturalness": 2, "correctness": 1, "note": "Off-topic biology lecture."}
+{"id": "j0025", "naturalness": 1, "correctness": 1, "note": "English, does not get the greeting."}
+{"id": "j0026", "naturalness": 2, "correctness": 2, "note": "Lecture list on taxi-be, no banter."}
+{"id": "j0027", "naturalness": 3, "correctness": 4, "note": "Fitting but formal assistant tone."}
+{"id": "j0028", "naturalness": 4, "correctness": 5, "note": "Short and fitting."}
+{"id": "j0029", "naturalness": 1, "correctness": 1, "note": "Echoes the prompt back."}
+{"id": "j0030", "naturalness": 3, "correctness": 4, "note": "Answers, odd phrasing and assistant tail."}
+{"id": "j0031", "naturalness": 3, "correctness": 4, "note": "Answers, somewhat stiff and long."}
+{"id": "j0032", "naturalness": 3, "correctness": 3, "note": "AI location explanation, wordy."}
+{"id": "j0033", "naturalness": 1, "correctness": 1, "note": "Replies in Hausa."}
+{"id": "j0034", "naturalness": 2, "correctness": 3, "note": "Broken ('misaona'), unclear answer."}
+{"id": "j0035", "naturalness": 2, "correctness": 2, "note": "French opener, ignores the question."}
+{"id": "j0036", "naturalness": 5, "correctness": 5, "note": "Natural, short, fitting."}
+{"id": "j0037", "naturalness": 3, "correctness": 3, "note": "Stiff AI disclaimer."}
+{"id": "j0038", "naturalness": 3, "correctness": 4, "note": "Answers, odd word and translated question."}
+{"id": "j0039", "naturalness": 2, "correctness": 1, "note": "Ignores question, claims Google."}
+{"id": "j0040", "naturalness": 5, "correctness": 5, "note": "Natural greeting back."}
+{"id": "j0041", "naturalness": 2, "correctness": 2, "note": "Essay on travel benefits."}
+{"id": "j0042", "naturalness": 3, "correctness": 2, "note": "Stiff, illogical reason."}
+{"id": "j0043", "naturalness": 2, "correctness": 2, "note": "Incoherent weekend/Wednesday mix."}
+{"id": "j0044", "naturalness": 3, "correctness": 4, "note": "Answers, assistant-like menu."}
+{"id": "j0045", "naturalness": 2, "correctness": 1, "note": "Does not understand 'ialahy'."}
+{"id": "j0046", "naturalness": 2, "correctness": 2, "note": "Broken, mostly nonsense words."}
+{"id": "j0047", "naturalness": 2, "correctness": 2, "note": "Formal capability menu."}
+{"id": "j0048", "naturalness": 3, "correctness": 4, "note": "Fitting, but nonsense word 'Tomazaia'."}
+{"id": "j0049", "naturalness": 1, "correctness": 1, "note": "Nonsense, ignores question."}
+{"id": "j0050", "naturalness": 2, "correctness": 2, "note": "Broken phrasing."}
+{"id": "j0051", "naturalness": 3, "correctness": 4, "note": "Plays along, narrated and stiff."}
+{"id": "j0052", "naturalness": 2, "correctness": 2, "note": "Capability list instead of chat."}
+{"id": "j0053", "naturalness": 2, "correctness": 2, "note": "Over-analyses a simple question."}
+{"id": "j0054", "naturalness": 4, "correctness": 5, "note": "Fitting, slightly assistant-like."}
+{"id": "j0055", "naturalness": 1, "correctness": 1, "note": "Replies in Slovak."}
+{"id": "j0056", "naturalness": 3, "correctness": 2, "note": "Ignores the awake question."}
+{"id": "j0057", "naturalness": 3, "correctness": 4, "note": "Fitting, odd 'Salamae', assistant tail."}
+{"id": "j0058", "naturalness": 1, "correctness": 1, "note": "Repetition loop."}
+{"id": "j0059", "naturalness": 4, "correctness": 5, "note": "Fitting, returns the question."}
+{"id": "j0060", "naturalness": 4, "correctness": 4, "note": "Short, a bit assistant-like."}
