@@ -5,8 +5,9 @@ Release blocker (lead decision 21): the export's sender names are read at run ti
 name lists, and searched for in every file except the lists a script rebuilds from public data alone. The lists
 scripts/build_known_words.py builds from public data minus the hand lists do not ship (REBUILT_LISTS). Release
 blocker (lead decision 34): any shipped file sharing a CHAT_TEXT_NGRAM-word run with the export's message texts
-fails the release. Everything this module reports is a count or a repo path; it never returns a sender name, a
-message text, a private id or a matched secret value.
+or the anonymised chats' turn texts (fake names, joined messages) fails the release. Everything this module
+reports is a count or a repo path; it never returns a sender name, a message text, a private id or a matched
+secret value.
 """
 
 import fnmatch
@@ -232,6 +233,7 @@ class Report:
     private_ids: int = 0
     private_id_hits: dict[str, int] = field(default_factory=dict)
     chat_messages: int = 0
+    chat_turns: int = 0
     chat_text_hits: list[str] = field(default_factory=list)
     unscannable: list[str] = field(default_factory=list)
     secret_hits: dict[str, dict[str, int]] = field(default_factory=dict)
@@ -270,6 +272,7 @@ class Report:
             },
             "chat_text": {
                 "messages_indexed": self.chat_messages,
+                "anonymised_turns_indexed": self.chat_turns,
                 "ngram_words": CHAT_TEXT_NGRAM,
                 "files_with_hits": self.chat_text_hits,
                 "files_total": len(self.chat_text_hits),
@@ -374,22 +377,46 @@ def export_senders(threads: list[Thread]) -> list[str]:
 # ---- chat text ------------------------------------------------------------------------------------------------
 
 
-def chat_text_index(threads: list[Thread]) -> tuple[NgramIndex, int]:
-    """CHAT_TEXT_NGRAM-word runs of every message text, as written and as the anonymiser `normalise`s it, and the
-    number of messages read. Refused when no message is that long: an empty index would pass every file unchecked."""
-    texts = [m.text for thread in threads for m in thread.messages if m.text]
+def export_texts(threads: list[Thread]) -> list[str]:
+    """Every non-empty message text in the export."""
+    return [m.text for thread in threads for m in thread.messages if m.text]
+
+
+def read_chats(path: Path, trees: Iterable[Path]) -> list[str]:
+    """Turn texts of the anonymised chats file at `path` (JSON lines, `{"messages": [{"role", "content"}]}`), system
+    turns left out (the system prompt is ours, not chat text). The file must sit outside the repo and its worktrees.
+    Refused when unreadable, malformed or holding no turns; errors never carry the file's path or contents."""
+    target = path.expanduser().resolve()
+    _require_outside(target, trees, "chats file")
     try:
-        index = NgramIndex([*texts, *map(normalise, texts)], n=CHAT_TEXT_NGRAM)
+        with target.open(encoding="utf-8") as lines:
+            records = [json.loads(line) for line in lines if line.strip()]
+        texts = [turn["content"] for record in records for turn in record["messages"] if turn["role"] != "system"]
+    except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError) as error:
+        raise RefusedError(f"chats file could not be read ({type(error).__name__})") from None
+    if not all(isinstance(text, str) for text in texts):
+        raise RefusedError("chats file could not be read (a turn's content is not text)")
+    texts = [text for text in texts if text]
+    if not texts:
+        raise RefusedError("chats file holds no turns")
+    return texts
+
+
+def chat_text_index(texts: list[str], source: str) -> NgramIndex:
+    """CHAT_TEXT_NGRAM-word runs of `texts`, as written and as the anonymiser `normalise`s them. Refused when no
+    text from `source` is that long: an empty index would pass every file unchecked."""
+    try:
+        return NgramIndex([*texts, *map(normalise, texts)], n=CHAT_TEXT_NGRAM)
     except ValueError:
-        raise RefusedError(f"export has no {CHAT_TEXT_NGRAM}-word message to check copied chat text against") \
+        raise RefusedError(f"{source} has no {CHAT_TEXT_NGRAM}-word message to check copied chat text against") \
             from None
-    return index, len(texts)
 
 
-def has_chat_text(text: str, index: NgramIndex) -> bool:
-    """`text` shares a word run with the export's messages, read as written and in both name-scan `readings`
+def has_chat_text(text: str, indexes: Iterable[NgramIndex]) -> bool:
+    """`text` shares a word run with any of `indexes`, read as written and in both name-scan `readings`
     (escapes decoded, hidden characters as a break and taken out)."""
-    return any(index.shares_with(reading) for reading in (text, *readings(text)))
+    forms = (text, *readings(text))
+    return any(index.shares_with(form) for index in indexes for form in forms)
 
 
 def count_name_hits(text: str, names: frozenset[str], allowed: frozenset[str] = frozenset()) -> int:
@@ -482,8 +509,7 @@ def load_private_ids(path: Path, trees: Iterable[Path]) -> tuple[re.Pattern[str]
     the file's contents.
     """
     target = path.expanduser().resolve()
-    if any(target == tree or tree in target.parents for tree in trees):
-        raise RefusedError("private ids file is inside the repo or one of its worktrees")
+    _require_outside(target, trees, "private ids file")
     try:
         lines = target.read_text("utf-8").splitlines()
     except (OSError, UnicodeDecodeError) as error:
@@ -494,6 +520,12 @@ def load_private_ids(path: Path, trees: Iterable[Path]) -> tuple[re.Pattern[str]
         raise RefusedError("private ids file holds no ids")
     pattern = re.compile(rf"(?<![A-Za-z0-9_])(?:{'|'.join(map(re.escape, ids))})(?![A-Za-z0-9_])", re.IGNORECASE)
     return pattern, len(ids)
+
+
+def _require_outside(target: Path, trees: Iterable[Path], what: str) -> None:
+    """Refuse a private input file (`target`, resolved) that sits inside the repo or one of its worktrees."""
+    if any(target == tree or tree in target.parents for tree in trees):
+        raise RefusedError(f"{what} is inside the repo or one of its worktrees")
 
 
 def count_private_ids(text: str, ids: re.Pattern[str]) -> int:
@@ -703,20 +735,24 @@ def is_list_file(path: str) -> bool:
     return any(fnmatch.fnmatch(path, pattern) for pattern in LIST_GLOBS)
 
 
-def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: Path) -> Report:
-    """Make the snapshot and check it. `out` is written only when every check passes.
+def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: Path, chats: Path) -> Report:
+    """Make the snapshot and check it. `out` is written only when every check passes. `chats` is the private
+    anonymised chats.jsonl: its turns (fake names, joined messages) are checked as copied chat text too.
 
     Every RefusedError is raised before anything is written. The snapshot is built in a staging folder next to
     `out` and moved into place only when the report is ok; on a failed check or any error the staging folder is
     deleted, so `out` never holds a partial or failing snapshot.
     """
     root, sha = check_inputs(repo, ref, out)
-    ids, id_count = load_private_ids(private_ids, worktrees(root))
+    trees = worktrees(root)
+    ids, id_count = load_private_ids(private_ids, trees)
+    turns = read_chats(chats, trees)
     threads = read_export(export)
     names, short, placeholders = name_tokens(export_senders(threads))
     if not names:
         raise RefusedError("export gave no sender name tokens")
-    chat, chat_messages = chat_text_index(threads)
+    messages = export_texts(threads)
+    chat = (chat_text_index(messages, "export"), chat_text_index(turns, "chats file"))
     files, excluded = tracked_files(root, sha)
     out.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{out.name}.partial-", dir=out.parent))
@@ -726,7 +762,7 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
         shutil.rmtree(staging, ignore_errors=True)
         raise
     report.ref, report.name_tokens, report.private_ids = sha, len(names), id_count
-    report.chat_messages = chat_messages
+    report.chat_messages, report.chat_turns = len(messages), len(turns)
     report.short_tokens_skipped, report.placeholder_senders_skipped = short, placeholders
     if not report.ok:
         shutil.rmtree(staging)
@@ -738,7 +774,7 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
 
 
 def _write_and_check(files: dict[str, tuple[bytes, int]], excluded: list[dict], out: Path, names: frozenset[str],
-                     ids: re.Pattern[str], chat: NgramIndex) -> Report:
+                     ids: re.Pattern[str], chat: tuple[NgramIndex, ...]) -> Report:
     kept = write_files(files, out)
     report = Report(ref="", files_copied=len(kept), excluded=excluded)
     matched = {exclusion_entry(e["path"]) for e in excluded}
