@@ -6,6 +6,7 @@ import importlib.util
 import json
 import shutil
 import subprocess
+from dataclasses import replace
 from pathlib import Path, PurePath
 
 import pytest
@@ -13,7 +14,7 @@ import pytest
 from fym1 import release
 from fym1.data.anonymize import fold
 from fym1.data.known_words import PERSON_NAMES
-from fym1.data.messenger import load_threads
+from fym1.data.messenger import Message, load_threads
 from fym1.eval.metrics import NgramIndex
 from fym1.release import RefusedError, build_snapshot, count_name_hits, name_tokens, secret_hits, strip_list
 
@@ -895,6 +896,24 @@ def test_the_loaders_nicknames_join_the_name_list(tmp_path, monkeypatch):
     monkeypatch.setattr(release, "read_export", with_loader_nickname)
     names = name_tokens(export_names(export))[0]
     assert {release.compare_key(n) for n in ("Loaderfake", "Nickfake")} <= names
+
+
+def test_the_loaded_threads_participants_and_senders_join_the_name_list(tmp_path, monkeypatch):
+    """New name sources add to the old ones: a participant or sender only the loaded threads hold (here put on the
+    loaded threads) still joins the name list."""
+    export = _with_events(tmp_path, True, [("Zafy Test", NICKNAME_SLIPS[0][1])], ["Zafy Test"])
+    read = release.read_export
+
+    def with_loader_names(*args, **kwargs):
+        threads = read(*args, **kwargs)
+        thread = threads[0]
+        threads[0] = replace(thread, participants=[*thread.participants, "Partfake Loaderonly"],
+                             messages=[*thread.messages, Message(sender="Sendfake Loaderonly", text="salama", ts_ms=1)])
+        return threads
+
+    monkeypatch.setattr(release, "read_export", with_loader_names)
+    names = name_tokens(export_names(export))[0]
+    assert {release.compare_key(n) for n in ("Partfake", "Sendfake")} <= names
 
 
 # ---- notes: listed given names and distinctive words, both (review finding 26) -------------------------------------

@@ -619,7 +619,8 @@ def _walk(node: object, schema: Schema, found: _Fields, fix: Callable[[str], str
 @dataclass(frozen=True)
 class ExportScan:
     threads: list[Thread]  # `read_export`
-    names: list[str]  # every NAME field, nickname-event name, and distinctive LABEL, NOTE and DATA word
+    names: list[str]  # every NAME field, nickname-event name, loader nickname, participant and sender, and
+    # distinctive LABEL, NOTE and DATA word
     free_texts: list[str]  # every LABEL, NOTE and TEXT field, for the chat-text check
     label_words_common: int  # LABEL words left out of the names as common (`label_words`)
     keys: int  # distinct schema keys the export uses
@@ -631,7 +632,7 @@ def scan_export(export: Path) -> ExportScan:
     """Every person name and free text the export holds, read from its raw files against the format's schema
     (DYI_SCHEMA for thread pages in any folder, FLAT_SCHEMA for one-file exports) rather than from the loaded
     conversations (which drop unsent, call and event messages), plus the names in every nickname event, the
-    loaders' nicknames (`Thread.nicknames`), the listed given names of every note (`note_names`) and the distinctive
+    loaders' nicknames (`Thread.nicknames`), the loaded threads' participants and senders, the listed given names of every note (`note_names`) and the distinctive
     words of every title, note and data text (`described_words`). Refused, counted, never named: a key outside the
     schema, a key written twice in one object, a nickname event no pattern reads or that the release patterns and
     the loaders' read differently, a page of any other shape. Errors never carry the export's paths or text."""
@@ -667,6 +668,7 @@ def scan_export(export: Path) -> ExportScan:
         threads=threads,
         names=[*found.values[NAME], *(name for event in events for name in event.names),
                *(nickname for thread in threads for nickname in thread.nicknames),
+               *(name for t in threads for name in [*t.participants, *(m.sender for m in t.messages)]),
                *(word for kept, _ in labels for word in kept), *(word for kept, _ in described for word in kept),
                *(name for note in found.values[NOTE] for name in note_names(note))],
         free_texts=[*found.values[LABEL], *found.values[NOTE], *found.values[TEXT]],
