@@ -106,6 +106,9 @@ SECRET_PATTERNS: dict[str, re.Pattern[str]] = {
     "google_api_key": re.compile(r"\bAIza[0-9A-Za-z_\-]{35}"),
     "sk_api_key": re.compile(r"\bsk-[A-Za-z0-9_\-]{20,}"),
     "slack_token": re.compile(r"\bxox[abposr]-[A-Za-z0-9-]{10,}"),
+    "google_oauth_secret": re.compile(r"\bGOCSPX-[A-Za-z0-9_\-]{20,}"),
+    "jwt": re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}"),
+    "telegram_bot_token": re.compile(r"\b\d{8,10}:[A-Za-z0-9_\-]{35}\b"),
     "assigned_secret": re.compile(
         r"""(?i)\b(?:api[_-]?key|secret|token|password|passwd)\b["']?\s*[:=]\s*["'][A-Za-z0-9_\-+/=.]{16,}["']"""
     ),
@@ -114,8 +117,19 @@ EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-
 ALLOWED_EMAILS: dict[str, str] = {
     "x@y.mg": "placeholder example in scripts/build_known_words.py, not an address",
 }
-ALLOWED_EMAIL_PREFIXES: dict[str, str] = {
-    "tests/": "synthetic anonymiser probe addresses (fixtures are synthetic by repo rule)",
+# Under tests/ only: the made-up domains the synthetic fixtures use.
+TEST_EMAIL_DOMAINS: dict[str, str] = {
+    "example.mg": "made-up domain of the synthetic anonymiser and gate probes",
+    "mail.example": "reserved .example domain, release tests",
+    "mail.mg": "made-up domain of a synthetic known-words probe",
+    "t.invalid": "reserved .invalid domain, the git identity of synthetic test repos",
+}
+# Under tests/ only: synthetic probes that need a real provider's shape (plus-tags, upper case) to test masking.
+# Kept as (local part, domain) so this file holds no address itself.
+TEST_PROBE_EMAILS: dict[str, str] = {
+    f"{local}@{domain}": "synthetic anonymiser probe in tests/data/test_anonymize_probes.py"
+    for local, domain in (("nirina+tag", "gmail.com"), ("nirina", "gmail.com"), ("nirina.rk+fy", "yahoo.fr"),
+                          ("marie-claire.rasoanaivo", "gmail.com"))
 }
 SECRET_FILE_NAMES = frozenset({".env", "kaggle.json", "access_token", "id_rsa", "id_ed25519", ".netrc"})
 SECRET_FILE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
@@ -285,17 +299,22 @@ def secret_hits(path: str, text: str) -> Counter:
     for label, pattern in SECRET_PATTERNS.items():
         if n := len(pattern.findall(text)):
             hits[label] += n
-    if not path.startswith(tuple(ALLOWED_EMAIL_PREFIXES)):
-        if n := sum(1 for email in EMAIL.findall(text) if email not in ALLOWED_EMAILS):
-            hits["email"] += n
+    if n := sum(1 for email in EMAIL.findall(text) if not email_allowed(path, email)):
+        hits["email"] += n
     return hits
 
 
+def email_allowed(path: str, email: str) -> bool:
+    """`email` is a known placeholder, or a synthetic test address on a made-up domain or the probe list."""
+    address = email.casefold()
+    if address in ALLOWED_EMAILS:
+        return True
+    in_tests = path.startswith("tests/")
+    return in_tests and (address.rsplit("@", 1)[1] in TEST_EMAIL_DOMAINS or address in TEST_PROBE_EMAILS)
+
+
 def allowed_email_count(path: str, text: str) -> int:
-    emails = EMAIL.findall(text)
-    if path.startswith(tuple(ALLOWED_EMAIL_PREFIXES)):
-        return len(emails)
-    return sum(1 for email in emails if email in ALLOWED_EMAILS)
+    return sum(1 for email in EMAIL.findall(text) if email_allowed(path, email))
 
 
 # ---- copy -----------------------------------------------------------------------------------------------------
@@ -348,7 +367,7 @@ def copy_tracked(root: Path, sha: str, out: Path) -> tuple[list[str], list[dict]
                              check=True, capture_output=True).stdout
     kept, excluded = [], []
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as tar:
-        members = []
+        members, unsafe = [], 0
         for member in tar.getmembers():
             if member.isdir() or member.name == "pax_global_header":
                 continue
@@ -356,9 +375,12 @@ def copy_tracked(root: Path, sha: str, out: Path) -> tuple[list[str], list[dict]
                 excluded.append({"path": member.name, "reason": reason})
                 continue
             path = PurePosixPath(member.name)
-            if path.is_absolute() or ".." in path.parts or not member.isfile():  # symlinks too: fail closed
-                raise RefusedError(f"unsafe or non-regular archive entry: {member.name}")
+            unsafe += path.is_absolute() or ".." in path.parts or not member.isfile()  # symlinks too: fail closed
             members.append(member)
+        if unsafe:  # counted, not named: a path may hold a name
+            raise RefusedError(f"{unsafe} unsafe or non-regular archive entries (symlink, absolute or ../ path)")
+        if any(member.name == NOTICE_NAME for member in members):
+            raise RefusedError(f"{NOTICE_NAME} already tracked; merge the licence notes by hand")
         out.mkdir(parents=True, exist_ok=True)
         for member in members:
             dest = out / member.name
@@ -420,8 +442,6 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
                     private_ids=id_count)
     matched = {exclusion_entry(e["path"]) for e in excluded}
     report.excludes_unmatched = [entry.path for entry in EXCLUDES if entry.path not in matched]
-    if (out / NOTICE_NAME).exists():
-        raise RefusedError(f"{NOTICE_NAME} already tracked; merge the licence notes by hand")
     (out / NOTICE_NAME).write_text(notice_text(), encoding="utf-8")
 
     for path in (p for p in kept if p in HAND_LISTS):

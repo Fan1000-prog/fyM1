@@ -129,8 +129,19 @@ def test_secret_hits_count_patterns_and_files_without_values():
 def test_secret_hits_env_files_and_email_allow_list():
     assert secret_hits("config/.env", "") == {"secret_file": 1}
     assert secret_hits("scripts/x.py", "see x@y.mg") == {}
-    assert secret_hits("tests/data/test_x.py", "probe zz@mail.example") == {}
+    assert secret_hits("tests/data/test_x.py", "probe zz@mail.example and NIRINA@GMAIL.COM") == {}
     assert release.allowed_email_count("tests/data/test_x.py", "probe zz@mail.example") == 1
+    # Only the made-up domains and the listed probes are allowed under tests/, and nothing outside tests/.
+    assert secret_hits("tests/data/test_x.py", "real.person" + "@gmail.com") == {"email": 1}
+    assert secret_hits("docs/x.md", "zz@mail.example") == {"email": 1}
+
+
+def test_secret_hits_google_oauth_jwt_and_telegram_tokens():
+    oauth = "GOCSPX-" + "Ab1_" * 7
+    jwt = ".".join(["eyJ" + "hbGciOiJI", "eyJ" + "zdWIiOiIx", "S" * 20])
+    bot = "1234567" + "89:" + "A" * 35
+    hits = secret_hits("scripts/x.py", f"{oauth}\n{jwt}\nbot {bot}\n")
+    assert hits == {"google_oauth_secret": 1, "jwt": 1, "telegram_bot_token": 1}
 
 
 # ---- end to end -----------------------------------------------------------------------------------------------
@@ -180,9 +191,10 @@ def test_refuses_dirty_tree(tmp_path):
         snap(repo, tmp_path / "public", make_export(tmp_path))
 
 
-@pytest.mark.parametrize("inside", ["repo/out", "repo"])
-def test_refuses_output_inside_repo(tmp_path, inside):
+@pytest.mark.parametrize("inside", ["repo/out", "repo", "linked/out", "linked"])
+def test_refuses_output_inside_repo_or_a_linked_worktree(tmp_path, inside):
     repo = make_repo(tmp_path, CLEAN_FILES)
+    git(repo, "worktree", "add", "-q", str(tmp_path / "linked"))
     with pytest.raises(RefusedError, match="inside the repo"):
         snap(repo, tmp_path / inside, make_export(tmp_path))
 
@@ -209,8 +221,9 @@ def test_symlink_is_refused_unless_excluded(tmp_path):
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "links")
     export = make_export(tmp_path)
-    with pytest.raises(RefusedError, match="non-regular"):
+    with pytest.raises(RefusedError, match="1 unsafe or non-regular") as error:
         snap(repo, tmp_path / "public", export)
+    assert "link.md" not in str(error.value)  # counted, never named: a path may hold a name
     assert not (tmp_path / "public").exists()
     git(repo, "rm", "-q", "link.md")
     git(repo, "commit", "-q", "-m", "drop link")
@@ -321,3 +334,20 @@ def test_private_ids_file_empty_or_missing_is_refused(tmp_path):
         build_snapshot(repo, "HEAD", tmp_path / "public", export, make_ids(tmp_path, "# only a comment\n\n"))
     with pytest.raises(RefusedError, match="could not be read"):
         build_snapshot(repo, "HEAD", tmp_path / "public", export, tmp_path / "missing.txt")
+
+
+# ---- unreadable files and NOTICE ------------------------------------------------------------------------------
+
+
+def test_unreadable_pdf_fails_the_check(tmp_path):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "paper/main.pdf": "not a pdf at all\n"})
+    report = snap(repo, tmp_path / "public", make_export(tmp_path))
+    assert report.unscannable == ["paper/main.pdf"]
+    assert not report.ok
+
+
+def test_tracked_notice_is_refused_before_anything_is_written(tmp_path):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "NOTICE": "existing notes\n"})
+    with pytest.raises(RefusedError, match="NOTICE already tracked"):
+        snap(repo, tmp_path / "public", make_export(tmp_path))
+    assert not (tmp_path / "public").exists()
