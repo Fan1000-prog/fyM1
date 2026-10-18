@@ -197,3 +197,78 @@ def test_promote_matches_the_04_synth_notebook_cell():
     spec.loader.exec_module(nb)
     source = "".join(cell.source for cell in nb.synth_cells())
     assert f'uploads["{filter_synth.PROMOTED}"] = uploads["{filter_synth.FILTERED}"]' in source
+
+
+# ---- --keep-ids: promote only the chats the sample gate passed ------------------------------------------------
+
+
+@pytest.fixture
+def two_kept_hub(tmp_path):
+    second = "A: Aiza ianao izao?\nB: Any an-trano aho, mamaky boky vaovao sy misotro dite mafana"
+    parts = {"synth/raw/part-00000.ndjson": ndjson([raw_row(0, KEPT_OUTPUT), raw_row(1, second)])}
+    (tmp_path / "hub").mkdir()
+    return FakeHub(tmp_path / "hub", parts)
+
+
+def kept_ids(tmp_path, real, hub, capsys):
+    out = tmp_path / "dry"
+    run(["--real", str(real), "--out-dir", str(out)], hub, capsys)
+    return [json.loads(line)["id"] for line in (out / "filtered.ndjson").read_text().splitlines()]
+
+
+def ids_file(tmp_path, lines):
+    path = tmp_path / "private" / "kept_ids.txt"
+    path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+    return path
+
+
+def test_keep_ids_promotes_only_the_listed_chats_and_keeps_filtered_whole(tmp_path, real, two_kept_hub, capsys):
+    first, second = kept_ids(tmp_path, real, two_kept_hub, capsys)
+    keep = ids_file(tmp_path, [second, ""])
+    code, printed = run(["--real", str(real), "--upload", "--promote", "--keep-ids", str(keep)], two_kept_hub, capsys)
+    assert code == 0
+    [commit] = two_kept_hub.commits
+    files = commit["files"]
+    assert [json.loads(line)["id"] for line in files["synth/filtered.ndjson"].decode().splitlines()] == [first, second]
+    promoted = files["synth/synth_chats.jsonl"].decode().splitlines()
+    assert [json.loads(line)["id"] for line in promoted] == [second]
+    assert promoted[0] == files["synth/filtered.ndjson"].decode().splitlines()[1]  # same bytes per chat
+    assert json.loads(files["synth/synth_stats.json"])["kept"] == 2
+    assert "promoted 1" in commit["message"] and "promoted 1" in printed.out
+
+
+def test_keep_ids_listing_every_kept_chat_matches_plain_promote(tmp_path, real, two_kept_hub, capsys):
+    ids = kept_ids(tmp_path, real, two_kept_hub, capsys)
+    out = tmp_path / "out"
+    run(["--real", str(real), "--out-dir", str(out), "--promote", "--keep-ids", str(ids_file(tmp_path, ids))],
+        two_kept_hub, capsys)  # fmt: skip
+    assert (out / "synth_chats.jsonl").read_bytes() == (out / "filtered.ndjson").read_bytes()
+
+
+def test_keep_ids_refuses_an_id_not_in_the_filtered_chats_and_writes_nothing(tmp_path, real, two_kept_hub, capsys):
+    first, _ = kept_ids(tmp_path, real, two_kept_hub, capsys)
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit, match="1 of 2 --keep-ids ids are not in the filtered chats"):
+        run(["--real", str(real), "--upload", "--promote", "--keep-ids", str(ids_file(tmp_path, [first, "no-id"]))],
+            two_kept_hub, capsys)  # fmt: skip
+    assert two_kept_hub.commits == [] and not out.exists()
+
+
+@pytest.mark.parametrize("lines", [[], ["", "  "]])
+def test_keep_ids_refuses_an_empty_file_before_downloading(tmp_path, real, hub, capsys, lines):
+    with pytest.raises(SystemExit, match="lists no chat id"):
+        run(["--real", str(real), "--upload", "--promote", "--keep-ids", str(ids_file(tmp_path, lines))], hub, capsys)
+    assert hub.downloads == [] and hub.commits == []
+
+
+def test_keep_ids_refuses_a_missing_file(tmp_path, real, hub, capsys):
+    with pytest.raises(SystemExit, match="could not be read"):
+        run(["--real", str(real), "--upload", "--promote", "--keep-ids", str(tmp_path / "nope.txt")], hub, capsys)
+    assert hub.commits == []
+
+
+def test_keep_ids_without_promote_is_a_usage_error(tmp_path, real, hub, capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        run(["--real", str(real), "--upload", "--keep-ids", str(ids_file(tmp_path, ["x"]))], hub, capsys)
+    assert exit_info.value.code == 2 and "--keep-ids only applies with --promote" in capsys.readouterr().err
+    assert hub.commits == []

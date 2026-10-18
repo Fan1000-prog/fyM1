@@ -73,7 +73,7 @@ DROP_REASONS = (
 LEAK_N = 8
 NEAR_DUP_JACCARD = 0.7
 _SHINGLE = 3
-_PLACEHOLDER = re.compile(r"<[A-Z_]+>|\[[A-Z_]+\]")
+PLACEHOLDER = re.compile(r"<[A-Z_]+>|\[[A-Z_]+\]")
 _WORDS = re.compile(r"\w+")
 _SPEAKER = re.compile(r"^[\s*_]*([AB])[\s*_]*[:：][\s*_]*(.*)$")
 _ROLE = {"A": "user", "B": "assistant"}
@@ -213,7 +213,7 @@ def _merge(turns: Conversation) -> Conversation:
     return merged
 
 
-def _record_id(messages: Conversation) -> str:
+def record_id(messages: Conversation) -> str:
     text = json.dumps(messages, ensure_ascii=False, sort_keys=True)
     return "synth-" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
@@ -257,7 +257,7 @@ def _first_failure(
     if not all(is_malagasy(t["content"]) for t in messages if t["role"] == "assistant"):
         return "not_malagasy", None
     clean = [{"role": t["role"], "content": anonymize(t["content"])} for t in messages]
-    if any(_PLACEHOLDER.search(t["content"]) for t in clean):
+    if any(PLACEHOLDER.search(t["content"]) for t in clean):
         return "placeholder", None
     if _has_unknown_name(clean):
         return "unknown_name", None
@@ -292,7 +292,7 @@ def filter_conversations(
             else:
                 seen_exact.add(" ".join(words))
                 kept_shingles.append(shingles)
-                kept.append({"id": _record_id(clean), "messages": clean})
+                kept.append({"id": record_id(clean), "messages": clean})
         if reason:
             dropped[reason] += 1
     return kept, dropped

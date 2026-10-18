@@ -1,0 +1,249 @@
+{
+  "auto_decisions": [
+    "Every chat with any drop reason is dropped whole; nothing is patched or replaced.",
+    "A real-name match counts any sender or participant name token of 3+ letters, also inside a longer word; ambiguous matches are dropped, not cleared.",
+    "User turns with no Malagasy are kept (the spec's drift rule is about replies); counted in chats_with_user_turn_not_malagasy.",
+    "Lower-case words no list knows are not dropped (lead decision 30: few-shot examples hold only fakes); real names in lower case are caught by real_name. Counted on the sample as chats_with_unlisted_word.",
+    "Leftover-sheet words (capitalised, outside the common-word list) that a known-word list clears are kept; only uncleared ones would drop (unknown_name).",
+    "Any 8-word match with the raw export fails the gate as well as dropping the chat."
+  ],
+  "chats_with_user_turn_not_malagasy": 14,
+  "checked": 1319,
+  "dataset": "Fan1000-Prog/fyM1-chats",
+  "dropped": 35,
+  "dropped_by_reason": {
+    "broken": 4,
+    "contact": 19,
+    "drift": 1,
+    "hidden_char": 0,
+    "identity": 0,
+    "leak_8gram": 0,
+    "long_number": 1,
+    "real_name": 10,
+    "unknown_name": 0
+  },
+  "dropped_ids": {
+    "synth-0c8851ed2d39": [
+      "contact"
+    ],
+    "synth-1ebb93443f7c": [
+      "real_name"
+    ],
+    "synth-209eeffb773c": [
+      "contact"
+    ],
+    "synth-2ecb6c32f4ea": [
+      "real_name"
+    ],
+    "synth-3468952b103a": [
+      "contact"
+    ],
+    "synth-3924108ac47d": [
+      "contact"
+    ],
+    "synth-47b4347c5021": [
+      "contact"
+    ],
+    "synth-4c4a6a5ee022": [
+      "contact"
+    ],
+    "synth-58baa8a7d16b": [
+      "real_name"
+    ],
+    "synth-5f8ea6867d7e": [
+      "broken"
+    ],
+    "synth-678cc35ba5bc": [
+      "contact"
+    ],
+    "synth-6a885ac93692": [
+      "real_name"
+    ],
+    "synth-7111c84f925b": [
+      "long_number"
+    ],
+    "synth-80f84c82e7b1": [
+      "contact"
+    ],
+    "synth-80f8e9e1fc4d": [
+      "real_name"
+    ],
+    "synth-87c4aa269fe4": [
+      "contact"
+    ],
+    "synth-89541aa5e4ab": [
+      "contact"
+    ],
+    "synth-8da42a4c5ac3": [
+      "contact"
+    ],
+    "synth-91f1f55fbb86": [
+      "contact"
+    ],
+    "synth-9fbe10aa97ef": [
+      "contact"
+    ],
+    "synth-a4f5fca66617": [
+      "contact"
+    ],
+    "synth-ae9e99473dc0": [
+      "broken"
+    ],
+    "synth-af0c196a192d": [
+      "real_name"
+    ],
+    "synth-ba60cb9bcbf2": [
+      "real_name"
+    ],
+    "synth-bb0962d92af1": [
+      "broken"
+    ],
+    "synth-c7a5143d552d": [
+      "contact"
+    ],
+    "synth-c7d335c49bbf": [
+      "real_name"
+    ],
+    "synth-cd888685131b": [
+      "broken"
+    ],
+    "synth-d0851411b684": [
+      "real_name"
+    ],
+    "synth-e438438d33ab": [
+      "drift"
+    ],
+    "synth-e5014b3a51f0": [
+      "contact"
+    ],
+    "synth-f067842c4a52": [
+      "real_name"
+    ],
+    "synth-f074841c4626": [
+      "contact"
+    ],
+    "synth-f3bfef457851": [
+      "contact"
+    ],
+    "synth-fad95f605dca": [
+      "contact"
+    ]
+  },
+  "file": "synth/filtered.ndjson",
+  "file_sha256": "3762428589bf875ad451a85996a2acba54ed23c5812c888e4a49dd524c336aae",
+  "kept": 1284,
+  "raw_name_tokens": 4,
+  "revision": "d0d076f60ec691b2f82ff3c4c5f494db81a4e545",
+  "sample": {
+    "chats_with_leftover_word": 83,
+    "chats_with_unlisted_word": 54,
+    "dropped": 1,
+    "ids": [
+      "synth-038c69699434",
+      "synth-041b01da4382",
+      "synth-072368f4feff",
+      "synth-0bbfc4f9b0f9",
+      "synth-0efc129dad39",
+      "synth-0f3238c46fcd",
+      "synth-0fffa078b160",
+      "synth-12bc1b821450",
+      "synth-14bef76592d7",
+      "synth-18465bffbeb1",
+      "synth-185a2ac6d790",
+      "synth-1876e734130b",
+      "synth-19df2aa98923",
+      "synth-1bfc296727af",
+      "synth-1fab35a43b90",
+      "synth-2054b7d97fa9",
+      "synth-2138b2aabc44",
+      "synth-2358522a54d6",
+      "synth-245fb024228b",
+      "synth-2dc261bd9933",
+      "synth-306466e46109",
+      "synth-351fdd165f3a",
+      "synth-3bbc7cc76004",
+      "synth-3ed91ba03da9",
+      "synth-3f102c3193f4",
+      "synth-400d86a6d7a5",
+      "synth-407b79edb376",
+      "synth-4189ae99b890",
+      "synth-4e06775fdecd",
+      "synth-4e245803d255",
+      "synth-4eee021e4545",
+      "synth-527c8e69b0c7",
+      "synth-564a97b87767",
+      "synth-580e86328041",
+      "synth-582860b7a36d",
+      "synth-5d1ec6d25a1f",
+      "synth-62a3d4a62dbe",
+      "synth-661ebb4bde80",
+      "synth-66ab034ee44c",
+      "synth-696c862f18c8",
+      "synth-6b9bc34e5cfc",
+      "synth-6f314a3106a2",
+      "synth-70eb8b3314b6",
+      "synth-74e1c480473a",
+      "synth-75c88ad68ef9",
+      "synth-77210a25de52",
+      "synth-7cfa637df0b0",
+      "synth-8039a4f1e92e",
+      "synth-8119b729c404",
+      "synth-822b182000a6",
+      "synth-85b4ea7f025e",
+      "synth-873d03687bbb",
+      "synth-87c4aa269fe4",
+      "synth-894823b9b292",
+      "synth-8ea2e4b893de",
+      "synth-8ef0caac3658",
+      "synth-8f35e33f4e6c",
+      "synth-8fb34ad6acaf",
+      "synth-93086dc02cdb",
+      "synth-943c7641ecd8",
+      "synth-961db4dbb615",
+      "synth-96b0711eeffe",
+      "synth-99826253d756",
+      "synth-99d58eac3d96",
+      "synth-9c7a75d7db66",
+      "synth-9f67e86be21b",
+      "synth-a271a92da0f0",
+      "synth-a275b0da1d16",
+      "synth-a495d9a526ea",
+      "synth-a5e7144bcb82",
+      "synth-a7f0e38d8772",
+      "synth-aaef0651893c",
+      "synth-ae5bdfc8cfc6",
+      "synth-afdfc8bf26c0",
+      "synth-affca65b432a",
+      "synth-b33ac0d1a5be",
+      "synth-b6e7b783d719",
+      "synth-ba113d6de62c",
+      "synth-ba5d2ae08284",
+      "synth-c41b92cddbde",
+      "synth-c761dc448e7a",
+      "synth-c889b6286acb",
+      "synth-c9beeeb98ee7",
+      "synth-cb850d4b2e31",
+      "synth-d69c0da83de2",
+      "synth-d75bc720182f",
+      "synth-da02ad3af197",
+      "synth-da97292a691e",
+      "synth-dc1570095e0c",
+      "synth-e0a181d7ba77",
+      "synth-e6c64c2bfd39",
+      "synth-e9a330fdec00",
+      "synth-ece4453402f6",
+      "synth-ee755b777dc8",
+      "synth-ef0d460ca3a9",
+      "synth-ef1bd2cc3464",
+      "synth-ef51e374dee9",
+      "synth-f169c8c50d48",
+      "synth-f7e9fb1cd966",
+      "synth-fed2e5113e8c"
+    ],
+    "leftover_words": 223,
+    "leftover_words_unresolved": 0,
+    "seed": 20261018,
+    "size": 100
+  },
+  "status": "pass"
+}

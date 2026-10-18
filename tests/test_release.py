@@ -11,6 +11,7 @@ from pathlib import Path, PurePath
 import pytest
 
 from fym1 import release
+from fym1.data import name_scan
 from fym1.release import RefusedError, build_snapshot, count_name_hits, name_tokens, secret_hits, strip_list
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -522,6 +523,13 @@ def test_nothing_shipped_imports_or_describes_the_release_tooling():
         assert "fym1.release" not in text and "INNER_NAME_ALLOWED" not in text, path
         if path.endswith(".py"):
             assert not _imports_release(text), path
+
+
+def test_release_uses_the_shared_name_scan_unchanged():
+    """The snapshot and the synth gate run the same scan: release re-uses fym1.data.name_scan, it keeps no copy."""
+    shared = ["RefusedError", "count_name_hits", "name_tokens", "is_name_word", "words", "readings", "read_export",
+              "export_senders", "export_texts", "chat_text_index", "has_chat_text", "CHAT_TEXT_NGRAM"]
+    assert all(getattr(release, n) is getattr(name_scan, n) for n in shared)
 
 
 def test_no_inner_name_allow_list_entry_names_an_unshipped_file():
