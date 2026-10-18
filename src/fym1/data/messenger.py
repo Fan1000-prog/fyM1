@@ -9,7 +9,9 @@ import re
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import ftfy
 
@@ -161,9 +163,91 @@ def load_dyi_threads(export_dir: Path) -> list[Thread]:
     return [_load_dyi_thread(d) for d in thread_dirs]
 
 
-LOADERS: tuple[Callable[[Path], list[Thread]], ...] = (load_dyi_threads,)
+FLAT_MESSAGE_KEYS = {"sender", "timestamp"}
 
 
-def load_threads(export_dir: Path) -> list[Thread]:
-    """Every thread found in `export_dir`, from every known export format."""
-    return [thread for load in LOADERS for thread in load(export_dir)]
+def _is_flat_export(data: object) -> bool:
+    """`{"conversation": {...}, "messages": [{"id", "sender", "text", "timestamp"}, ...]}`."""
+    return (
+        isinstance(data, dict)
+        and isinstance(data.get("conversation"), dict)
+        and isinstance(data.get("messages"), list)
+        and all(isinstance(m, dict) and FLAT_MESSAGE_KEYS <= m.keys() for m in data["messages"])
+    )
+
+
+def _flat_zone(conversation: dict, path: Path) -> ZoneInfo:
+    """The zone naive timestamps are written in: `conversation.timezone`, else UTC."""
+    name = conversation.get("timezone") or "UTC"
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError, TypeError) as error:
+        raise ValueError(f"{path}: unknown conversation timezone") from error
+
+
+def _flat_ts_ms(value: object, zone: ZoneInfo, path: Path, index: int) -> int:
+    """ISO 8601 timestamp -> epoch milliseconds; a timestamp without an offset is in `zone`."""
+    try:
+        moment = datetime.fromisoformat(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{path}: message {index} has an unreadable timestamp (want ISO 8601)") from error
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=zone)
+    return int(moment.timestamp() * 1000)
+
+
+def _flat_text(raw: dict) -> str | None:
+    """The typed text of one flat-export message, or None if it is missing, empty, media or an event."""
+    text = raw.get("text")
+    if not isinstance(text, str):
+        return None
+    text = unicodedata.normalize("NFC", text).strip()
+    if not text or PLACEHOLDER.match(text):
+        return None
+    return text
+
+
+def _load_flat_thread(path: Path, data: dict) -> Thread:
+    conversation = data["conversation"]
+    zone = _flat_zone(conversation, path)
+    messages = [
+        Message(sender=raw["sender"], text=text, ts_ms=_flat_ts_ms(raw["timestamp"], zone, path, index))
+        for index, raw in enumerate(data["messages"])
+        if (text := _flat_text(raw)) is not None
+    ]
+    listed = conversation.get("participants")
+    listed = [p for p in listed if isinstance(p, str)] if isinstance(listed, list) else []
+    senders = [raw["sender"] for raw in data["messages"]]
+    participants = list(dict.fromkeys([*listed, *senders]))
+    return Thread(
+        title=str(conversation.get("title") or ""),
+        participants=participants,
+        messages=sorted(messages, key=lambda m: m.ts_ms),
+    )
+
+
+def load_flat_threads(export: Path) -> list[Thread]:
+    """Threads from one-file exports: `export` itself if it is a file, else its top-level *.json.
+
+    A top-level JSON file of any other shape raises, so a renamed or reshaped export is never
+    silently skipped. ("Download your information" pages sit in subfolders and are not read here.)
+    """
+    paths = [export] if export.is_file() else sorted(export.glob("*.json"))
+    threads = []
+    for path in paths:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not _is_flat_export(data):
+            raise ValueError(
+                f"{path}: unknown export shape. Expected {{'conversation': {{...}}, 'messages': "
+                "[{'id', 'sender', 'text', 'timestamp'}, ...]}."
+            )
+        threads.append(_load_flat_thread(path, data))
+    return threads
+
+
+LOADERS: tuple[Callable[[Path], list[Thread]], ...] = (load_dyi_threads, load_flat_threads)
+
+
+def load_threads(export: Path) -> list[Thread]:
+    """Every thread found in `export` (a folder, or one export file), from every known format."""
+    return [thread for load in LOADERS for thread in load(export)]

@@ -4,6 +4,7 @@ from fym1.data.messenger import Message, Thread
 
 Turn = dict[str, str]
 Conversation = list[Turn]
+GAP_MINUTES = 60  # a silence longer than this starts a new session
 
 
 def _sessions(messages: list[Message], gap_ms: int) -> list[list[Message]]:
@@ -41,8 +42,13 @@ def _chunks(turns: Conversation, max_turns: int) -> list[Conversation]:
     return [piece for piece in pieces if len(piece) >= 2]
 
 
+def count_sessions(thread: Thread, gap_minutes: int = GAP_MINUTES) -> int:
+    """How many time-gap sessions `to_conversations` cuts `thread` into, before turns and trimming."""
+    return len(_sessions(thread.messages, gap_minutes * 60_000))
+
+
 def to_conversations(
-    thread: Thread, owner: str, gap_minutes: int = 60, max_turns: int = 12
+    thread: Thread, owner: str, gap_minutes: int = GAP_MINUTES, max_turns: int = 12
 ) -> list[Conversation]:
     """Conversations that start with a user turn, end with an assistant turn, have 2+ turns.
 
