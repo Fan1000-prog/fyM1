@@ -149,7 +149,7 @@ FLORES+ and smoke numbers.
 | PR #33 strict data gate | lead | open; review rounds continue. Must merge before the real `build_chats` run |
 | Gemma 4 baseline (plain-text Belebele, FLORES+, smoke) | trainer | on Colab; result JSON goes in a PR |
 | Base-model pick | lead | Gemma 4 vs AfriqueQwen3.5-9B-Instruct, after the Gemma 4 numbers |
-| `synth.py` / `04_synth` default generator | data | still Gemma 3 from #30; must move to the picked permissive base |
+| `synth.py` / `04_synth` default generator | data | AfriqueQwen3.5-9B-Instruct, then Gemma 4; `synth.generator_licence` refuses non-permissive models |
 | wordfreq-derived word lists | writer, lead | attribution in README; decide at release whether lists ship or get regenerated |
 | Private `fyM1-chats` files | data | rename to `fy-m1` in the system prompt and identity lines |
 

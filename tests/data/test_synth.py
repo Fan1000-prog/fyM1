@@ -230,7 +230,7 @@ def test_filter_needs_real_chats_to_check_leaks_against():
 
 def test_stats_are_counts_only_and_valid():
     kept, dropped = run(conv("Salama", "Ok"), None)
-    stats = synth_stats(raw=2, kept=len(kept), dropped=dropped, by_generator={"google/gemma-3-27b-it": 2},
+    stats = synth_stats(raw=2, kept=len(kept), dropped=dropped, by_generator={"google/gemma-4-12B-it": 2},
                         meta={"seed": 0, "few_shot_k": 3, "target_raw": 2500, "dtype": "float16",
                               "code_sha": "abc", "data_revision": "def", "gen_seconds": 10.5, "new_tokens": 900})
     validate_stats(stats)
@@ -242,11 +242,11 @@ def test_stats_are_counts_only_and_valid():
     {"extra_text": "Salama ry namana"},
     {"dropped": {"secret_reason": 1}},
     {"kept": "12"},
-    {"by_generator": {"google/gemma-3-27b-it": "many"}},
+    {"by_generator": {"google/gemma-4-12B-it": "many"}},
 ])
 def test_validate_stats_rejects_unknown_keys_and_non_counts(bad):
     kept, dropped = run(conv("Salama", "Ok"))
-    stats = synth_stats(raw=1, kept=1, dropped=dropped, by_generator={"google/gemma-3-27b-it": 1}, meta={})
+    stats = synth_stats(raw=1, kept=1, dropped=dropped, by_generator={"google/gemma-4-12B-it": 1}, meta={})
     for key, value in bad.items():
         stats[key] = {**stats[key], **value} if isinstance(value, dict) and key in stats else value
     with pytest.raises(ValueError):
@@ -257,3 +257,68 @@ def test_stats_reject_counts_that_do_not_add_up():
     stats = synth_stats(raw=5, kept=1, dropped={r: 0 for r in DROP_REASONS}, by_generator={}, meta={})
     with pytest.raises(ValueError, match="add up"):
         validate_stats(stats)
+
+
+# --- generator licence ---------------------------------------------------------------------------------------
+
+AFRIQUE = "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1"
+
+
+@pytest.mark.parametrize("hub_id, licence", [(AFRIQUE, "cc-by-4.0"), ("google/gemma-4-12B-it", "apache-2.0")])
+def test_permissive_generators_are_allowed(hub_id, licence):
+    assert synth.generator_licence(hub_id) == licence
+    assert synth.generator_licence(hub_id, card_licence=licence.upper()) == licence
+
+
+@pytest.mark.parametrize("hub_id", ["google/gemma-3-27b-it", "google/gemma-3-12b-it", "someone/unknown-7b"])
+def test_other_generators_are_refused(hub_id):
+    """Gemma 3's terms would make fy-m1 a Gemma derivative; unknown models have no checked licence."""
+    with pytest.raises(ValueError, match="not an allowed generator"):
+        synth.generator_licence(hub_id)
+
+
+@pytest.mark.parametrize("card", [None, "", "gemma", "other"])
+def test_generator_refused_when_model_card_licence_differs(card):
+    with pytest.raises(ValueError, match="model card"):
+        synth.generator_licence("google/gemma-4-12B-it", card_licence=card)
+
+
+def test_allowed_generators_are_permissive():
+    assert set(synth.GENERATOR_LICENCES.values()) <= synth.PERMISSIVE_LICENCES
+    assert not any("gemma-3" in hub_id for hub_id in synth.GENERATOR_LICENCES)
+
+
+def test_generator_licences_match_model_selection():
+    from pathlib import Path
+
+    selection = json.loads((Path(__file__).parents[2] / "results" / "model_selection.json").read_text())
+    measured = {c["model"]: c["license"].lower() for c in selection["candidates"]}
+    for hub_id, licence in synth.GENERATOR_LICENCES.items():
+        assert measured[hub_id] == licence
+
+
+def test_stats_refuse_a_non_permissive_generator():
+    stats = synth_stats(raw=1, kept=1, dropped={r: 0 for r in DROP_REASONS},
+                        by_generator={"google/gemma-3-27b-it": 1}, meta={})
+    with pytest.raises(ValueError, match="not an allowed generator"):
+        validate_stats(stats)
+
+
+def test_stats_record_the_generator_licence():
+    stats = synth_stats(raw=1, kept=1, dropped={r: 0 for r in DROP_REASONS}, by_generator={AFRIQUE: 1},
+                        meta={"generator": AFRIQUE, "generator_licence": "cc-by-4.0"})
+    validate_stats(stats)
+
+
+# --- fp16 overflow -------------------------------------------------------------------------------------------
+
+
+def test_sampling_overflow_is_recognised():
+    error = RuntimeError("probability tensor contains either `inf`, `nan` or element < 0")
+    assert synth.is_sampling_overflow(error)
+
+
+@pytest.mark.parametrize("error", [RuntimeError("CUDA out of memory"), ValueError("probability tensor contains"),
+                                   RuntimeError("bad input")])
+def test_other_errors_are_not_sampling_overflow(error):
+    assert not synth.is_sampling_overflow(error)
