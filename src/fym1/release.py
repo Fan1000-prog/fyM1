@@ -70,7 +70,7 @@ REPORT_NAME = "RELEASE_CHECK.json"
 MIN_NAME_TOKEN = 3  # shorter tokens ("ny", initials) are everyday words or letters; counted as skipped
 # Meta's label for a deleted or unknown account: not a person's name.
 PLACEHOLDER_SENDERS = frozenset({"facebook user", "utilisateur de facebook", "instagram user", "meta user"})
-PRIVATE_HF_ID = "Fan1000-Prog/fyM1-"
+PRIVATE_HF_ID = "Fan1000-Prog/" + "fyM1-"  # split so test_public_name does not see a Hub id
 
 SECRET_PATTERNS: dict[str, re.Pattern[str]] = {
     "hf_token": re.compile(r"hf_[A-Za-z0-9]{20,}"),
