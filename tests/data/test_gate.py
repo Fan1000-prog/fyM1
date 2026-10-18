@@ -10,9 +10,9 @@ from fym1.data.gate import (
     MAX_FAKES_PER_CONVERSATION,
     contact_left,
     has_long_number,
-    names_to_mask,
     pool_names_in,
     strict_gate,
+    unknown_capitalised_words,
 )
 from fym1.data.known_words import word_list
 
@@ -391,8 +391,9 @@ def test_lowercase_first_names_that_are_everyday_words_stay(text):
     assert texts(result)[0] == text
 
 
-def test_names_to_mask_counts_what_strict_gate_replaces():
-    turns = ("Salama Zebulon, aiza ianao?", "Merci be, Rindra! Efa tonga i Zebulon")
-    gated = strict_gate([record("a", *turns)], fake_names=["Rindra"])
-    assert names_to_mask(turns, fake_names=["Rindra"]) == gated.counts["tokens_replaced"] == 2
-    assert names_to_mask(("Merci be, Rindra!",), fake_names=["Rindra"]) == 0
+def test_unknown_capitalised_words_counts_capitalised_words_no_list_clears():
+    pool = ["Rindra"]
+    assert unknown_capitalised_words(("Salama Zebulon, aiza ianao?", "Efa tonga i Zebulon"), pool) == 2
+    assert unknown_capitalised_words(("Merci be, Rindra!", "Ok Tsara be"), pool) == 0  # mid-sentence list word
+    assert unknown_capitalised_words(("salama zebulon",), pool) == 0  # lower case is not checked
+    assert unknown_capitalised_words(("Efa tonga i Tsara",), pool) == 1  # a name slot needs the hand list

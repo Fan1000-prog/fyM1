@@ -199,12 +199,27 @@ def test_fake_pool_names_are_kept():
 CORPUS_ONLY = "zokitra"  # synthetic: no real list has it; added to mg_corpus alone below
 
 
-def test_corpus_only_word_in_a_name_slot_is_dropped(monkeypatch):
+def test_mid_sentence_capitalised_word_a_list_knows_is_kept():
+    kept, _ = run(conv("Ok Tsara be", "Eny Merci be"))
+    assert len(kept) == 1
+
+
+def test_lowercase_unknown_word_is_kept():
+    kept, _ = run(conv("Salama blorpik, aiza ianao?", "Eto aho ry blorpik"))
+    assert len(kept) == 1
+
+
+@pytest.fixture
+def corpus_only(monkeypatch):
     corpus = KNOWN_WORDS["mg_corpus"]
     monkeypatch.setitem(KNOWN_WORDS, "mg_corpus", word_list(corpus.folded | {CORPUS_ONLY}))
-    kept, dropped = run(conv("Salama", f"Efa nandeha i {CORPUS_ONLY}"))
-    assert kept == [] and dropped["unknown_name"] == 1
-    kept, _ = run(conv("Salama", f"Tsara ny {CORPUS_ONLY}"))  # outside a name slot the corpus clears it
+    return CORPUS_ONLY.capitalize()
+
+
+def test_corpus_only_capitalised_word_is_dropped_mid_sentence_and_in_a_name_slot(corpus_only):
+    kept, dropped = run(conv("Salama", f"Efa nandeha i {corpus_only}"), conv("Salama", f"Tsara ny {corpus_only}"))
+    assert kept == [] and dropped["unknown_name"] == 2
+    kept, _ = run(conv("Salama", f"{corpus_only} ve?"))  # at a sentence start the corpus clears it, like the gate
     assert len(kept) == 1
 
 

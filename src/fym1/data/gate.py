@@ -299,8 +299,7 @@ def _is_lowercase_name(text: str, token: Token, lexicon: Lexicon) -> bool:
     if _in_compound_first_name(text, token):
         return True
     if _in_name_slot(text, token.start):
-        without_corpus = {name: words for name, words in lexicon.items() if name != CORPUS_LIST}
-        return known_by(word, without_corpus) is None
+        return known_by(word, _without_corpus(lexicon)) is None
     unknown = known_by(word, lexicon) is None  # person names are never known
     return unknown and fold(word) not in EVERYDAY_NAMES
 
@@ -359,13 +358,29 @@ def _clear_or_replace(texts: list[str], fake_keys: set[str], lexicon: Lexicon, d
     return _Names(new_texts, words, replaced, cleared)
 
 
-def names_to_mask(texts: Iterable[str], fake_names: Iterable[str], lexicon: Lexicon = KNOWN_WORDS) -> int:
-    """How many words of one conversation's turns strict_gate would replace with a fake. A count only.
+def _without_corpus(lexicon: Lexicon) -> Lexicon:
+    """`lexicon` minus the web-corpus list, which alone never clears a name position."""
+    return {name: words for name, words in lexicon.items() if name != CORPUS_LIST}
 
-    Same rules as strict_gate (same lists, same name-slot rule); `fake_names` and currency words pass.
+
+def unknown_capitalised_words(texts: Iterable[str], fake_names: Iterable[str], lexicon: Lexicon = KNOWN_WORDS) -> int:
+    """How many capitalised words of one conversation's turns no list clears. A count only.
+
+    For synthetic chats (lead decision 30): their few-shot examples hold only fakes, so lower-case words are not
+    checked. A capitalised word passes where strict_gate clears it, and also mid-sentence (not after a person
+    marker or "@") when a list other than `mg_corpus` knows it. `fake_names` and currency words pass.
     """
     fake_keys = fake_name_keys([*fake_names, *CURRENCY_WORDS])
-    return _clear_or_replace([normalise(text) for text in texts], fake_keys, lexicon, set()).replaced
+    without_corpus = _without_corpus(lexicon)
+    unknown = 0
+    for text in map(normalise, texts):
+        for token in tokens(text):
+            if not _is_capitalised(token.word, fake_keys) or _clearing_list(text, token, lexicon):
+                continue
+            in_running_text = not _sentence_initial(text, token.start) and not _in_name_slot(text, token.start)
+            if not (in_running_text and known_by(token.word, without_corpus)):
+                unknown += 1
+    return unknown
 
 
 def _with_texts(record: dict, texts: list[str]) -> dict:

@@ -17,7 +17,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 
 from fym1.data.anonymize import FALLBACK_NAME, FIRST_NAMES, SURNAMES, Anonymizer
-from fym1.data.gate import names_to_mask
+from fym1.data.gate import unknown_capitalised_words
 from fym1.data.segment import Conversation
 from fym1.eval.metrics import NgramIndex
 
@@ -238,11 +238,12 @@ def _fits_length(messages: Conversation) -> bool:
 
 
 def _has_unknown_name(messages: Conversation) -> bool:
-    """The real-data gate would replace a word here: synthetic chats are dropped for it, never patched.
+    """A capitalised word no known-word list clears (fym1.data.gate rules, lead decision 30): dropped, never patched.
 
-    Same lists and name-slot rule as fym1.data.gate (lead decision 30); the fake-name pool passes.
+    The fake-name pool passes. Lower-case words are not checked: the few-shot examples hold only fakes, and the
+    8-word leak check guards copying.
     """
-    return names_to_mask((t["content"] for t in messages), fake_names=FAKE_POOL) > 0
+    return unknown_capitalised_words((t["content"] for t in messages), fake_names=FAKE_POOL) > 0
 
 
 def _first_failure(
