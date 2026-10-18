@@ -8,7 +8,10 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOKS = ["notebooks/00_baseline.ipynb", "notebooks/01_train.ipynb"]
+ONE_GPU_NOTEBOOKS = ["notebooks/00_baseline.ipynb", "notebooks/01_train.ipynb"]
+TWO_GPU_NOTEBOOKS = ["notebooks/04_synth.ipynb"]  # the synthetic-chat generator spreads a 27B model over 2 T4s
+NOTEBOOKS = ONE_GPU_NOTEBOOKS + TWO_GPU_NOTEBOOKS
+GPU_PINS = [(n, "0") for n in ONE_GPU_NOTEBOOKS] + [(n, "0,1") for n in TWO_GPU_NOTEBOOKS]
 _spec = importlib.util.spec_from_file_location("build_notebooks", ROOT / "scripts" / "build_notebooks.py")
 build_notebooks = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(build_notebooks)
@@ -58,17 +61,17 @@ def test_token_only_through_the_runtime_helper(notebook):
     assert "userdata.get" not in source.replace("_secret(userdata.get)", "")
 
 
-@pytest.mark.parametrize("notebook", NOTEBOOKS)
-def test_one_gpu_is_pinned_before_torch_and_no_colab_paths(notebook):
+@pytest.mark.parametrize("notebook, gpus", GPU_PINS)
+def test_gpus_are_pinned_before_torch_and_no_colab_paths(notebook, gpus):
     cells = code_cells(notebook)
-    pin = next(i for i, c in enumerate(cells) if 'os.environ["CUDA_VISIBLE_DEVICES"] = "0"' in c)
+    pin = next(i for i, c in enumerate(cells) if f'os.environ["CUDA_VISIBLE_DEVICES"] = "{gpus}"' in c)
     torch = next(i for i, c in enumerate(cells) if "import torch" in c)
     assert pin < torch
     assert "/content" not in "\n".join(cells)
 
 
-@pytest.mark.parametrize("notebook", NOTEBOOKS)
-def test_bootstrap_runs_and_overrides_a_preset_gpu_list(notebook, monkeypatch, tmp_path):
+@pytest.mark.parametrize("notebook, gpus", GPU_PINS)
+def test_bootstrap_runs_and_overrides_a_preset_gpu_list(notebook, gpus, monkeypatch, tmp_path):
     import sys
     import tempfile
 
@@ -78,13 +81,13 @@ def test_bootstrap_runs_and_overrides_a_preset_gpu_list(notebook, monkeypatch, t
         monkeypatch.setitem(sys.modules, name, None)  # neither Colab nor Kaggle: falls back to the env var
     monkeypatch.delenv("KAGGLE_KERNEL_RUN_TYPE", raising=False)
     monkeypatch.setenv("HF_TOKEN", "env-fake")
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1")  # what Kaggle may preset
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1" if gpus == "0" else "1")  # Kaggle may preset "0,1"
     namespace = {}
     exec(bootstrap_cell(notebook), namespace)
     assert namespace["hf_token"]() == "env-fake"
     import os
 
-    assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == gpus
 
 
 @pytest.mark.parametrize("notebook", NOTEBOOKS)
