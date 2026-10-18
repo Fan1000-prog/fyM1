@@ -8,11 +8,11 @@ Tests: `tests/data/test_anonymize.py`, `tests/data/test_anonymize_probes.py`, `t
 
 | Found in a message | Becomes |
 |---|---|
-| Participant names, in full or any part, any case, accents or stretched letters ("NIRINA", "helene", "Niriiina") | the person's fake name ("First Last"; a part -> fake first name or surname) |
+| Participant names, in full or any part, any case, accents or stretched letters ("HANTA", "helene", "Haaanta") | the person's fake name ("First Last"; a part -> fake first name or surname) |
 | A part with a possessive ending ("Soako", "Fyntsika") | fake + the ending |
-| A word sharing a 4+ letter prefix with a name part ("nirin"), unless it is a common Malagasy word | fake |
+| A word sharing a 4+ letter prefix with a name part ("hant"), unless it is a common Malagasy word | fake |
 | Nicknames set through Messenger ("set the nickname for … to …", "a défini le surnom de … sur …") | the person's fake first name |
-| `@mention`: "@" plus every capitalised word after it (up to 3 words, hyphens allowed), or an `@handle` | one fake name: a participant's own fake, otherwise a made-up one that never equals or sits inside the mention, its letters joined up ("@mia_ly" never becomes "Mialy"). A capitalised word after the name goes too ("@Nirina Aiza ianao?" -> "Lova ianao?"); the owner chose that over leaking a surname |
+| `@mention`: "@" plus every capitalised word after it (up to 3 words, hyphens allowed), or an `@handle` | one fake name: a participant's own fake, otherwise a made-up one that never equals or sits inside the mention, its letters joined up ("@mia_ly" never becomes "Mialy"). A capitalised word after the name goes too ("@Hanta Aiza ianao?" -> "Lova ianao?"); the owner chose that over leaking a surname |
 | Labelled handles: `ig:`, `insta`, `snap:`, `tiktok`, `tg`/`telegram`, `twitter`, `fb`, `viber`, `wa`/`whatsapp` (not numbers or everyday words: "fb 2 andro") | `<HANDLE>` |
 | Phone numbers: Malagasy (`034 12 345 67` in any grouping, `(034) 12 …`, `020 …`, `+261 (0)34 …`, without the 0 in any grouping: `34 12 345 67`, `34 123 45 67`, `34 1234567`, `341234567`, glued to a word: `laharana034 12 345 67`, `wa+261341234567`, `wa00261…`, `tel(034) …`, `tel+261 (0)34 …`, or with a letter O for the 0: `WhatsAppO328585520`, `numéroo32.78.833.34`), other international, any of these with unicode dashes (`034–12–345–67`) or no-break spaces; not amounts or dates | `<TEL>` |
 | Emails, including `x [at] y . com` | `<EMAIL>` |
@@ -83,7 +83,7 @@ tests `tests/data/test_gate.py`). It drops a whole conversation if any turn stil
 | `long_number` | 7+ digits in one run across any non-letter characters (every kind of space, `. , / \ - _ ( ) + ; * \| :`, unicode dashes) (`12 34 567`, `(034) 12 345 67`, `15/03/2026`) | a price: clean 3-digit groups or no separator, then `Ar`, `Ariary`, `fmg`, `€`, `euro(s)`, `eur` (`1 500 000 Ar`), and not phone-shaped: no `+` before it, digits not starting `0` or `261`, not `3[2-9]` + 7 digits (`0341234567 Ar`, `341234567 Ar` are long numbers). A run of 9-10 digits is a phone's length (Malagasy landlines `2x`, French mobiles `[67]` without the 0, ...), so it is a price only with grouped thousands ending `000` (`150 000 000 Ar`) or cents (`123 456 789,00 €`); `202 212 345 Ar`, `612 345 678 €`, `150000000 Ar` are long numbers |
 | `contact` | an email, a link with a path or query, an `@` before a word or a placeholder (`@njaka`, `@ njaka`, `njaka@ <URL>`), `at`/`arobase`/`(at)`/`[at]` before a placeholder or a mail host (`njaka at gmail`), a private-use mark from a failed replacement | `<EMAIL>`, `<URL>`, a bare `host.com`, `@ 3 ora` |
 | `too_many_unknown` | more than 30% of the conversation's words would be replaced as names (below) | 30% or less |
-| `hidden_char` | an invisible or combining character still there after normalising (below): a spacing mark (Mc) inside a name, a Hangul filler, a format character not right after a letter (`a \u200dNirina`), bidi marks | emoji variation selectors, ZWJ between emoji, keycap `U+20E3` after a digit, `#` or `*`, subdivision-flag tags after 🏴, accents NFC composes |
+| `hidden_char` | an invisible or combining character still there after normalising (below): a spacing mark (Mc) inside a name, a Hangul filler, a format character not right after a letter (`a \u200dHanta`), bidi marks | emoji variation selectors, ZWJ between emoji, keycap `U+20E3` after a digit, `#` or `*`, subdivision-flag tags after 🏴, accents NFC composes |
 
 The gate fails closed: replacing or dropping too much is fine, a leak is not. The anonymiser and the
 gate both NFKC-normalise text first, so full-width (`＠`, `Ｒ`) and circled (`Ⓡ`) characters are read as
@@ -144,7 +144,7 @@ Also replaced, the same way:
 - **Lower-case words no list knows** (fail closed; name lists can never hold every name). Anywhere,
   a lower-case word that no known-word list knows is replaced like an unknown capitalised word:
   "salut tsanta", "rakoto", "salut sandrine", usernames such as "sandrinerakoto", and letters with
-  digits inside ("n1r1na"). Person names are never known, so `mg_first_names.txt` ("mialy") and
+  digits inside ("h4nt4"). Person names are never known, so `mg_first_names.txt` ("mialy") and
   `first_names.txt` ("sandrine") names are always replaced. Kept: words a list knows ("trano", "lol",
   "mdr"), and names that are also everyday words (`name_deny_list.txt`, `wordlike_first_names.txt`,
   the fallback "olona": "mila vola", "soa ve", "une rose", "tia"). Lists miss some everyday words too
@@ -213,10 +213,10 @@ When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit ref
   are replaced by a fake name: over-masking, not a leak.
 - A pool name that is also an everyday word ("Soa", "Vola", "Mamy") typed in lower case and not after
   a name particle ("hitako mamy") stays.
-- Names spelled out in pieces of two or more letters: "Ni-ri-na". (The gate reads 3+ single letters
-  joined by 1-3 non-letter, non-digit characters as one word, so "N i r i n a", "R.a.k.o.t.o" and
+- Names spelled out in pieces of two or more letters: "Han-ta". (The gate reads 3+ single letters
+  joined by 1-3 non-letter, non-digit characters as one word, so "H a n t a", "R.a.k.o.t.o" and
   "R_a_k_o_t_o" are replaced; it
-  drops loose strike-through/underline marks, so "R̶a̶k̶o̶t̶o̶" is too. "N1r1na", "Rak0to" are replaced:
+  drops loose strike-through/underline marks, so "R̶a̶k̶o̶t̶o̶" is too. "H4nt4", "Rak0to" are replaced:
   letters with digits inside are always a name.)
 - Names spelled in regional-indicator letters ("🇷🇦🇰🇴🇹🇴"): NFKC does not fold them to letters, so
   the gate sees emoji, not a word.

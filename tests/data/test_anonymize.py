@@ -10,20 +10,21 @@ from fym1.data.anonymize import (
     fold,
 )
 
-NAMES = {"Nirina Rakoto": "Soa Rabe", "Tojo Randria": "Hasina Ravelo"}
+NAMES = {"Hanta Rakoto": "Soa Rabe", "Tojo Randria": "Hasina Ravelo"}
 
 
-@pytest.mark.parametrize("written", ["Nirina", "nirin", "NIRINA", "Nirinaaa"])
+@pytest.mark.parametrize("written", ["Hanta", "hant", "HANTA", "Hantaaa"])
 def test_anonymize_replaces_name_in_body(written):
     assert anonymize(f"Salama ry {written}!", NAMES) == "Salama ry Soa!"
 
 
 def test_anonymize_replaces_full_name_once():
-    assert anonymize("Hoy i Nirina  Rakoto", NAMES) == "Hoy i Soa Rabe"
+    assert anonymize("Hoy i Hanta  Rakoto", NAMES) == "Hoy i Soa Rabe"
 
 
-def test_anonymize_replaces_surname_alone():
-    assert anonymize("ry rakoto", NAMES) == "ry Rabe"
+@pytest.mark.parametrize("written", ["rakoto", "rakot"])  # "rakot": a 5-letter prefix
+def test_anonymize_replaces_surname_alone(written):
+    assert anonymize(f"ry {written}", NAMES) == "ry Rabe"
 
 
 def test_anonymize_keeps_short_prefixes_and_other_words():
@@ -100,12 +101,12 @@ def test_anonymize_keeps_dates_and_prices(text):
 
 
 def test_anonymize_email_and_url():
-    text = "Alefaso any amin'ny nirina.r@example.mg na jereo https://example.mg/x?y=1 sy www.example.com"
+    text = "Alefaso any amin'ny hanta.r@example.mg na jereo https://example.mg/x?y=1 sy www.example.com"
     assert anonymize(text, NAMES) == "Alefaso any amin'ny <EMAIL> na jereo <URL> sy <URL>"
 
 
 @pytest.mark.parametrize(
-    "link", ["facebook.com/nirina.rakoto", "fb.com/x", "fb.me/x", "m.me/nirina", "bit.ly/3abc", "example.mg"]
+    "link", ["facebook.com/hanta.rakoto", "fb.com/x", "fb.me/x", "m.me/hanta", "bit.ly/3abc", "example.mg"]
 )
 def test_anonymize_schemeless_links(link):
     assert anonymize(f"jereo {link} fa tsara", NAMES) == "jereo <URL> fa tsara"
@@ -129,7 +130,7 @@ def test_anonymize_handle_becomes_consistent_fake_name():
 
 
 def test_anonymize_mention_of_participant_uses_their_fake_name():
-    assert anonymize("@Nirina jereo ity", NAMES) == "Soa jereo ity"
+    assert anonymize("@Hanta jereo ity", NAMES) == "Soa jereo ity"
 
 
 def test_fold_strips_accents_and_case():
@@ -141,7 +142,7 @@ def test_common_words_come_from_wikipedia_list():
 
 
 def test_assign_fake_names_is_distinct_and_avoids_real_names():
-    real = ["Soa Rabe", "Nirina Rakoto", "Tojo Randria"]
+    real = ["Soa Rabe", "Hanta Rakoto", "Tojo Randria"]
     fakes = assign_fake_names(real)
 
     assert set(fakes) == set(real)

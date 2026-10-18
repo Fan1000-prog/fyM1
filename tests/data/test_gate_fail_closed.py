@@ -49,9 +49,9 @@ def test_f1_assigned_fakes_pass():
 
 
 def test_f1_anonymizer_reports_every_mention_fake_it_wrote():
-    anonymize = Anonymizer({"Nirina Rakoto": "Soa Rabe"})
+    anonymize = Anonymizer({"Hanta Rakoto": "Soa Rabe"})
 
-    out = anonymize("hoy @Tsiky Bema sy @Nirina")
+    out = anonymize("hoy @Tsiky Bema sy @Hanta")
 
     fake_words = {"Soa", "Rabe"} | {w for fake in anonymize.mention_fakes for w in fake.split()}
     assert set(out.split()) - {"hoy", "sy"} <= fake_words
@@ -61,9 +61,9 @@ def test_f1_anonymizer_reports_every_mention_fake_it_wrote():
 def test_f1_pipeline_keeps_mention_fakes_and_replaces_other_pool_names():
     thread = Thread(
         title="t",
-        participants=["Nirina Rakoto", "Tojo Randria"],
+        participants=["Hanta Rakoto", "Tojo Randria"],
         messages=[
-            Message(sender="Nirina Rakoto", text="hoy @Tsiky Bema omaly", ts_ms=0),
+            Message(sender="Hanta Rakoto", text="hoy @Tsiky Bema omaly", ts_ms=0),
             Message(sender="Tojo Randria", text="eny tsara ihany koa, eny tsara ihany koa", ts_ms=60_000),
         ],
     )
@@ -263,7 +263,7 @@ def test_f7_deny_list_words_in_lower_case_without_a_marker_stay(text):
     [
         ("salut mialy, tonga ve ianao?", "mialy"),
         ("aiza ianao njaka?", "njaka"),
-        ("veloma nirina", "nirina"),
+        ("veloma hanta", "hanta"),
         ("miarahaba anao voahangy", "voahangy"),
         ("hoy fanja sy lalaina", "fanja"),
         ("hoy fanja sy lalaina", "lalaina"),
@@ -296,7 +296,7 @@ def test_r3_lowercase_name_in_one_conversation_never_clears_it_in_another():
         ("Jean_Pierre tonga", "jean"),
         ("Jean_Pierre tonga", "pierre"),
         ("Rak0to tonga", "rak0to"),
-        ("hoy n1r1na", "n1r1na"),
+        ("hoy h4nt4", "h4nt4"),
         ("Rakoto>>> tonga", "rakoto"),
         ("<<Njaka tonga", "njaka"),
         ("lol<3Njaka", "njaka"),
@@ -321,9 +321,9 @@ def pipeline_text(text):
     """`text` after the anonymiser and the strict gate, or None when its conversation is dropped."""
     thread = Thread(
         title="t",
-        participants=["Nirina Rakoto", "Tojo Randria"],
+        participants=["Hanta Rakoto", "Tojo Randria"],
         messages=[
-            Message(sender="Nirina Rakoto", text=text, ts_ms=0),
+            Message(sender="Hanta Rakoto", text=text, ts_ms=0),
             Message(sender="Tojo Randria", text=FILLER, ts_ms=60_000),
         ],
     )
@@ -501,7 +501,7 @@ def test_r5_emoji_variation_selectors_and_keycaps_stay():
 
 
 def test_r5_anonymiser_drops_stray_marks_too():
-    out = Anonymizer({"Nirina Rakoto": "Soa Rabe"})(f"salut {marked('Rakoto', STRIKE)}")
+    out = Anonymizer({"Hanta Rakoto": "Soa Rabe"})(f"salut {marked('Rakoto', STRIKE)}")
     assert STRIKE not in out and "rakoto" not in out.lower()
 
 

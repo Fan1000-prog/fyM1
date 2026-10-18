@@ -28,7 +28,7 @@ letter (emoji keep theirs). Kept turns are returned normalised.
 
 Words are letter runs, split at digits, underscores, punctuation, `<`/`>` and a lower-to-upper case change
 ("Rakoto2", "jean_r", "salutRakoto", "<<Njaka"); only the exact placeholders (`<TEL>`, `<EMAIL>`, ...)
-are skipped. Letters with digits inside ("Rak0to", "n1r1na") are one word and always a name. A run of
+are skipped. Letters with digits inside ("Rak0to", "h4nt4") are one word and always a name. A run of
 3+ single letters joined by 1-3 non-letter, non-digit characters ("r a k o t o", "R.a.k.o.t.o", "R_a_k",
 "J,E,A,N", "R . a . k", "R🔥a🔥k") is one word ("rakoto"), checked by the rules below and replaced whole.
 
@@ -125,7 +125,7 @@ PRIVATE_USE = re.compile("[\ue000-\uf8ff]")
 SENTENCE_END = ".!?…\n"
 
 PLACEHOLDERS = ("<TEL>", "<EMAIL>", "<URL>", "<HANDLE>", "<ADDRESS>")  # what the anonymiser writes
-# An exact placeholder, letters with digits inside ("Rak0to", "n1r1na": one word, always a name), or a
+# An exact placeholder, letters with digits inside ("Rak0to", "h4nt4": one word, always a name), or a
 # letter run ("Ra-be" taken whole); otherwise digits and "_" end a run.
 _LEET = r"[^\W\d_]+(?:\d+[^\W\d_]+)+"
 # 3+ single letters joined by 1-3 non-letter, non-digit characters ("r a k o t o", "R_a_k", "R . a . k",
@@ -240,16 +240,18 @@ def _in_emoji_sequence(text: str, i: int) -> bool:
     return False
 
 
+def is_hidden_char(c: str) -> bool:
+    """`c` is invisible or combining: a format character, a combining mark or a default-ignorable letter."""
+    return c in _IGNORABLE_LETTERS or unicodedata.category(c) in _HIDDEN_CATEGORIES
+
+
 def has_hidden_char(text: str) -> bool:
     """`text` (normalised) still holds an invisible or combining character that is not part of an emoji.
 
     normalise() drops the ones that hide a letter; anything left (a spacing mark inside a name, a Hangul
     filler, a format character after a space) fails closed. NFC-composed accents are letters, not marks.
     """
-    return any(
-        (c in _IGNORABLE_LETTERS or unicodedata.category(c) in _HIDDEN_CATEGORIES) and not _in_emoji_sequence(text, i)
-        for i, c in enumerate(text)
-    )
+    return any(is_hidden_char(c) and not _in_emoji_sequence(text, i) for i, c in enumerate(text))
 
 
 def contact_left(text: str) -> bool:
@@ -292,7 +294,7 @@ def _is_lowercase_name(text: str, token: Token, lexicon: Lexicon) -> bool:
     word = token.word
     if not word[0].islower() or len(word) < MIN_LETTERS:
         return False
-    if "-" in word or any(c.isdigit() for c in word):  # "ra-koto", "n1r1na"
+    if "-" in word or any(c.isdigit() for c in word):  # "ra-koto", "h4nt4"
         return True
     if _in_compound_first_name(text, token):
         return True

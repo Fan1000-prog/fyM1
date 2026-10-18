@@ -1,7 +1,7 @@
 {
   "participants": [
     {
-      "name": "Nirina Rakoto"
+      "name": "Hanta Rakoto"
     },
     {
       "name": "Tojo Randria"
@@ -14,9 +14,9 @@
       "content": "Ok fa aza adino ny rdv \u00c3\u00a0 18h \u00c3\u00a9"
     },
     {
-      "sender_name": "Nirina Rakoto",
+      "sender_name": "Hanta Rakoto",
       "timestamp_ms": 1760000480000,
-      "content": "Nirina called you.",
+      "content": "Hanta called you.",
       "call_duration": 42
     },
     {
@@ -25,7 +25,7 @@
       "content": "You sent an attachment."
     },
     {
-      "sender_name": "Nirina Rakoto",
+      "sender_name": "Hanta Rakoto",
       "timestamp_ms": 1760000360000,
       "content": "Mety be zany, lancer-na fotsiny\u00f0\u009f\u0098\u0082",
       "reactions": [
@@ -41,7 +41,7 @@
       "content": "Reacted \u00f0\u009f\u0098\u0082 to your message"
     }
   ],
-  "title": "Nirina Rakoto",
+  "title": "Hanta Rakoto",
   "is_still_participant": true,
-  "thread_path": "inbox/nirinarakoto_10001"
+  "thread_path": "inbox/hantarakoto_10001"
 }

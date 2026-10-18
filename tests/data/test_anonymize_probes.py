@@ -4,7 +4,7 @@ import pytest
 
 from fym1.data.anonymize import FIRST_NAMES, SURNAMES, Anonymizer, assign_fake_names, compare_key
 
-PEOPLE = ["Nirina Rakotomalala", "Soa Randria", "Haja Andrianasolo", "Fy Rakoto", "Jo Be", "Hélène Rabe"]
+PEOPLE = ["Hanta Rakotomalala", "Soa Randria", "Haja Andrianasolo", "Fy Rakoto", "Jo Be", "Hélène Rabe"]
 REAL_PARTS = {compare_key(w) for name in PEOPLE for w in name.split()}
 
 
@@ -19,9 +19,9 @@ def leaked_parts(text: str) -> set[str]:
 @pytest.mark.parametrize(
     "text",
     [
-        "NIRINA", "RAKOTOMALALA", "SOA", "NIRINAKO", "Nirinako", "Nirinany", "an'i Nirina", "ry Soa",
-        "ry Soa a", "Soako", "Soako a", "Soanay", "Fyko", "Soa ô", "SOAAA", "Soaaa", "Fyyy", "Niriiina",
-        "Nirinaaaa", "Nirinà", "nirin", "Niri", "Rakotomalalaaa", "Andrianasolo", "Andrianasolo-ko",
+        "HANTA", "RAKOTOMALALA", "SOA", "HANTAKO", "Hantako", "Hantany", "an'i Hanta", "ry Soa",
+        "ry Soa a", "Soako", "Soako a", "Soanay", "Fyko", "Soa ô", "SOAAA", "Soaaa", "Fyyy", "Haaanta",
+        "Hantaaaa", "Hantà", "hant", "Hant", "Rakotomalalaaa", "Andrianasolo", "Andrianasolo-ko",
         "Salama helene", "Salama Hélène", "Salama Hélène", "Soa ve?", "Fy ve", "fy be",
     ],
 )  # fmt: skip
@@ -93,10 +93,10 @@ def test_prices_and_dates_are_kept(text):
         ("whatsapp: 0341234567", "whatsapp: <TEL>"),
         ("WA 034 12 345 67", "WA <TEL>"),
         ("viber +261 34 12 345 67", "viber <TEL>"),
-        ("ig: @nirina.rk", "ig: <HANDLE>"),
-        ("insta nirina_rk", "insta <HANDLE>"),
-        ("ig: nirina.rk", "ig: <HANDLE>"),
-        ("snap: nirinark", "snap: <HANDLE>"),
+        ("ig: @hanta.rk", "ig: <HANDLE>"),
+        ("insta hanta_rk", "insta <HANDLE>"),
+        ("ig: hanta.rk", "ig: <HANDLE>"),
+        ("snap: hantark", "snap: <HANDLE>"),
         ("ig: hery.rakotobe", "ig: <HANDLE>"),
         ("insta hery_rakotobe", "insta <HANDLE>"),
         ("tg: @hery99", "tg: <HANDLE>"),
@@ -110,7 +110,7 @@ def test_labelled_handles(text, expected):
 @pytest.mark.parametrize(
     "text",
     [
-        "tiktok.com/@nirina", "t.me/nirina", "instagram.com/nirina.rk", "linktr.ee/nirina", "nirina.site/x",
+        "tiktok.com/@hanta", "t.me/hanta", "instagram.com/hanta.rk", "linktr.ee/hanta", "hanta.site/x",
         "wa.me/+261341234567", "linktr.ee/hery.rakotobe", "HTTPS://Exämple.mg/ñ",
     ],
 )  # fmt: skip
@@ -121,8 +121,8 @@ def test_links_become_url(text):
 @pytest.mark.parametrize(
     "text",
     [
-        "nirina+tag@gmail.com", "nirina.rk+fy@yahoo.fr", "nirina @ gmail . com", "nirina[at]gmail.com",
-        "nirina@gmail", "NIRINA@GMAIL.COM", "hery.rakotobe[at]gmail.com", "hery (at) yahoo (dot) fr",
+        "hanta+tag@gmail.com", "hanta.rk+fy@yahoo.fr", "hanta @ gmail . com", "hanta[at]gmail.com",
+        "hanta@gmail", "HANTA@GMAIL.COM", "hery.rakotobe[at]gmail.com", "hery (at) yahoo (dot) fr",
     ],
 )  # fmt: skip
 def test_emails_become_email(text):
@@ -164,7 +164,7 @@ def test_assign_fake_names_handles_overlapping_contacts(people):
 
 @pytest.mark.parametrize("text", ["Facebook user ve", "user", "ilay user"])
 def test_deleted_account_names_are_not_names(text):
-    assert run(text, people=["Facebook User", "Utilisateur Facebook", "Nirina Rakoto"]) == text
+    assert run(text, people=["Facebook User", "Utilisateur Facebook", "Hanta Rakoto"]) == text
 
 
 @pytest.mark.parametrize("text", ["Jean-Pierre", "jean pierre", "Jean", "Pierre"])
@@ -175,9 +175,9 @@ def test_hyphenated_first_name(text):
 
 
 KNOWN_LIMITS = [
-    "Ni-ri-na",  # spelled out with separators
-    "N i r i n a",
-    "N1r1na",  # digits for letters
+    "Han-ta",  # spelled out with separators
+    "H a n t a",
+    "H4nt4",  # digits for letters
     "zero trois quatre douze",  # phone spelled in words
     "aotra telo efatra roa",
     "034 douze 345 67",
@@ -209,7 +209,7 @@ def test_mobile_without_the_0_is_masked_in_any_grouping(text):
 
 # --- final review (PR #3 round 3) -------------------------------------------------------
 
-FINAL_PEOPLE = ["Nirina Rakotomalala", "Fara Randria", "Tojo Rasolofonirina", "Mialy Razafindrakoto",
+FINAL_PEOPLE = ["Hanta Rakotomalala", "Fara Randria", "Tojo Ravelohanta", "Mialy Razafindrakoto",
                 "Hery Andriamanana", "Fan Rabearison"]  # fmt: skip
 FINAL_NAMES = assign_fake_names(FINAL_PEOPLE)
 
@@ -280,7 +280,7 @@ def test_everyday_lines_are_not_redacted(text):
         ("Tonga ve ny colis? Lot 3 no nalefa", "<ADDRESS>"),  # leans private: Lot + number
         ("Ref: 123456789 ilay transaction", "<TEL>"),  # leans private: long number
         ("Sambatra ianao ry Mialy", None),
-        ("Nirina sy Fara no tonga voalohany", None),
+        ("Hanta sy Fara no tonga voalohany", None),
     ],
 )
 def test_lines_with_private_bits(text, kept):
@@ -299,10 +299,10 @@ def fake_first(person):
     "text, expected",
     [
         # owner's call (round 4): every capitalised word after "@" goes, even "Aiza"
-        ("@Nirina Rakotomalala Aiza ianao?", FINAL_NAMES["Nirina Rakotomalala"] + " ianao?"),
-        ("@Nirina Mbola tsy vita", fake_first("Nirina Rakotomalala") + " tsy vita"),
-        ("@Nirina mbola tsy vita", fake_first("Nirina Rakotomalala") + " mbola tsy vita"),
-        ("@Nirina Rakotomalala", FINAL_NAMES["Nirina Rakotomalala"]),
+        ("@Hanta Rakotomalala Aiza ianao?", FINAL_NAMES["Hanta Rakotomalala"] + " ianao?"),
+        ("@Hanta Mbola tsy vita", fake_first("Hanta Rakotomalala") + " tsy vita"),
+        ("@Hanta mbola tsy vita", fake_first("Hanta Rakotomalala") + " mbola tsy vita"),
+        ("@Hanta Rakotomalala", FINAL_NAMES["Hanta Rakotomalala"]),
         ("@Fara Ok ve?", fake_first("Fara Randria") + " ve?"),
         ("@Fara Randria Tojo ve?", FINAL_NAMES["Fara Randria"] + " ve?"),
     ],
@@ -311,7 +311,7 @@ def test_mention_replaces_every_capitalised_word(text, expected):
     assert Anonymizer(FINAL_NAMES)(text) == expected
 
 
-PRIV_NAMES = assign_fake_names(["Nirina Rakotomalala", "Fara Randria", "Jean-Pierre Rakoto"])
+PRIV_NAMES = assign_fake_names(["Hanta Rakotomalala", "Fara Randria", "Jean-Pierre Rakoto"])
 
 
 @pytest.mark.parametrize(
@@ -353,8 +353,8 @@ def test_phones_in_brackets_and_glued(text, expected):
 @pytest.mark.parametrize(
     "text, leaked",
     [
-        ("Nirina-nao", "nirina"), ("Nirinantsika", "nirinantsika"), ("NIRINAKO", "nirinako"),
-        ("ry Nirinaaa ô", "nirina"), ("Fara a!", "fara"), ("Faraaa", "fara"), ("Faralahy", "faralahy"),
+        ("Hanta-nao", "hanta"), ("Hantantsika", "hantantsika"), ("HANTAKO", "hantako"),
+        ("ry Hantaaa ô", "hanta"), ("Fara a!", "fara"), ("Faraaa", "fara"), ("Faralahy", "faralahy"),
     ],
 )  # fmt: skip
 def test_name_forms_do_not_leak(text, leaked):
@@ -438,9 +438,9 @@ def test_hashed_handle_fake_never_repeats_the_handle(first):
 
 
 def test_exact_mention_of_participant_first_name_with_unknown_surname():
-    out = Anonymizer(FINAL_NAMES)("@Nirina Rabearisoa")
+    out = Anonymizer(FINAL_NAMES)("@Hanta Rabearisoa")
 
-    assert out == fake_first("Nirina Rakotomalala")
+    assert out == fake_first("Hanta Rakotomalala")
 
 
 @pytest.mark.parametrize(
