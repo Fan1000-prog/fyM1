@@ -77,7 +77,7 @@ def test_text_values_are_latex_escaped(results_dir):
 
 def test_missing_values_render_pending(results_dir):
     tex = numbers.render_tex(resolve(results_dir))
-    assert macro(tex, "data-approved") == r"\textbf{pending}"  # key missing from a present file
+    assert macro(tex, "data-identity") == r"\textbf{pending}"  # key missing from a present file
     assert macro(tex, "ppl-fym1") == r"\textbf{pending}"  # nested key missing
     assert macro(tex, "train-steps") == r"\textbf{pending}"  # whole file missing
 
@@ -268,3 +268,69 @@ def test_data_gate_counts_are_cited(tmp_path):
 def test_greeting_judge_is_disclosed(tmp_path):
     (tmp_path / "greeting_gate.json").write_text(json.dumps({"judge": "Judge X, blind"}))
     assert resolve(tmp_path).values["greet-judge"] == "Judge X, blind"
+
+
+def _set(data: dict, key, value) -> None:
+    """Write value at key (the same key forms lookup() reads), creating dicts and picked list items."""
+    parts = key.split(".") if isinstance(key, str) else list(key)
+    for i, part in enumerate(parts):
+        last = i == len(parts) - 1
+        if isinstance(part, numbers.Pick):
+            item = next((x for x in data if x.get(part.field) == part.value), None)
+            if item is None:
+                item = {part.field: part.value}
+                data.append(item)
+            data = item
+            continue
+        nxt = parts[i + 1] if not last else None
+        if last:
+            data[part] = value
+        else:
+            data = data.setdefault(part, [] if isinstance(nxt, numbers.Pick) else {})
+
+
+def _sample(fmt):
+    """A synthetic value the formatter accepts."""
+    for value in (1, True, "x"):
+        try:
+            fmt(value)
+            return value
+        except (TypeError, ValueError):
+            continue
+    raise AssertionError(f"no sample value for {fmt}")
+
+
+def full_results(root: Path) -> Path:
+    """Every number the scripts cite, filled with synthetic values; the chosen base's table row complete."""
+    files: dict[str, dict] = {}
+    for n in numbers.NUMBERS:
+        _set(files.setdefault(n.file, {}), n.key, _sample(n.fmt))
+    selection = files[numbers.SELECTION_FILE]
+    selection["chosen"] = numbers.QWEN
+    base = next(c for c in selection["candidates"] if c["model"] == numbers.QWEN)
+    for col in numbers.SELECTION_COLUMNS:
+        _set(base, col, 1)
+    files[numbers.LEAK_FILE] = {"matches": 1, "approved_generic": 1, "rejected": 0}
+    for name, data in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(json.dumps(data))
+    return root
+
+
+def test_cli_strict_passes_on_full_results_without_owner_approval_count(tmp_path):
+    # The automatic gate replaced the owner review, so data_stats.json has no "approved" count.
+    results = full_results(tmp_path / "results")
+    assert "approved" not in json.loads((results / "data_stats.json").read_text())
+    out = tmp_path / "numbers.tex"
+    run = run_cli("--results", str(results), "--out", str(out), "--strict")
+    assert run.returncode == 0, run.stderr
+    # Comparison rows of the selection table may stay pending; every cited number must be filled.
+    cited = [line for line in out.read_text().splitlines() if "SelectionRows" not in line]
+    assert not any(r"\textbf{pending}" in line for line in cited)
+
+
+def test_candidate_licence_comes_from_selection(tmp_path):
+    (tmp_path / "model_selection.json").write_text(
+        json.dumps({"candidates": [{"model": numbers.GEMMA3, "license": "Gemma Terms of Use"}]})
+    )
+    assert resolve(tmp_path).values["sel-gemma3-license"] == "Gemma Terms of Use"

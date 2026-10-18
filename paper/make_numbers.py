@@ -12,8 +12,7 @@ Usage: uv run python paper/make_numbers.py [--results results] [--out paper/numb
                                            [--markdown README.md MODEL_CARD.md] [--strict]
 
 Expected files (keys are dotted paths below):
-  data_stats.json        threads, conversations, kept_messages, approved, identity, formal, synthetic,
-                         train_examples
+  data_stats.json        threads, conversations, kept_messages, identity, formal, synthetic, train_examples
   data_gate.json         conversations_before_gate, kept, dropped, dropped_{long_number, contact,
                          too_many_unknown, too_many_fakes}, tokens_replaced, fakes_per_kept_{median, max}
   synth_stats.json       raw, kept, generator, generator_licence
@@ -161,6 +160,7 @@ def candidate_numbers() -> list[Number]:
         ("chrf-mg-en", "chrf_plt_eng", fixed(1)),
         ("chrf-en-mg", "chrf_eng_plt", fixed(1)),
         ("sec-step", "sec_per_step", fixed(1)),
+        ("license", "license", text),
     ]
     out = [
         Number(f"sel-{SHORT[m]}-{label}", "model_selection.json", ("candidates", Pick("model", m), key), fmt, m == QWEN)
@@ -182,7 +182,6 @@ NUMBERS: list[Number] = [
     # data (counts only, never text)
     Number("data-threads", "data_stats.json", "threads", count),
     Number("data-conversations", "data_stats.json", "conversations", count),
-    Number("data-approved", "data_stats.json", "approved", count),
     Number("data-identity", "data_stats.json", "identity", count),
     Number("data-formal", "data_stats.json", "formal", count),
     Number("data-synthetic", "data_stats.json", "synthetic", count),
