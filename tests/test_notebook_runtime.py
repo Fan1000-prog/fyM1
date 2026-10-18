@@ -79,3 +79,10 @@ def test_bootstrap_runs_and_overrides_a_preset_gpu_list(notebook, monkeypatch):
     import os
 
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
+
+
+@pytest.mark.parametrize("notebook", NOTEBOOKS)
+def test_code_dir_is_fresh_each_run_not_a_fixed_tmp_path(notebook):
+    source = "\n".join(code_cells(notebook))
+    assert 'CODE_DIR = tempfile.mkdtemp(prefix="fym1code-")' in bootstrap_cell(notebook)
+    assert "gettempdir()" not in source and '"fym1code"' not in source
