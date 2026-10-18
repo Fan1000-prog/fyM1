@@ -96,6 +96,7 @@ CODE_SHA = open(sha_file).read().strip() if os.path.exists(sha_file) else "unkno
 from fym1.eval import baseline as bl
 from fym1.eval.batching import StillOutOfMemory, run_batched
 from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS
+from fym1.train.hardware import precision_flags
 from fym1.train.run_state import check_hub_id
 from fym1.runtime import output_dir, scratch_dir
 
@@ -328,7 +329,7 @@ code("""if section("qlora_smoke"):
                          args=SFTConfig(output_dir=f"{SCRATCH}/smoke_out", per_device_train_batch_size=1,
                                         gradient_accumulation_steps=8, max_steps=SMOKE_STEPS, learning_rate=2e-4,
                                         lr_scheduler_type="cosine", warmup_steps=3, logging_steps=1, optim="adamw_8bit",
-                                        fp16=compute_dtype == torch.float16, bf16=False, max_length=2048,
+                                        **precision_flags(str(compute_dtype)), max_length=2048,
                                         dataset_text_field="text",
                                         packing=False, save_strategy="no", report_to="none", seed=42))
     torch.cuda.reset_peak_memory_stats()
@@ -363,7 +364,7 @@ print("BASELINE_DONE" if not missing else f"BASELINE_INCOMPLETE {missing}", SLUG
 
 def train_cells() -> list:
     return [
-md("""# fy-m1 01 — QLoRA training (T4)
+md("""# fy-m1 01 — QLoRA training (A100 or T4)
 Set `MODEL_ID` (the lead's pick) and `RUN_ID`, then **Runtime → Run all**. Trains a LoRA adapter on the private
 `Fan1000-Prog/fyM1-chats` data (every `*.jsonl`, rows `{"id", "messages"}`, plus `system_prompt.txt`) at a pinned
 dataset revision. Everything of a run lives under `fyM1-ckpt/<RUN_ID>/`: each `checkpoint-<step>/` carries
@@ -372,13 +373,14 @@ session count so far) and `data_stats.json`. Rerunning after a disconnect resume
 means a new `RUN_ID`. Training stops when eval loss rises 2 evals in a row (or is NaN) and writes
 `<RUN_ID>/stopped.json`; reruns then skip straight to the final cell. The best checkpoint becomes `<RUN_ID>/final/`
 and `final/`; the log goes to `<RUN_ID>/train_log.json` and `results/train_log.json`.
-Runs on Colab or Kaggle (T4). Needs the `HF_TOKEN` secret (Colab: Secrets pane with notebook access; Kaggle: Add-ons → Secrets) and code synced from clean origin/main (`scripts/sync_code_to_hub.py`)."""),
+Runs on Colab A100 (8 rows x 1 step, bf16) or a Colab/Kaggle T4 (2 rows x 4 steps, fp16): the effective batch is 8
+on both. Needs the `HF_TOKEN` secret (Colab: Secrets pane with notebook access; Kaggle: Add-ons → Secrets) and code synced from clean origin/main (`scripts/sync_code_to_hub.py`)."""),
 code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
 !pip install -q -U unsloth unsloth_zoo"""),
 code("""MODEL_ID = None  # set by the lead's model pick, e.g. "org/model"
 RUN_ID = None    # e.g. "r1-lr2e-4"; one folder per run in fyM1-ckpt
 LR, LR_SCHEDULER, WARMUP, EPOCHS, MAX_LEN = 2e-4, "cosine", 10, 2, 2048
-BATCH, GRAD_ACCUM, SAVE_EVERY = 2, 4, 100
+SAVE_EVERY = 100  # BATCH x GRAD_ACCUM is picked by GPU below (effective batch 8 everywhere)
 LORA_R, LORA_ALPHA = 16, 16
 EVAL_SHARE, SEED = 0.02, 42
 CKPT_REPO, DATA_REPO = "Fan1000-Prog/fyM1-ckpt", "Fan1000-Prog/fyM1-chats"
@@ -397,8 +399,13 @@ from fym1.train.resume import latest_checkpoint
 from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text, turn_markers
 from fym1.train.supervise import best_eval, eval_losses, should_stop
 from fym1.train.run_state import check_hub_id, config_mismatch, session_progress
+from fym1.train.hardware import batch_shape, precision_flags
 from fym1.runtime import output_dir, scratch_dir
+import torch
 
+GPU = torch.cuda.get_device_name(0)
+BATCH, GRAD_ACCUM = batch_shape(GPU)
+HARDWARE = {"gpu": GPU, "compute_dtype": None}  # dtype is filled in once the model is loaded
 OUTPUT, SCRATCH = output_dir(), scratch_dir()  # small wanted results vs big throwaway files
 OUT = f"{SCRATCH}/out"  # checkpoints (pushed to the Hub, never kept as Kaggle output)
 
@@ -416,11 +423,12 @@ RUN_CONFIG = {"run_id": RUN_ID, "model": MODEL_ID, "lr": LR, "lr_scheduler": LR_
               "epochs": EPOCHS, "max_seq_len": MAX_LEN, "batch": BATCH, "grad_accum": GRAD_ACCUM,
               "save_every": SAVE_EVERY, "lora_r": LORA_R, "lora_alpha": LORA_ALPHA, "eval_share": EVAL_SHARE,
               "seed": SEED, "data_revision": DATA_REVISION, "chat_template_kwargs": CHAT_TEMPLATE_KWARGS,
-              "code_sha": CODE_SHA}  # a resume on other code is refused: no code sync to the Hub during a run
+              "code_sha": CODE_SHA, "hardware": HARDWARE}  # resume on other code is refused: no code sync during a run
 if saved_config:
     mismatch = config_mismatch(saved_config, RUN_CONFIG)
     assert not mismatch, f"{resume} belongs to a different run config: {mismatch}; use a new RUN_ID"
-print("RUN", RUN_ID, "| resume from", resume or "scratch", "| stopped earlier:", STOPPED, "| code", CODE_SHA)"""),
+print("RUN", RUN_ID, "| resume from", resume or "scratch", "| stopped earlier:", STOPPED, "| code", CODE_SHA,
+      "| gpu", GPU, "| batch", BATCH, "x grad-accum", GRAD_ACCUM)"""),
 code("""import torch
 
 LOADED_FROM = None  # what this session loaded; stays None when the run stopped in an earlier session
@@ -441,6 +449,7 @@ if not STOPPED:
         model = FastModel.get_peft_model(model, target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
                                                                 "gate_proj", "up_proj", "down_proj"], **lora)
     compute_dtype = next(p.dtype for p in model.parameters() if p.is_floating_point())
+    HARDWARE["compute_dtype"] = str(compute_dtype)
     print("model dtype", compute_dtype, "| vram GB", round(torch.cuda.memory_allocated() / 2**30, 2))"""),
 code("""if not STOPPED:
     from datasets import Dataset
@@ -507,7 +516,7 @@ code("""if not STOPPED:
                        per_device_eval_batch_size=BATCH, gradient_accumulation_steps=GRAD_ACCUM,
                        num_train_epochs=EPOCHS, learning_rate=LR, lr_scheduler_type=LR_SCHEDULER,
                        warmup_steps=WARMUP, logging_steps=10, optim="adamw_8bit",
-                       fp16=compute_dtype == torch.float16, bf16=False, max_length=MAX_LEN,
+                       **precision_flags(str(compute_dtype)), max_length=MAX_LEN,
                        dataset_text_field="text", packing=False, eval_strategy="steps", eval_steps=SAVE_EVERY,
                        save_strategy="steps", save_steps=SAVE_EVERY, save_total_limit=2, report_to="none",
                        seed=SEED))
@@ -549,7 +558,9 @@ log = {
     "stopped_early": f"{RUN_ID}/stopped.json" in list_repo_files(CKPT_REPO),
     "data": DATA_STATS,
     "config": {"lora_r": LORA_R, "lora_alpha": LORA_ALPHA, "lr": LR, "lr_scheduler": LR_SCHEDULER,
-               "warmup_steps": WARMUP, "max_seq_len": MAX_LEN, "effective_batch": BATCH * GRAD_ACCUM,
+               "warmup_steps": WARMUP, "max_seq_len": MAX_LEN, "batch": BATCH, "grad_accum": GRAD_ACCUM,
+               "effective_batch": BATCH * GRAD_ACCUM,
+               "hardware": (saved_config if STOPPED else RUN_CONFIG).get("hardware"),
                "data_revision": DATA_REVISION, "chat_template_kwargs": CHAT_TEMPLATE_KWARGS},
     "loss_curve": [{"step": h["step"], "loss": h["loss"]} for h in history if "loss" in h],
     "eval_curve": [{"step": s, "eval_loss": l} for s, l in eval_losses(history)],

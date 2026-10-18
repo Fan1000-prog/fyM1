@@ -123,6 +123,9 @@ ARCHIVE_SUFFIXES = frozenset({".zip", ".gz", ".tar", ".tgz", ".7z", ".rar", ".wh
 ARCHIVE_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00", b"7z\xbc\xaf\x27\x1c",
                  b"Rar!\x1a\x07", b"\x28\xb5\x2f\xfd")
 TAR_MAGIC, TAR_MAGIC_OFFSET = b"ustar", 257
+# The vocabulary trim's kept token ids: a private build record that never ships (security finding #13). The trim
+# keeps them only in the private checkpoint repo; a tracked copy fails the release before anything is written.
+PRIVATE_BUILD_FILES = frozenset({"keep_ids.json"})
 # Zip readers find the archive from its end, so a zip appended to a PDF or a text file still opens as a zip.
 ZIP_MARKERS = (b"PK\x03\x04", b"PK\x05\x06")
 
@@ -1009,6 +1012,8 @@ def tracked_files(root: Path, sha: str) -> tuple[dict[str, tuple[bytes, int]], d
         raise RefusedError(f"{unsafe} unsafe or non-regular archive entries (symlink, absolute or ../ path)")
     if archives := sum(is_archive(path) or has_archive_magic(data) for path, (data, _) in files.items()):  # counted
         raise RefusedError(f"{archives} archive files; the release ships no archives (their members are not read)")
+    if private := sum(PurePosixPath(path).name.lower() in PRIVATE_BUILD_FILES for path in files):  # counted
+        raise RefusedError(f"{private} private build files (trim keep ids); they never ship")
     texts = {path: text_of(path, data) for path, (data, _) in files.items()}
     if non_text := sum(text is None for text in texts.values()):  # counted, not named
         raise RefusedError(f"{non_text} non-text files; the release ships text files only (lead decision 36)")

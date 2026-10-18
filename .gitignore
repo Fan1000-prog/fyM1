@@ -21,6 +21,8 @@ __pycache__/
 *.egg-info/
 
 # Models and build outputs
+# The trim's kept token ids: private build record, never committed (security finding #13)
+keep_ids.json
 *.gguf
 *.safetensors
 checkpoints/

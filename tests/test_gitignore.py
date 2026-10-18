@@ -27,6 +27,8 @@ def is_ignored(path: str) -> bool:
         "pairs_key.jsonl",
         "spaces/arena/pairs_key.jsonl",
         ".playwright-mcp/page-1.yml",
+        "keep_ids.json",
+        "results/shrink/keep_ids.json",
     ],
 )
 def test_private_paths_are_ignored(path):
