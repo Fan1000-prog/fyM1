@@ -4,15 +4,17 @@
         --results results/release_check.json --private-ids ~/fyM1-handoff/private_ids.txt [--ref origin/main]
 
 Copies the commit's tracked files (no git history) into --out, outside every worktree, minus the private paths
-in fym1.release.EXCLUDES, and adds a NOTICE for the third-party word lists. Sender names are read from the
-export at run time, removed from the hand-written name lists and searched for in every file but the lists a
-script rebuilds from public data, whole word, case/accent-insensitive, through invisible or combining marks
-and digits typed for letters ("Z4fy"); then a secret scan runs. Writes the counts
-report to --results only (never into --out: the report is a private build record).
+in fym1.release.EXCLUDES (including the word lists scripts/build_known_words.py writes), and adds a NOTICE for
+the third-party word lists. Sender names are read from the export at run time, removed from the hand-written
+name lists and searched for in every file but the lists a script builds from public data alone, as the strict
+gate reads words (case changes, spaced-out letters, digits typed for letters, hidden characters, escapes); then
+a secret scan runs. Only known text types, PDFs (text and metadata) and zip/gz members are read; any other file
+fails. Writes the counts report to --results only (never into --out: the report is a private build record).
 --private-ids names a file outside the repo (one private account id per line); any whole-word,
 case-insensitive match in a snapshot file or path fails the check, counted per file, never shown.
 Prints and writes counts and repo paths only, never a name, message text or secret value.
-Exit 0: clean. Exit 1: name hits, secret hits or an unreadable file. Exit 2: refused, nothing copied.
+Exit 0: clean, snapshot in --out. Exit 1: name hits, secret hits or an unreadable file; nothing written to --out.
+Exit 2: refused before anything was written.
 """
 
 import argparse
@@ -51,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
           f"in {len(report.private_id_hits)} files")
     print(f"secret hits {summary['secrets']['hits_total']} in {len(report.secret_hits)} files")
     print(f"report: {results}")
-    print("OK" if report.ok else "FAILED: see the report's per-file counts")
+    print("OK" if report.ok else "FAILED: see the report's per-file counts; nothing was written to --out")
     return 0 if report.ok else 1
 
 

@@ -104,6 +104,9 @@ MAX_ARCHIVE_DEPTH = 3
 MAX_UNPACKED_BYTES = 200 << 20
 
 MIN_NAME_TOKEN = 3  # shorter tokens ("ny", initials) are everyday words or letters; counted as skipped
+# A name this long is a hit anywhere inside a word no known-word list has ("xbodozafyx"). Shorter names are common
+# letter runs: a real 4-letter name sits inside everyday English words and code names the lists lack.
+MIN_INNER_NAME = 5
 # Meta's label for a deleted or unknown account: not a person's name.
 PLACEHOLDER_SENDERS = frozenset({"facebook user", "utilisateur de facebook", "instagram user", "meta user"})
 PRIVATE_HF_ID = "Fan1000-Prog/" + "fyM1-"  # split so test_public_name does not see a Hub id
@@ -247,7 +250,8 @@ def words(text: str) -> list[str]:
 def is_name_word(word: str, names: frozenset[str]) -> bool:
     """`word` (as typed) is a name, alone or with a glued person marker ("izafy", "n'izafy" reads "izafy", "ryzafy")
     and/or a glued possessive ending ("Zafyko"), the anonymiser's suffix list, or holds a 4+ letter name: at its start
-    ("zafybodo") or, when no known-word list has the word, anywhere inside ("bodozafy"). Like the anonymiser, only
+    ("zafybodo") or, for a MIN_INNER_NAME+ letter name when no known-word list has the word, anywhere inside
+    ("xfakenainax"). Like the anonymiser, only
     an exact name match counts for an everyday word. A word under MIN_NAME_TOKEN letters is never a name, so a short
     name's collapsed key ("Ann" -> "an") does not match the everyday word "an"."""
     if len(fold(word)) < MIN_NAME_TOKEN:
@@ -261,10 +265,10 @@ def is_name_word(word: str, names: frozenset[str]) -> bool:
     stems |= {stem[: -len(s)] for stem in stems for s in NAME_SUFFIXES if stem.endswith(s)}
     if not stems.isdisjoint(names):
         return True
-    long_names = [name for name in names if len(name) >= MIN_NAME_PREFIX]
-    if any(stem.startswith(n) for stem in stems for n in long_names):
+    if any(stem.startswith(n) for stem in stems for n in names if len(n) >= MIN_NAME_PREFIX):
         return True
-    return known_by(word, KNOWN_WORDS) is None and any(n in key for n in long_names)
+    inner = [n for n in names if len(n) >= MIN_INNER_NAME]
+    return bool(inner) and known_by(word, KNOWN_WORDS) is None and any(n in key for n in inner)
 
 
 def name_tokens(senders: Iterable[str]) -> tuple[frozenset[str], int, int]:
