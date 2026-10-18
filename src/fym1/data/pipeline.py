@@ -50,9 +50,11 @@ def _fake_names(threads: list[Thread], blocklist: Iterable[str]) -> dict[str, st
 
 
 def build_records(
-    threads: list[Thread], owner: str, is_malagasy: Callable[[str], bool], blocklist: Iterable[str] = ()
+    threads: list[Thread], owner: str | None, is_malagasy: Callable[[str], bool], blocklist: Iterable[str] = ()
 ) -> BuildResult:
     """`{"id", "messages"}` per anonymised conversation that is at least half Malagasy.
+
+`owner=None` makes every sender the assistant in turn (see `to_conversations`).
 
     Identical conversations are kept once.
     """

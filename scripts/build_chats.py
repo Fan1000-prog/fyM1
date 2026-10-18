@@ -10,6 +10,7 @@ such file. --dry-run prints thread, message, session and conversation counts and
     uv run python scripts/build_chats.py --export ~/malagasy-data/raw --owner "<name>" \
         --out ~/malagasy-data/private/chats.jsonl --sheet ~/malagasy-data/private/review.html
     uv run python scripts/build_chats.py --export ~/malagasy-data/raw --owner "<name>" --dry-run
+    uv run python scripts/build_chats.py --export ~/malagasy-data/raw --all-senders --dry-run
 """
 
 import argparse
@@ -30,7 +31,11 @@ REPO = Path(__file__).resolve().parents[1]
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--export", type=Path, required=True, help="unzipped export folder, or one export file")
-    parser.add_argument("--owner", required=True, help="owner's name exactly as Messenger shows it")
+    speaker = parser.add_mutually_exclusive_group(required=True)
+    speaker.add_argument("--owner", help="owner's name exactly as Messenger shows it")
+    speaker.add_argument(
+        "--all-senders", action="store_true", help="every sender takes the assistant side in turn (all consented)"
+    )
     parser.add_argument("--out", type=Path, help="JSONL of anonymised conversations")
     parser.add_argument("--sheet", type=Path, help="HTML review sheet")
     parser.add_argument("--dry-run", action="store_true", help="print segmenting counts only; write nothing")
@@ -44,13 +49,17 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def dry_run_counts(threads: list[Thread], owner: str) -> dict[str, int]:
-    """Counts after time-gap segmenting, before anonymising and the Malagasy filter. No text."""
+def dry_run_counts(threads: list[Thread], owner: str | None) -> dict[str, int]:
+    """Counts after time-gap segmenting, before anonymising and the Malagasy filter. No text.
+
+    Exact-duplicate conversations count once, as in `build_records`.
+    """
+    conversations = {json.dumps(c, sort_keys=True) for t in threads for c in to_conversations(t, owner)}
     return {
         "threads": len(threads),
         "messages": sum(len(t.messages) for t in threads),
         "sessions": sum(count_sessions(t) for t in threads),
-        "conversations": sum(len(to_conversations(t, owner)) for t in threads),
+        "conversations": len(conversations),
     }
 
 
@@ -77,7 +86,7 @@ def main() -> None:
     threads = load_threads(export)
     if not threads:
         sys.exit(f"No Messenger threads found under {export}. Point --export at the unzipped export folder.")
-    if not any(args.owner in t.participants for t in threads):
+    if args.owner is not None and not any(args.owner in t.participants for t in threads):
         sys.exit(f"--owner {args.owner!r} is not a participant of any thread. Use the name exactly as Messenger shows it.")
     if args.dry_run:
         print(json.dumps(dry_run_counts(threads, args.owner)))

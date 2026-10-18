@@ -82,3 +82,21 @@ def test_to_conversations_drops_one_sided_sessions():
     chat = thread(["Ana", "Bema"], [("Ana", 0, "Allo?"), ("Ana", 1, "Allo??")])
 
     assert to_conversations(chat, owner="Ana") == []
+
+
+def test_every_sender_takes_a_turn_as_assistant_in_a_group():
+    chat = thread(
+        ["Ana", "Bema", "Koto"],
+        [("Ana", 0, "Salama"), ("Bema", 1, "Eny"), ("Koto", 2, "Inona?"), ("Ana", 3, "Tsy misy")],
+    )
+
+    every = to_conversations(chat, owner=None)
+
+    assert every == [c for name in chat.participants for c in to_conversations(chat, owner=name)]
+    assert len(every) == 3
+
+
+def test_every_sender_in_a_one_to_one_thread_is_each_side_once():
+    chat = thread(["Ana", "Bema"], [("Ana", 0, "Salama"), ("Bema", 1, "Eny"), ("Ana", 2, "Veloma")])
+
+    assert to_conversations(chat, owner=None) == to_conversations(chat, owner="Ana")

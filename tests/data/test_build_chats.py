@@ -76,3 +76,32 @@ def test_full_run_still_requires_out_and_sheet(tmp_path):
 
     assert result.returncode != 0
     assert "--out" in result.stderr and "--sheet" in result.stderr
+
+
+def test_all_senders_dry_run_counts_every_side_without_duplicates(tmp_path):
+    export = _flat_export(tmp_path / "group.json")
+
+    result = _run("--export", str(export), "--all-senders", "--dry-run")
+
+    assert result.returncode == 0, result.stderr
+    # Owner answers twice; Alpha answers nothing (always speaks first, so trimmed); Bravo is silent.
+    assert json.loads(result.stdout)["conversations"] == 2
+
+
+def test_dry_run_counts_exact_duplicates_once(tmp_path):
+    export = _flat_export(tmp_path / "group.json")
+    data = json.loads(export.read_text())
+    for msg in data["messages"]:
+        msg["text"] = "mitovy" if msg["sender"] == "Alpha" else "eny"
+    export.write_text(json.dumps(data))
+
+    result = _run("--export", str(export), "--owner", "Owner", "--dry-run")
+
+    assert json.loads(result.stdout)["conversations"] == 1
+
+
+def test_owner_and_all_senders_are_exclusive(tmp_path):
+    export = _flat_export(tmp_path / "group.json")
+
+    assert _run("--export", str(export), "--owner", "Owner", "--all-senders", "--dry-run").returncode != 0
+    assert _run("--export", str(export), "--dry-run").returncode != 0
