@@ -1,4 +1,4 @@
-"""fyM1 chat demo: the GGUF model on a free CPU Space, streamed token by token.
+"""fy-m1 chat demo: the GGUF model on a free CPU Space, streamed token by token.
 
 Env (Space variables): MODEL_REPO, MODEL_FILE (the GGUF in that repo), SYSTEM_PROMPT (owner-approved line).
 HF_TOKEN (Space secret) is only needed while the model repo is private.
@@ -11,8 +11,8 @@ from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 from prompt import MessageTooLong, build_messages
 
-GITHUB_URL = "https://github.com/Fan1000-prog/fy-m-1"
-FOOTER = f"[Code]({GITHUB_URL}) · [Paper]({GITHUB_URL}/tree/main/paper) · [Arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m-1-arena)"
+GITHUB_URL = "https://github.com/Fan1000-prog/fy-m1"
+FOOTER = f"[Code]({GITHUB_URL}) · [Paper]({GITHUB_URL}/tree/main/paper) · [Arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)"
 # Same sampling as the eval run, so the demo shows the model that was measured.
 SAMPLING = {"temperature": 0.7, "top_p": 0.9, "max_tokens": 256}
 CONTEXT_TOKENS = 4096
@@ -55,10 +55,10 @@ def respond(message: str, history: list[dict]):
         yield reply
 
 
-with gr.Blocks(title="fy-m-1") as demo:
+with gr.Blocks(title="fy-m1") as demo:
     gr.ChatInterface(
         respond,
-        title="fy-m-1",
+        title="fy-m1",
         examples=["Sali ahn", "De ahoana?"],
         cache_examples=False,
         concurrency_limit=1,  # one Llama instance: generations run one at a time, others wait in the queue

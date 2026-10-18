@@ -13,7 +13,7 @@
 % Rebuild with: uv run python paper/make_numbers.py && tectonic paper/fym1.tex
 \input{numbers}
 
-\title{fyM1: Teaching an Open Model to Chat in Everyday Malagasy\\[0.3em]
+\title{fy-m1: Teaching an Open Model to Chat in Everyday Malagasy\\[0.3em]
   \large Version 0.1 --- full human ratings in v0.2}
 \author{Fan's lab}
 \date{October 2026}
@@ -29,7 +29,7 @@ model, \fyBaseModel{}, with QLoRA on a single free GPU so that it replies the wa
 friendly, mixing in French, and using everyday spelling. We describe how we chose the base model, how we
 built and anonymised the training data, how we trained and trimmed the model, and what we measured. On
 \fyEvalPrompts{} fresh everyday prompts, we report the share of replies that drift into full French or
-English (base: \fyDriftBase{}; fyM1: \fyDriftFymOne{}), LLM-judge scores, and regression checks on
+English (base: \fyDriftBase{}; fy-m1: \fyDriftFymOne{}), LLM-judge scores, and regression checks on
 reading and translation. A blind human comparison reports early votes here; the full panel's result
 comes in v0.2.
 \end{abstract}
@@ -117,7 +117,7 @@ held-out loss was \fyEvalLoss{}.
 
 \section{Making the model smaller: vocabulary trimming}
 \label{sec:trim}
-Much of a multilingual model's vocabulary is for scripts and languages fyM1 never uses. Following
+Much of a multilingual model's vocabulary is for scripts and languages fy-m1 never uses. Following
 \citet{ushio-etal-2023-efficient}, we keep only the tokens seen in Malagasy, French and English text,
 plus all special and byte-fallback tokens, and drop the matching embedding and output rows.
 The trim ships only if it passes three gates: held-out Malagasy text round-trips through the new
@@ -131,7 +131,7 @@ that free GPU time cannot pay for. We leave it for v0.2.
 
 \section{Results}
 \label{sec:results}
-We generated answers from the base model and fyM1 to \fyEvalPrompts{} fresh everyday prompts with the
+We generated answers from the base model and fy-m1 to \fyEvalPrompts{} fresh everyday prompts with the
 same system prompt and sampling settings (Table~\ref{tab:results}).
 
 \begin{table}[h]
@@ -139,7 +139,7 @@ same system prompt and sampling settings (Table~\ref{tab:results}).
 \small
 \begin{tabular}{lrr}
 \toprule
-Measure & Base & fyM1 \\
+Measure & Base & fy-m1 \\
 \midrule
 Drift to full French/English ($\downarrow$) & \fyDriftBase & \fyDriftFymOne \\
 Naturalness, LLM judge, 1--5 ($\uparrow$) & \fyNaturalBase & \fyNaturalFymOne \\
@@ -150,7 +150,7 @@ FLORES+ chrF++ mg$\to$en ($\uparrow$) & \fyChrfMgEnBase & \fyChrfMgEnFymOne \\
 FLORES+ chrF++ en$\to$mg ($\uparrow$) & \fyChrfEnMgBase & \fyChrfEnMgFymOne \\
 \bottomrule
 \end{tabular}
-\caption{Base model versus fyM1. Belebele and FLORES+ are regression checks: they should not fall much.}
+\caption{Base model versus fy-m1. Belebele and FLORES+ are regression checks: they should not fall much.}
 \label{tab:results}
 \end{table}
 
@@ -158,15 +158,15 @@ FLORES+ chrF++ en$\to$mg ($\uparrow$) & \fyChrfEnMgBase & \fyChrfEnMgFymOne \\
 shuffled, on a published 1--5 rubric for naturalness and correctness
 \citep{zheng2023judging}. Judge: \fyJudgeModel{}. Judge scores are a cheap signal, not a substitute for native speakers.
 
-\paragraph{Leak check.} Any fyM1 answer that shares a run of 8 words with the training chats blocks
-release. \fyLeakFymOne{} of fyM1 answers had such a run; across all fyM1 answers there were \fyLeakMatches{} distinct
+\paragraph{Leak check.} Any fy-m1 answer that shares a run of 8 words with the training chats blocks
+release. \fyLeakFymOne{} of fy-m1 answers had such a run; across all fy-m1 answers there were \fyLeakMatches{} distinct
 matched 8-word runs. The owner reviewed each run on its own, seeing only those 8 words and never the chat
 around them, and release required every run to be a generic phrase. Of those runs, \fyLeakGeneric{} were
 judged generic and \fyLeakRejected{} were rejected.
 
 \paragraph{Blind human comparison (early votes).} Native speakers rate pairs of answers in a public
 ``arena'': same prompt, two unlabelled answers in random order, pick the more natural one. These are the
-early votes in at release: \fyArenaVotes{} votes from \fyArenaRaters{} raters; fyM1 win rate
+early votes in at release: \fyArenaVotes{} votes from \fyArenaRaters{} raters; fy-m1 win rate
 \fyArenaWinRate{} (95\% Wilson interval \fyArenaCiLow{}--\fyArenaCiHigh{}; \citealp{wilson1927}).
 With so few raters this is a first signal, not a result. The full panel's numbers come in v0.2.
 

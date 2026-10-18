@@ -14,17 +14,17 @@ tags:
   - gguf
 ---
 
-# fyM1
+# fy-m1
 
-fyM1 chats in everyday Malagasy: short, friendly, mixing in French, with texting spelling and emoji.
+fy-m1 chats in everyday Malagasy: short, friendly, mixing in French, with texting spelling and emoji.
 It is a QLoRA fine-tune of <!-- n:base-model -->pending<!-- /n -->, made by Fan's lab.
 
 **Status: v0.1.** *pending* means not measured yet. Coming in v0.2: the full panel's blind human
 ratings and each model's answer to each test prompt.
 
-- Demo: [fyM1-chat](https://huggingface.co/spaces/Fan1000-Prog/fyM1-chat)
-- Code, notebooks and paper: [github.com/Fan1000-prog/fyM1](https://github.com/Fan1000-prog/fyM1)
-- Help rate it: [fyM1-arena](https://huggingface.co/spaces/Fan1000-Prog/fyM1-arena)
+- Demo: [fy-m1-chat](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-chat)
+- Code, notebooks and paper: [github.com/Fan1000-prog/fy-m1](https://github.com/Fan1000-prog/fy-m1)
+- Help rate it: [fy-m1-arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)
 
 ## Files
 
@@ -49,7 +49,7 @@ ratings and each model's answer to each test prompt.
 
 ```bash
 # TODO(final): exact file name of the GGUF.
-llama-cli -hf Fan1000-Prog/fyM1-<size>:Q4_K_M -p "Sali ahn"
+llama-cli -hf Fan1000-Prog/fy-m1-<size>:Q4_K_M -p "Sali ahn"
 ```
 
 ## System prompt
@@ -71,20 +71,20 @@ Described here, not shared. It contains private conversations.
 - A few identity answers and polite refusals, written by the owner.
 - No outputs from closed-API models.
 
-Counts are in [`results/data_stats.json`](https://github.com/Fan1000-prog/fyM1/blob/main/results/data_stats.json).
+Counts are in [`results/data_stats.json`](https://github.com/Fan1000-prog/fy-m1/blob/main/results/data_stats.json).
 
 ## Training procedure
 
 QLoRA (4-bit NF4 base, LoRA on all linear layers) with Unsloth on a free Colab T4 GPU. Loss on assistant
 turns only. Full settings and the loss curve:
-[`results/train_log.json`](https://github.com/Fan1000-prog/fyM1/blob/main/results/train_log.json).
+[`results/train_log.json`](https://github.com/Fan1000-prog/fy-m1/blob/main/results/train_log.json).
 
 ## Evaluation
 
 All numbers are written by scripts in the GitHub repo.
 
 <!-- numbers:start -->
-| Measure | Base model | fyM1 |
+| Measure | Base model | fy-m1 |
 |---|---|---|
 | Replies that drift to full French/English (lower is better) | pending | pending |
 | Naturalness, LLM judge, 1-5 | pending | pending |
@@ -92,10 +92,10 @@ All numbers are written by scripts in the GitHub repo.
 | Belebele Malagasy reading (accuracy) | pending | pending |
 | FLORES chrF++ Malagasy to English | pending | pending |
 | FLORES chrF++ English to Malagasy | pending | pending |
-| Blind human votes so far (early votes): fyM1 win rate | - | pending |
+| Blind human votes so far (early votes): fy-m1 win rate | - | pending |
 <!-- numbers:end -->
 
-Leak gate: any fyM1 answer that shares a run of 8 words with the training chats blocks release.
+Leak gate: any fy-m1 answer that shares a run of 8 words with the training chats blocks release.
 The owner sees only the matched 8 words, never the chat, and it ships only if every match is a generic phrase.
 At release: <!-- n:leak-matches -->pending<!-- /n --> distinct matched 8-word runs, of which
 <!-- n:leak-generic -->pending<!-- /n --> approved as generic and <!-- n:leak-rejected -->pending<!-- /n --> rejected (`results/eval/leak_review.json`).
@@ -120,9 +120,9 @@ Follows the base model's license: <!-- n:base-license -->pending<!-- /n -->. Cod
 
 ```bibtex
 @misc{fym1,
-  title  = {fyM1: Teaching an Open Model to Chat in Everyday Malagasy},
+  title  = {fy-m1: Teaching an Open Model to Chat in Everyday Malagasy},
   author = {{Fan's lab}},
   year   = {2026},
-  url    = {https://github.com/Fan1000-prog/fyM1}
+  url    = {https://github.com/Fan1000-prog/fy-m1}
 }
 ```

@@ -95,3 +95,13 @@ def test_leak_matches_rejects_training_texts_without_ngrams():
 def test_leak_matches_rejects_empty_responses():
     with pytest.raises(ValueError):
         leak_matches([], ["a b c d e f g h"])
+
+
+def test_ngram_index_matches_leak_rate_normalisation():
+    from fym1.eval.metrics import NgramIndex
+
+    index = NgramIndex(["Ny alika mainty dia nandry teo ambanin'ny latabatra lehibe omaly"], n=8)
+    assert index.shares_with("hoy izy: NY ALIKA mainty, dia nandry teo ambanin'ny latabatra!")
+    assert not index.shares_with("ny alika mainty dia nandry teo")
+    with pytest.raises(ValueError):
+        NgramIndex(["too short"], n=8)

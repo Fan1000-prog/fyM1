@@ -8,21 +8,27 @@ This file says where the project stands and how to pick it up; the spec and plan
 
 1. Read this file, then `AGENTS.md`, then spec §7–§8 and the plan's "Changes from the plan".
 2. Read the private operator handoff on the owner's laptop (not in this repo; it names accounts and machines):
-   `~/fyM1-handoff/LEAD-HANDOFF.md` (start at §13 "CURRENT STATE" and read every later section; §14–§15 are post-wrap-up updates) and `~/fyM1-handoff/TRAINER-HANDOFF.md`.
+   `~/fyM1-handoff/LEAD-HANDOFF.md` (start at §13 "CURRENT STATE" and read every later section; §14–§15 are post-wrap-up updates; §16, the new run, overrides older parts) and `~/fyM1-handoff/TRAINER-HANDOFF.md`.
 3. Set up the team: a **lead** (owns calls, merges, run order; talks to the owner through the main session) and,
    as needed, a **trainer** (the only agent that drives Kaggle/Colab), **data** (cleaner + export), **eval**
    (Task 5), **publish** (Spaces), **shrink** (03_trim), **writer** (paper/README/model card).
 4. Check what's running before starting anything: the Kaggle kernel status and the result JSONs on the Hub
    (commands in `docs/kaggle_operator.md` and LEAD-HANDOFF §13). Never run the same model on Kaggle and Colab.
-5. Rules that bite: one branch + worktree per change, fresh reviewer per PR, at most 2 fix rounds then ask the
-   owner, squash-merge only on safe-to-merge + green CI, clean up merged branches, no AI attribution, no deletions
-   or architecture changes without the owner, never print or pass the HF/Kaggle tokens, never hand-type a number.
+5. Rules that bite: one branch + worktree per change, fresh reviewer per PR. Blocked review → a fresh
+   ML-engineer agent fixes → a fresh reviewer, repeated until safe-to-merge + green CI (no round cap); the same
+   blocker 3 rounds in a row → the lead decides and records it. Squash-merge only on safe-to-merge + green CI,
+   clean up merged branches, no AI attribution, no deletions or architecture changes without the owner, never
+   print or pass the HF/Kaggle tokens, never hand-type a number.
+6. Owner-review gates (100-sample sheet, leftover names, leak gate, identity check, greeting ratings) are strict
+   automatic gates run by fresh agents; list what they auto-decided for the owner. Any agent near 25% context
+   writes a handoff and is replaced by a fresh one. Public name is `fy-m1` (spec §8.6).
 
 ## 1. Where we are
 
 Tooling is built and merged. Baseline tests are half done; no model is picked or trained yet.
 
-- **Blocking training:** the owner's Messenger export (waiting on Meta). `~/malagasy-data/raw/` doesn't exist.
+- **Messenger export:** arrived in `~/malagasy-data/raw/` (custom JSON; the parser needs an adapter). Well under
+  2,000 conversations, so synthetic chats are needed.
 - **GPU:** Kaggle's CLI works, but the first real run failed for setup reasons (§5). Colab's free quota ran out at
   01:15 UTC and resets daily; it's the backup.
 - **Ship date:** when the export is in (owner chose this over a Wikipedia-only model that would still talk formally).
@@ -47,7 +53,7 @@ with `uv sync --all-groups`. The 14 strict xfails pin known anonymiser limits.
 | 4 Gemma 3 load | Load `google/gemma-3-12b-it` quantised on load (no silent swap to the oversized copy), out-of-memory guard records `"oom"`, never a number | #21 |
 | 4 Results | AfriqueQwen3.5-9B-Instruct baseline + selection table | #23 |
 | 5 Scoring | `score.py`: blind judge batch, judge means, `scores.json`, leak matches, owner leak review, strict leak gate | #6, #10, #11, #15 |
-| 6 Spaces | Chat + arena apps, votes, owner-approved Malagasy text, `fy-m-1` names | #7, #9, #12 |
+| 6 Spaces | Chat + arena apps, votes, owner-approved Malagasy text, `fy-m1` names | #7, #9, #12 |
 | 7 Shrink | Vocabulary trim (notebook not run yet) | #8 |
 | 8 Writing | Paper, README, model card skeletons; this update, spec §8, plan status | #5, #17 |
 
@@ -55,8 +61,8 @@ with `uv sync --all-groups`. The 14 strict xfails pin known anonymiser limits.
 
 Recorded in spec §8 and the plan's "Changes from the plan" too.
 
-- **Name:** public `fy-m-1`; private repos keep `fyM1-*`; package stays `fym1`. GitHub repo recreated clean as
-  `Fan1000-prog/fy-m-1` at release (owner pre-approved deleting and recreating it).
+- **Name:** public `fy-m1`; private repos keep `fyM1-*`; package stays `fym1`. GitHub repo recreated clean as
+  `Fan1000-prog/fy-m1` at release (owner pre-approved deleting and recreating it).
 - **Privacy backstops**, kept whatever the cleaner does: owner's 100-sample review, leftover-names blocklist,
   count-only post-run phone check, strict 8-word leak gate. Raw answers and the arena A/B key stay private until v0.2.
 - **Anonymiser trade-offs (owner):** glued `tel34…`/`telO34…` and no-0 layouts like `34 123 45 67` stay known
@@ -111,7 +117,7 @@ Run order: Gemma 3 (full) → Gemma 4 (plain-text Belebele, FLORES+, scripted 15
    if fewer than 2,000 approved conversations.
 7. **Sync code** from clean `main`; set `MODEL_ID`/`RUN_ID` in `01_train` (no defaults); **train** on Kaggle,
    supervised; log to `results/train_log.json`.
-8. **Eval** (Task 5): 150 answers from base and fy-m-1, Belebele + FLORES+ rerun, perplexity, blind judge,
+8. **Eval** (Task 5): 150 answers from base and fy-m1, Belebele + FLORES+ rerun, perplexity, blind judge,
    `scores.json`; merge LoRA, 4-bit + GGUF Q4_K_M.
 9. **Leak gate**: owner reviews every matched 8-word run; owner checks the 20 identity/safety answers.
 10. **Trim** (Task 7): run `03_trim`; ship trimmed GGUF only if all three gates pass.

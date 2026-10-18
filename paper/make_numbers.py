@@ -112,7 +112,7 @@ def passed(v: Any) -> str:
 
 
 def model_repo(size: Any) -> str:
-    return f"Fan1000-Prog/fyM1-{text(size)}"
+    return f"Fan1000-Prog/fy-m1-{text(size)}"
 
 
 @dataclass(frozen=True)
@@ -193,7 +193,7 @@ NUMBERS: list[Number] = [
 ]
 # fmt: on
 
-# README results table: (row label, base macro name or None, fyM1 macro name)
+# README results table: (row label, base macro name or None, fy-m1 macro name)
 README_ROWS: list[tuple[str, str | None, str]] = [
     ("Replies that drift to full French/English (lower is better)", "drift-base", "drift-fym1"),
     ("Naturalness, LLM judge, 1-5", "natural-base", "natural-fym1"),
@@ -201,7 +201,7 @@ README_ROWS: list[tuple[str, str | None, str]] = [
     ("Belebele Malagasy reading (accuracy)", "belebele-base", "belebele-fym1"),
     ("FLORES chrF++ Malagasy to English", "chrf-mg-en-base", "chrf-mg-en-fym1"),
     ("FLORES chrF++ English to Malagasy", "chrf-en-mg-base", "chrf-en-mg-fym1"),
-    ("Blind human votes so far (early votes): fyM1 win rate", None, "arena-win-rate"),
+    ("Blind human votes so far (early votes): fy-m1 win rate", None, "arena-win-rate"),
 ]
 
 SELECTION_FILE = "model_selection.json"
@@ -332,7 +332,7 @@ def render_readme_table(values: dict[str, str | None]) -> str:
     def cell(name: str | None) -> str:
         return "-" if name is None else _md_value(values, name)
 
-    lines = ["| Measure | Base model | fyM1 |", "|---|---|---|"]
+    lines = ["| Measure | Base model | fy-m1 |", "|---|---|---|"]
     lines += [f"| {label} | {cell(base)} | {cell(ours)} |" for label, base, ours in README_ROWS]
     return "\n".join(lines)
 

@@ -1,4 +1,4 @@
-"""Build notebooks/00_baseline.ipynb and notebooks/01_train.ipynb. This script is their source of truth.
+"""Build notebooks/00_baseline.ipynb, 01_train.ipynb and 04_synth.ipynb. This script is their source of truth.
 
 Usage: python scripts/build_notebooks.py [--check]
 Edit the cells here, run it, and commit both this file and the notebooks. --check exits non-zero when a
@@ -38,19 +38,24 @@ def runtime_segments() -> list[str]:
     return [found[n] for n in COPIED]
 
 
-def bootstrap_cell():
+ONE_GPU = 'os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Kaggle\'s T4 runtime may preset "0,1"; always use one GPU\n'
+TWO_GPUS = ('os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"  # both of Kaggle\'s T4s: a 27B model in 4-bit needs ~17 GB; '
+            "a single-GPU runtime just sees GPU 0\n")
+
+
+def bootstrap_cell(gpus: str = ONE_GPU):
     return code(
         "# Runtime bootstrap (Colab or Kaggle). The HF token is needed before fym1 can be downloaded, so this cell\n"
         "# carries a verbatim copy of fym1.runtime.hf_token and its helpers (checked by tests/test_notebook_runtime.py).\n"
         "import os\nimport tempfile\n\n"
-        'os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Kaggle\'s T4 runtime may preset "0,1"; always use one GPU\n'
-        'CODE_DIR = tempfile.mkdtemp(prefix="fym1code-")  # fresh each run: nothing stale on sys.path\n\n'
+        + gpus
+        + 'CODE_DIR = tempfile.mkdtemp(prefix="fym1code-")  # fresh each run: nothing stale on sys.path\n\n'
         + "\n\n\n".join(runtime_segments()))
 
 
 def baseline_cells() -> list:
     return [
-md("""# fyM1 00 — base-model baseline (T4)
+md("""# fy-m1 00 — base-model baseline (T4)
 One candidate per run. **Runtime → Run all**; the notebook picks the first candidate in `CANDIDATES` whose
 results file on `Fan1000-Prog/fyM1-ckpt` (`results/baseline/<slug>.json`) still misses a required section, and
 skips sections already saved there, so a rerun after a disconnect resumes. Restart the runtime between candidates
@@ -355,7 +360,7 @@ print("BASELINE_DONE" if not missing else f"BASELINE_INCOMPLETE {missing}", SLUG
 
 def train_cells() -> list:
     return [
-md("""# fyM1 01 — QLoRA training (T4)
+md("""# fy-m1 01 — QLoRA training (T4)
 Set `MODEL_ID` (the lead's pick) and `RUN_ID`, then **Runtime → Run all**. Trains a LoRA adapter on the private
 `Fan1000-Prog/fyM1-chats` data (every `*.jsonl`, rows `{"id", "messages"}`, plus `system_prompt.txt`) at a pinned
 dataset revision. Everything of a run lives under `fyM1-ckpt/<RUN_ID>/`: each `checkpoint-<step>/` carries
@@ -551,7 +556,185 @@ print("TRAIN_LOG", json.dumps({k: v for k, v in log.items() if not k.endswith("_
     ]
 
 
-NOTEBOOKS = {"00_baseline": baseline_cells, "01_train": train_cells}
+def synth_cells() -> list:
+    return [
+md("""# fy-m1 04 — synthetic everyday chats (T4 x2)
+Few-shot prompts an open-weight model with the real, anonymised chats in the private `Fan1000-Prog/fyM1-chats` and
+keeps only chats that pass `fym1.data.synth.filter_conversations` (Malagasy assistant turns, length bounds, no
+placeholders or unknown names after anonymising, no 8-word run shared with any real chat, no duplicates).
+**Runtime → Run all.** Raw outputs go to `fyM1-chats` `synth/raw/part-<first index>.ndjson` every `UPLOAD_EVERY`
+chats, so a rerun after a disconnect resumes where the last part ended. Each run then filters everything generated
+so far and writes `synth/filtered.ndjson` and counts-only `synth/synth_stats.json`
+(fetch it with `scripts/build_synth_stats.py`). Nothing here prints chat text.
+
+`.ndjson`, not `.jsonl`: `01_train` trains on every `*.jsonl` in the repo, so these files stay out of training until
+the sample check; then `PROMOTE = True` writes `synth/synth_chats.jsonl`.
+Generator: the first entry of `GENERATORS` that loads fully on the GPUs and passes a one-chat smoke check (the stats
+record which). Kaggle: Accelerator **GPU T4 x2**, Internet on, `HF_TOKEN` secret on; the HF account must have
+accepted the Gemma license. Code comes from `fyM1-ckpt` `code/` (`scripts/sync_code_to_hub.py`)."""),
+code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
+!pip install -q -U transformers accelerate bitsandbytes fasttext-numpy2-wheel"""),
+code("""GENERATORS = [  # (hub id, dtype), tried in order; float16 is ~2x faster on a T4, float32 avoids fp16 overflow
+    ("google/gemma-3-27b-it", "float16"),
+    ("google/gemma-3-12b-it", "float16"),
+    ("google/gemma-3-12b-it", "float32"),
+]
+TARGET_RAW = 2500         # raw chats to generate; the goal is >= 2,000 kept after filtering
+FEW_SHOT_K, SEED = 3, 0   # real examples per prompt; SEED fixes the seed grid, example picks and sampling
+GEN_BATCH, MAX_NEW_TOKENS, TEMPERATURE, TOP_P = 8, 400, 0.9, 0.95
+UPLOAD_EVERY = 48         # chats per raw part on the Hub: a disconnect loses at most this many
+MAX_HOURS = 11.0          # stop generating after this (Kaggle sessions end at 12 h), then filter and save stats
+WEIGHTS_GIB_PER_GPU = 11  # weights cap per T4 (15 GB); the rest is left for the KV cache
+REAL_FILES = ["chats.jsonl"]  # real chats in fyM1-chats: few-shot examples and the 8-word leak reference
+PROMOTE = False           # True only after the sample check: also writes synth/synth_chats.jsonl (01_train input)
+CKPT_REPO, DATA_REPO = "Fan1000-Prog/fyM1-ckpt", "Fan1000-Prog/fyM1-chats"
+RAW_PREFIX = "synth/raw/\""""),
+bootstrap_cell(TWO_GPUS),
+code("""import sys, json, time, datetime
+from huggingface_hub import HfApi, hf_hub_download, list_repo_files, snapshot_download
+
+SESSION_START = time.time()
+os.environ["HF_TOKEN"] = hf_token()  # never print it
+api = HfApi()
+code_dir = snapshot_download(CKPT_REPO, allow_patterns=["code/**"], local_dir=CODE_DIR)
+sys.path.insert(0, f"{code_dir}/code/src")
+CODE_SHA = open(f"{code_dir}/code/SHA").read().strip()
+from fym1.data import synth
+from fym1.eval.batching import run_batched
+from fym1.runtime import output_dir, scratch_dir
+
+OUTPUT, SCRATCH = output_dir(), scratch_dir()
+DATA_REVISION = api.dataset_info(DATA_REPO).sha
+real = []
+for f in REAL_FILES:  # private chat text: kept in memory only, never printed or saved here
+    path = hf_hub_download(DATA_REPO, f, repo_type="dataset", revision=DATA_REVISION)
+    real += [json.loads(l) for l in open(path) if l.strip()]
+seeds = synth.seed_grid(TARGET_RAW, SEED)
+
+
+def raw_rows():
+    files = [f for f in list_repo_files(DATA_REPO, repo_type="dataset") if f.startswith(RAW_PREFIX)]
+    if not files:
+        return []
+    local = snapshot_download(DATA_REPO, repo_type="dataset", allow_patterns=[f"{RAW_PREFIX}*"],
+                              local_dir=f"{SCRATCH}/synth")
+    return [json.loads(l) for f in sorted(files) for l in open(f"{local}/{f}") if l.strip()]
+
+
+done = {row["index"] for row in raw_rows()}
+todo = [i for i in range(TARGET_RAW) if i not in done]
+print("real chats:", len(real), "| raw done:", len(done), "| to do:", len(todo), "| code", CODE_SHA)"""),
+code("""import gc
+import torch
+from transformers import AutoModelForImageTextToText, AutoTokenizer, BitsAndBytesConfig
+
+GPUS = torch.cuda.device_count()
+
+
+def load(hub_id, dtype):
+    torch_dtype = getattr(torch, dtype)
+    quant = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
+                               bnb_4bit_compute_dtype=torch_dtype)
+    model = AutoModelForImageTextToText.from_pretrained(
+        hub_id, quantization_config=quant, torch_dtype=torch_dtype, device_map="auto",
+        max_memory={i: f"{WEIGHTS_GIB_PER_GPU}GiB" for i in range(GPUS)})
+    off_gpu = {d for d in model.hf_device_map.values() if not isinstance(d, int)}
+    if off_gpu:  # CPU/disk offload would be far too slow: treat as "does not fit"
+        raise MemoryError(f"needs offload to {sorted(map(str, off_gpu))}")
+    tok = AutoTokenizer.from_pretrained(hub_id)
+    tok.padding_side = "left"
+    return model.eval(), tok
+
+
+def prompt_text(i):
+    examples = [r["messages"] for r in synth.examples_for(i, real, FEW_SHOT_K, SEED)]
+    chat = [{"role": "user", "content": synth.build_prompt(seeds[i], examples)}]
+    return tok.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+
+
+@torch.inference_mode()
+def generate(indices):
+    \"\"\"(output text, new tokens) per seed index; batches that run out of memory are retried one by one.\"\"\"
+    def run(batch):
+        enc = tok([prompt_text(i) for i in batch], return_tensors="pt", padding=True,
+                  add_special_tokens=False).to(model.device)
+        ids = model.generate(**enc, max_new_tokens=MAX_NEW_TOKENS, do_sample=True, temperature=TEMPERATURE,
+                             top_p=TOP_P, pad_token_id=tok.pad_token_id)
+        new = ids[:, enc["input_ids"].shape[1]:]
+        counts = (new != tok.pad_token_id).sum(dim=1).tolist()
+        return list(zip(tok.batch_decode(new, skip_special_tokens=True), counts))
+
+    return run_batched(indices, GEN_BATCH, run, is_oom=lambda e: isinstance(e, torch.OutOfMemoryError),
+                       clear=torch.cuda.empty_cache)
+
+
+model = tok = None
+LOAD_LOG = []  # counts-only reasons a generator was skipped
+if todo:
+    for GEN_ID, DTYPE in GENERATORS:
+        try:
+            model, tok = load(GEN_ID, DTYPE)
+            torch.manual_seed(SEED)
+            smoke = generate(todo[:2])  # two chats, so one unlucky sample does not skip a good model
+            smoke_ok = any(synth.parse_conversation(text) for text, _ in smoke)  # outputs never printed
+            if smoke_ok:
+                break
+            LOAD_LOG.append(f"{GEN_ID} {DTYPE}: smoke output did not parse")
+        except Exception as e:  # does not fit, gated, fp16 overflow (inf/nan in sampling), ...
+            LOAD_LOG.append(f"{GEN_ID} {DTYPE}: {type(e).__name__}: {str(e)[:200]}")
+        model = tok = None
+        gc.collect()
+        torch.cuda.empty_cache()
+    assert model is not None, f"no generator loaded: {LOAD_LOG}"
+    GPU_NAMES = f"{GPUS}x {torch.cuda.get_device_name(0)}"
+    print("GENERATOR", GEN_ID, DTYPE, "| GPUs", GPU_NAMES, "| skipped:", LOAD_LOG,
+          "| VRAM GB", [round(torch.cuda.memory_allocated(i) / 2**30, 1) for i in range(GPUS)])"""),
+code("""for start in range(0, len(todo), UPLOAD_EVERY):
+    if time.time() - SESSION_START > MAX_HOURS * 3600:
+        print("time budget reached; filtering what exists")
+        break
+    part = todo[start:start + UPLOAD_EVERY]
+    torch.manual_seed(SEED * 1_000_003 + part[0])  # same part, same sampling on a rerun
+    t0 = time.time()
+    results = generate(part)
+    seconds = (time.time() - t0) / len(part)
+    rows = [{"index": i, "seed": seeds[i].as_dict(), "generator": GEN_ID, "dtype": DTYPE, "code_sha": CODE_SHA,
+             "data_revision": DATA_REVISION, "output": text, "new_tokens": n, "gen_seconds": round(seconds, 2)}
+            for i, (text, n) in zip(part, results)]
+    body = "".join(json.dumps(r, ensure_ascii=False) + "\\n" for r in rows).encode()
+    api.upload_file(path_or_fileobj=body, path_in_repo=f"{RAW_PREFIX}part-{part[0]:05d}.ndjson", repo_id=DATA_REPO,
+                    repo_type="dataset", commit_message=f"synth raw {part[0]}-{part[-1]}")
+    print(f"part {part[0]:05d}: {len(rows)} chats, {sum(r['new_tokens'] for r in rows)} new tokens, "
+          f"{seconds:.1f} s/chat | {len(done) + start + len(part)}/{TARGET_RAW}")"""),
+code("""from collections import Counter
+from fym1.eval.lang import is_malagasy
+
+rows = sorted(raw_rows(), key=lambda r: r["index"])
+kept, dropped = synth.filter_conversations((synth.parse_conversation(r["output"]) for r in rows), real,
+                                           is_malagasy=is_malagasy)
+generators = sorted({(r["generator"], r["dtype"]) for r in rows})
+stats = synth.synth_stats(
+    raw=len(rows), kept=len(kept), dropped=dropped, by_generator=Counter(r["generator"] for r in rows),
+    meta={"seed": SEED, "few_shot_k": FEW_SHOT_K, "target_raw": TARGET_RAW,
+          "generator": ", ".join(g for g, _ in generators), "dtype": ", ".join(sorted({d for _, d in generators})),
+          "gpus": GPU_NAMES if todo else None, "code_sha": CODE_SHA, "data_revision": DATA_REVISION,
+          "gen_seconds": round(sum(r["gen_seconds"] for r in rows), 1),
+          "new_tokens": sum(r["new_tokens"] for r in rows)})
+synth.validate_stats(stats)
+uploads = {"synth/filtered.ndjson": "".join(json.dumps(r, ensure_ascii=False) + "\\n" for r in kept).encode(),
+           "synth/synth_stats.json": (json.dumps(stats, indent=2) + "\\n").encode()}
+if PROMOTE:
+    uploads["synth/synth_chats.jsonl"] = uploads["synth/filtered.ndjson"]
+for dest, body in uploads.items():
+    api.upload_file(path_or_fileobj=body, path_in_repo=dest, repo_id=DATA_REPO, repo_type="dataset",
+                    commit_message=f"synth filtered: {len(kept)}/{len(rows)} kept")
+with open(f"{OUTPUT}/synth_stats.json", "wb") as f:  # counts only (Kaggle: kernels output)
+    f.write(uploads["synth/synth_stats.json"])
+print("SYNTH_STATS", json.dumps(stats))"""),
+    ]
+
+
+NOTEBOOKS = {"00_baseline": baseline_cells, "01_train": train_cells, "04_synth": synth_cells}
 
 
 def build(name: str) -> str:
@@ -572,7 +755,7 @@ def main(argv: list[str] | None = None) -> int:
     for name in NOTEBOOKS:
         path = REPO_ROOT / "notebooks" / f"{name}.ipynb"
         text = build(name)
-        if path.read_text() != text:
+        if not path.exists() or path.read_text() != text:
             stale.append(path.name)
             if not args.check:
                 path.write_text(text)
