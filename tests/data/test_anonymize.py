@@ -33,7 +33,7 @@ def test_anonymize_keeps_short_prefixes_and_other_words():
 
 
 def test_common_words_never_prefix_match_names():
-    names = {"Mbolatiana Raharison": "Soa Rabe", "Volanirina Faranirina": "Hasina Ravelo"}
+    names = {"Mbolatiana Raharison": "Soa Rabe", "Volamena Faratiana": "Hasina Ravelo"}
     text = "Mbola tsy vita raha ny volana farany"
 
     assert anonymize(text, names) == text

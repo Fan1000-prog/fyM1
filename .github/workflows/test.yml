@@ -17,4 +17,6 @@ jobs:
           path: ~/.cache/huggingface/hub
           key: glotlid-v2-85cd6716494360367b75f642b5bc78667605d0b4
       - run: uv sync --all-groups
+      # poppler reads the paper PDF for the release name checks; without it they cannot run.
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - run: uv run pytest -q
