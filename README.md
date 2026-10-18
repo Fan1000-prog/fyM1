@@ -87,8 +87,8 @@ licence, so the base needs one too.
 | Training speed on a T4 (seconds per step) | <!-- n:sel-qwen-sec-step -->83.3<!-- /n --> | <!-- n:sel-gemma4-sec-step -->pending<!-- /n --> | <!-- n:sel-gemma3-sec-step -->122.4<!-- /n --> |
 | Licence | <!-- n:sel-qwen-license -->CC-BY-4.0<!-- /n --> | <!-- n:sel-gemma4-license -->Apache-2.0<!-- /n --> | <!-- n:sel-gemma3-license -->Gemma Terms of Use<!-- /n --> |
 
-Winner: AfriqueQwen3.5-9B-Instruct. It translates into Malagasy best, ties Gemma 4 on greetings and
-reading, and trains in 16-bit on a free GPU (Gemma 4 is expected to need slower 32-bit). Gemma 3 is only a
+Winner: AfriqueQwen3.5-9B-Instruct. Of the models measured so far, it translates English into Malagasy
+best (Gemma 4's score is still pending). It ties Gemma 4 on greetings and reading, and trains in 16-bit on a free GPU (Gemma 4 is expected to need slower 32-bit). Gemma 3 is only a
 comparison: its terms would make fy-m1 a Gemma derivative. Full table: the paper, Table 1.
 
 ## How it was made
@@ -158,7 +158,7 @@ and train on your own chats with `scripts/build_chats.py`. Kaggle and Colab step
 - **Code:** [Apache-2.0](LICENSE).
 - **Wikipedia text:** the formal chats are built from Malagasy Wikipedia text, which is
   [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). We credit it here. The model stays
-  CC-BY-4.0, but if you reuse that training text, its ShareAlike terms apply to it.
+  CC-BY-4.0. Anyone who reuses Malagasy Wikipedia text must follow its ShareAlike terms.
 - Gemma 3 was only a comparison. None of its outputs are in the training data.
 
 ## Credits

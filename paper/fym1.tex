@@ -80,7 +80,7 @@ Vocabulary trimming follows \citet{ushio-etal-2023-efficient}; layer pruning
 We describe the data but do not share it: part of it is private conversations. Only counts are
 published (\path{results/data_stats.json}, \path{results/data_gate.json}).
 
-\paragraph{Real chats.} The main source is one family's Messenger export (\fyDataThreads{} thread). All
+\paragraph{Real chats.} The main source is one family's Messenger export (threads used: \fyDataThreads{}). All
 participants consented to the use of their messages, and every sender's side is used as the assistant
 in turn. The export never leaves the data owner's laptop. A local script splits it into short
 multi-turn conversations on long gaps, merges back-to-back messages from the same sender, and replaces
@@ -94,9 +94,10 @@ owner review we first planned. Of \fyGateBefore{} cleaned conversations, it drop
 email, link or handle, \fyGateDroppedUnknown{} for too many unknown words and \fyGateDroppedFakes{} for
 needing more than five fake names. A word is kept only if a known-word list has it: common Malagasy
 words, Malagasy Wikipedia vocabulary \citep{wikipedia-dump}, Malagasy web text from HPLT 2.0
-\citep{hplt2}, and French and English words from \texttt{wordfreq} \citep{wordfreq}. French first names
+\citep{hplt2}, a short hand list of places and brands (\texttt{known\_names}), and French and English
+words from \texttt{wordfreq} \citep{wordfreq}. French first names
 from INSEE \citep{insee-prenoms} never count as known words. Any other word is replaced with a fake
-name; a word only the web-text list knows is never cleared in a name position. This over-masks rare
+name; in a name position (mid-sentence or after a person marker) only the hand list can clear a word. This over-masks rare
 words on purpose: \fyGateReplaced{} words were replaced in total, a median of \fyGateFakesMedian{} and at
 most \fyGateFakesMax{} per kept conversation. \fyGateKept{} conversations (\fyDataKeptMessages{}
 messages) passed.
@@ -130,7 +131,7 @@ licence: fy-m1 ships under a simple open licence, so the base must have one.
 
 Table~\ref{tab:selection} shows the measured values (\path{results/model_selection.json},
 \path{results/greeting_gate.json}). We chose \fyBaseModel{} (licence \fyBaseLicense{}). It has the
-best English$\to$Malagasy translation we measured (chrF++ \fySelQwenChrfEnMg{}, versus \fySelGemmaThreeChrfEnMg{}
+best English$\to$Malagasy translation of the models measured so far; Gemma~4's score is pending (chrF++ \fySelQwenChrfEnMg{}, versus \fySelGemmaThreeChrfEnMg{}
 for Gemma~3 12B; Gemma~4 12B: \fySelGemmaFourChrfEnMg{}). On the greeting gate it ties Gemma~4 12B
 (judge mean \fyGreetQwenMean{} versus \fyGreetGemmaFourMean{}; Malagasy replies \fyGreetQwenMalagasy{}
 versus \fyGreetGemmaFourMalagasy{}), and chat-format Belebele is equal within noise
@@ -280,8 +281,8 @@ safety-tested product.
 \paragraph{Licence.} fy-m1's weights are released under CC-BY-4.0, the base model's licence
 (\fyBaseLicense{}), with attribution to \citet{afriqueqwen}. The code is Apache-2.0. Gemma~3 was used only
 as a measured baseline; none of its outputs are in the training data. The formal chats are built from
-Malagasy Wikipedia text, which is CC-BY-SA 4.0. We credit it here. The weights stay CC-BY-4.0, but if
-you reuse that training text, its ShareAlike terms apply to it.
+Malagasy Wikipedia text, which is CC-BY-SA 4.0. We credit it here. The weights stay CC-BY-4.0. Anyone who
+reuses Malagasy Wikipedia text must follow its ShareAlike terms.
 
 \paragraph{Credits.} Base model: AfriqueQwen by McGill-NLP \citep{afriqueqwen}. Data cleaning uses
 \texttt{wordfreq} by Robyn Speer \citep{wordfreq} (word data CC-BY-SA 4.0; derived word lists keep that

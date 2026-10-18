@@ -134,7 +134,7 @@ the base model, AfriqueQwen by McGill-NLP. Code in the GitHub repo is Apache-2.0
 Malagasy Wikipedia, HPLT 2.0, INSEE first names, Belebele, FLORES+) are in the GitHub README.
 
 The formal chats are built from Malagasy Wikipedia text, which is CC-BY-SA 4.0. We credit it here. The
-model stays CC-BY-4.0, but if you reuse that training text, its ShareAlike terms apply to it.
+model stays CC-BY-4.0. Anyone who reuses Malagasy Wikipedia text must follow its ShareAlike terms.
 
 ## Citation
 
