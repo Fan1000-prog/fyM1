@@ -20,8 +20,8 @@ def test_metadata_is_private_gpu_t4_with_internet():
 
 
 def test_04_synth_is_a_private_gpu_t4_kernel_with_internet():
-    meta = push.kernel_metadata("croixrousse69", "04_synth")
-    assert meta["id"] == "croixrousse69/fym1-04-synth"
+    meta = push.kernel_metadata("someone", "04_synth")
+    assert meta["id"] == "someone/fym1-04-synth"
     assert meta["code_file"] == "04_synth.ipynb"
     assert meta["is_private"] is True and meta["enable_gpu"] is True and meta["enable_internet"] is True
     assert meta["machine_shape"] == "NvidiaTeslaT4"
