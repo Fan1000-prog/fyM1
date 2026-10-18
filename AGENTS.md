@@ -1,5 +1,7 @@
 # fyM1 — agent conventions
 
+New session or new team: start at `docs/project-update.md` §0.
+
 Read `docs/superpowers/specs/2026-10-17-resaka-design.md` (§7 and §8 override earlier sections) and
 `docs/superpowers/plans/2026-10-17-fym1-v0.1.md` before working.
 
