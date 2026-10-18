@@ -10,6 +10,7 @@ from fym1.data.gate import (
     MAX_FAKES_PER_CONVERSATION,
     contact_left,
     has_long_number,
+    names_to_mask,
     pool_names_in,
     strict_gate,
 )
@@ -388,3 +389,10 @@ def test_lowercase_first_names_that_are_everyday_words_stay(text):
     result = strict_gate([record("a", text, "eny tsara ihany koa, eny tsara ihany koa")], fake_names=[])
 
     assert texts(result)[0] == text
+
+
+def test_names_to_mask_counts_what_strict_gate_replaces():
+    turns = ("Salama Zebulon, aiza ianao?", "Merci be, Rindra! Efa tonga i Zebulon")
+    gated = strict_gate([record("a", *turns)], fake_names=["Rindra"])
+    assert names_to_mask(turns, fake_names=["Rindra"]) == gated.counts["tokens_replaced"] == 2
+    assert names_to_mask(("Merci be, Rindra!",), fake_names=["Rindra"]) == 0

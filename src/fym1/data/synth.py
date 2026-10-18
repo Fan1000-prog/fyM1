@@ -16,10 +16,9 @@ from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 
-from fym1.data.anonymize import FIRST_NAMES, SURNAMES, Anonymizer, compare_key
-from fym1.data.leftovers import leftover_names
+from fym1.data.anonymize import FALLBACK_NAME, FIRST_NAMES, SURNAMES, Anonymizer
+from fym1.data.gate import names_to_mask
 from fym1.data.segment import Conversation
-from fym1.eval.lang import MALAGASY_WORDS
 from fym1.eval.metrics import NgramIndex
 
 # Everyday situations; English, so the generator reads them reliably. The chat itself is in Malagasy.
@@ -55,16 +54,7 @@ MAX_CHAT_CHARS = 3000
 MAX_EXAMPLE_CHARS = 1500  # few-shot examples longer than this make the prompt too long
 NEW_CHAT_HEADER = "### New chat"
 
-# Capitalised words that are not names: French and texting words people start lines with.
-NOT_NAMES = frozenset(
-    compare_key(w)
-    for w in """
-    merci salut bonjour bonsoir bonne bon oui non mais donc bref alors enfin voila voilà déjà deja désolé desole
-    je tu il elle on nous vous ils moi toi lui quoi comment pourquoi quand ou où ça ca cest c'est trop grave
-    super cool top vraiment courage bisous bises allez allo allô attends attend normal sérieux serieux pardon
-    haha hahaha hihi mdr lol ptdr ouf bah ben hein ok okay oki dac stp svp rdv
-    """.split()
-) | frozenset(compare_key(w) for w in MALAGASY_WORDS)
+FAKE_POOL = (*FIRST_NAMES, *SURNAMES, FALLBACK_NAME)  # names the anonymiser writes: never a real person
 
 # Synthetic chats are training data, so the generator's licence reaches fy-m1. Owner decision 2026-10-18: fy-m1
 # ships under a simple open licence, so only permissively licensed generators (Gemma 3's terms of use would make
@@ -248,8 +238,11 @@ def _fits_length(messages: Conversation) -> bool:
 
 
 def _has_unknown_name(messages: Conversation) -> bool:
-    names = leftover_names((t["content"] for t in messages), fake_names=FIRST_NAMES + SURNAMES)
-    return any(compare_key(word) not in NOT_NAMES for word in names)
+    """The real-data gate would replace a word here: synthetic chats are dropped for it, never patched.
+
+    Same lists and name-slot rule as fym1.data.gate (lead decision 30); the fake-name pool passes.
+    """
+    return names_to_mask((t["content"] for t in messages), fake_names=FAKE_POOL) > 0
 
 
 def _first_failure(
