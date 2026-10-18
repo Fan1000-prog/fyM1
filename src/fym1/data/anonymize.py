@@ -16,11 +16,11 @@ FIRST_NAMES = (
     "Soa", "Hasina", "Tiana", "Mamy", "Lova", "Fara", "Haja", "Rindra", "Mialy", "Toky",
     "Kanto", "Onja", "Faly", "Sitraka", "Tahina", "Andry", "Hanitra", "Volana", "Miora", "Fitia",
     "Aina", "Fenitra", "Herizo", "Lalaina", "Mahery", "Nomena", "Ravo", "Santatra", "Tsiry", "Vola",
-    "Zoary", "Holy", "Ando", "Bodo", "Dera", "Elia", "Finaritra", "Hoby", "Iony", "Koloina",
+    "Zoary", "Holy", "Tantely", "Bodo", "Dera", "Elia", "Finaritra", "Hoby", "Iony", "Koloina",
 )  # fmt: skip
 SURNAMES = (
     "Rabe", "Ravelo", "Rasoa", "Rabemananjara", "Andrianina", "Razafy", "Rajaonarison",
-    "Ramanantsoa", "Randrianarisoa", "Rasolofo", "Ratsimba", "Rafidy", "Rahaga", "Ralay",
+    "Ramanantsoa", "Randrianarisoa", "Ramaroson", "Ratsimba", "Rafidy", "Rahaga", "Ralay",
     "Ranaivo", "Raveloson", "Rakotondrabe", "Razanakoto", "Rabarison", "Rajoelina",
 )  # fmt: skip
 # Only used if every pool name clashes with a real contact.
