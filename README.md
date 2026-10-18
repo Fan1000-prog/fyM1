@@ -4,7 +4,8 @@ An open AI model that chats in everyday Malagasy — the way people really text,
 
 "fy" means sweet or pleasant in Malagasy. M is for Malagasy. 1 is the first version.
 
-**[Try it](#try-it)** · [Paper](paper/fym1.pdf) · [Model card](MODEL_CARD.md) · [Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)
+**[Try it](#try-it)** · [Paper](paper/fym1.pdf) · [Model card](MODEL_CARD.md) ·
+[Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)
 
 > **Status: v0.1.** *pending* means not measured yet. Coming in v0.2: the full panel's blind human
 > ratings, each model's answer to each test prompt, and the layer-pruning experiment.
@@ -30,7 +31,8 @@ everyday Malagasy chat, trained for $0 and shared under an open licence.
 
 - **Chat with it:** [fy-m1-chat](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-chat) — free, no login.
   Try "Salama e!" or "Inona no vaovao?".
-- **Download the model:** <!-- n:model-repo -->Fan1000-Prog/fy-m1-9B<!-- /n --> on [Hugging Face](https://huggingface.co/Fan1000-Prog).
+- **Download the model:** <!-- n:model-repo -->Fan1000-Prog/fy-m1-9B<!-- /n --> on
+  [Hugging Face](https://huggingface.co/Fan1000-Prog).
   The GGUF file runs with llama.cpp and Ollama.
 - **Read the paper:** [paper/fym1.pdf](paper/fym1.pdf)
 - **Help us rate (native speakers):** [fy-m1-arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena) —
@@ -83,11 +85,11 @@ licence, so the base needs one too.
 | Greeting gate, blind judge mean (1-5) | <!-- n:greet-qwen-mean -->2.90<!-- /n --> | <!-- n:greet-gemma4-mean -->2.85<!-- /n --> | <!-- n:greet-gemma3-mean -->1.90<!-- /n --> |
 | Greeting answers in Malagasy | <!-- n:greet-qwen-malagasy -->95.0%<!-- /n --> | <!-- n:greet-gemma4-malagasy -->90.0%<!-- /n --> | <!-- n:greet-gemma3-malagasy -->80.0%<!-- /n --> |
 | Training speed on a T4 (seconds per step) | <!-- n:sel-qwen-sec-step -->83.3<!-- /n --> | <!-- n:sel-gemma4-sec-step -->pending<!-- /n --> | <!-- n:sel-gemma3-sec-step -->122.4<!-- /n --> |
-| Licence | CC-BY-4.0 | Apache-2.0 | Gemma Terms of Use |
+| Licence | <!-- n:sel-qwen-license -->CC-BY-4.0<!-- /n --> | <!-- n:sel-gemma4-license -->Apache-2.0<!-- /n --> | <!-- n:sel-gemma3-license -->Gemma Terms of Use<!-- /n --> |
 
 Winner: AfriqueQwen3.5-9B-Instruct. It translates into Malagasy best, ties Gemma 4 on greetings and
-reading, and trains in 16-bit on a free GPU (Gemma 4 is expected to need slower 32-bit). Gemma 3 is only a comparison: its terms would make fy-m1 a
-Gemma derivative. Full table: the paper, Table 1.
+reading, and trains in 16-bit on a free GPU (Gemma 4 is expected to need slower 32-bit). Gemma 3 is only a
+comparison: its terms would make fy-m1 a Gemma derivative. Full table: the paper, Table 1.
 
 ## How it was made
 
@@ -150,14 +152,19 @@ and train on your own chats with `scripts/build_chats.py`. Kaggle and Colab step
 
 ## Licence
 
-- **Model:** CC-BY-4.0, the same as the base model, <!-- n:base-model -->McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1<!-- /n -->
+- **Model:** CC-BY-4.0, the same as the base model,
+  <!-- n:base-model -->McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1<!-- /n -->
   (<!-- n:base-license -->CC-BY-4.0<!-- /n -->). If you use it, credit fy-m1 and the base model.
 - **Code:** [Apache-2.0](LICENSE).
+- **Wikipedia text:** the formal chats are built from Malagasy Wikipedia text, which is
+  [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). We credit it here. The model stays
+  CC-BY-4.0, but if you reuse that training text, its ShareAlike terms apply to it.
 - Gemma 3 was only a comparison. None of its outputs are in the training data.
 
 ## Credits
 
-- Base model: [AfriqueQwen3.5-9B-50Langs-Instruct-v1](https://huggingface.co/McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1)
+- Base model:
+  [AfriqueQwen3.5-9B-50Langs-Instruct-v1](https://huggingface.co/McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1)
   by McGill-NLP, CC-BY-4.0.
 - Tests: [Belebele](https://huggingface.co/datasets/facebook/belebele) and
   [FLORES+](https://huggingface.co/datasets/openlanguagedata/flores_plus); language ID with
@@ -174,9 +181,8 @@ and train on your own chats with `scripts/build_chats.py`. Kaggle and Colab step
   word case counts from its text, and the formal slice uses Malagasy Wikipedia, licensed
   [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 - [HPLT 2.0 cleaned](https://huggingface.co/datasets/HPLT/HPLT2.0_cleaned) (Malagasy, `plt_Latn`): the data
-  cleaner's Malagasy web-text word list (`mg_corpus_words.txt`) uses word case counts from it. HPLT licenses the
-  packaging, metadata and annotations under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) and does
-  not own the crawled web text (Internet Archive, Common Crawl); only a word list, never text, is kept here.
+  cleaner's Malagasy web-text word list (`mg_corpus_words.txt`) is built from it. We keep only that word list,
+  never the text.
 - [INSEE fichier des prénoms](https://www.insee.fr/fr/statistiques/7633685): the French first-name list,
   [Licence Ouverte / Etalab 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence/).
 

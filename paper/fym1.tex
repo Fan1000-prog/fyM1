@@ -88,7 +88,8 @@ names, nicknames (also inside message text and handles), phone numbers, emails a
 placeholders (\path{docs/anonymisation.md}).
 
 \paragraph{Strict automatic gate.} No person reads the cleaned text; a strict automatic gate replaces the
-owner review we first planned. Of \fyGateBefore{} cleaned conversations, it dropped \fyGateDropped{}:
+owner review we first planned. Of \fyGateBefore{} cleaned conversations, it dropped \fyGateDropped{}
+(a conversation can count under more than one reason):
 \fyGateDroppedNumber{} for a long digit run (a possible phone number), \fyGateDroppedContact{} for an
 email, link or handle, \fyGateDroppedUnknown{} for too many unknown words and \fyGateDroppedFakes{} for
 needing more than five fake names. A word is kept only if a known-word list has it: common Malagasy
@@ -135,7 +136,7 @@ for Gemma~3 12B; Gemma~4 12B: \fySelGemmaFourChrfEnMg{}). On the greeting gate i
 versus \fyGreetGemmaFourMalagasy{}), and chat-format Belebele is equal within noise
 (\fySelQwenBelebeleChat{} versus \fySelGemmaFourBelebeleChat{}). Its T4 smoke ran in 16-bit at
 \fySelQwenSecStep{} seconds per step (Gemma~3: \fySelGemmaThreeSecStep{}; Gemma~4:
-\fySelGemmaFourSecStep{}, expected to be slower because it is expected to need 32-bit on a T4), which saves free GPU time.
+\fySelGemmaFourSecStep{}, expected to be slower because it likely needs 32-bit on a T4), which saves free GPU time.
 We did not wait for Gemma~4's FLORES+ and smoke runs; it stays a comparison row.
 
 Gemma~3 12B \citep{gemma3} is a measured baseline only: its terms of use would make fy-m1 a Gemma
@@ -278,12 +279,14 @@ safety-tested product.
 \section{Licence and credits}
 \paragraph{Licence.} fy-m1's weights are released under CC-BY-4.0, the base model's licence
 (\fyBaseLicense{}), with attribution to \citet{afriqueqwen}. The code is Apache-2.0. Gemma~3 was used only
-as a measured baseline; none of its outputs are in the training data.
+as a measured baseline; none of its outputs are in the training data. The formal chats are built from
+Malagasy Wikipedia text, which is CC-BY-SA 4.0. We credit it here. The weights stay CC-BY-4.0, but if
+you reuse that training text, its ShareAlike terms apply to it.
 
 \paragraph{Credits.} Base model: AfriqueQwen by McGill-NLP \citep{afriqueqwen}. Data cleaning uses
 \texttt{wordfreq} by Robyn Speer \citep{wordfreq} (word data CC-BY-SA 4.0; derived word lists keep that
 licence and attribution), word case counts from Malagasy Wikipedia \citep{wikipedia-dump} (CC-BY-SA 4.0),
-HPLT 2.0 cleaned Malagasy web text \citep{hplt2} (packaging CC0 1.0; only a word list is kept), and the
+HPLT 2.0 cleaned Malagasy web text \citep{hplt2} (we keep only a word list, never the text), and the
 INSEE first-name file \citep{insee-prenoms} (Licence Ouverte / Etalab 2.0). The formal slice uses Malagasy
 Wikipedia. Evaluation uses Belebele \citep{bandarkar-etal-2024-belebele}, FLORES+ \citep{floresplus} and
 GlotLID \citep{kargaran-etal-2023-glotlid}. Training uses Unsloth \citep{unsloth}, on free GPUs from Kaggle

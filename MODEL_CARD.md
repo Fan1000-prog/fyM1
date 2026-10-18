@@ -17,7 +17,8 @@ tags:
 # fy-m1
 
 fy-m1 chats in everyday Malagasy: short, friendly, mixing in French, with texting spelling and emoji.
-It is a QLoRA fine-tune of <!-- n:base-model -->McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1<!-- /n -->, by Fandresena Raharinaivo.
+It is a QLoRA fine-tune of <!-- n:base-model -->McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1<!-- /n -->,
+by Fandresena Raharinaivo.
 
 **Status: v0.1.** *pending* means not measured yet. Coming in v0.2: the full panel's blind human
 ratings and each model's answer to each test prompt.
@@ -71,7 +72,8 @@ Described here, not shared. Part of it is private conversations.
 - **Synthetic chats:** <!-- n:synth-kept -->pending<!-- /n --> everyday chats written by
   <!-- n:synth-generator -->pending<!-- /n --> (licence <!-- n:synth-licence -->pending<!-- /n -->), run by us,
   from cleaned examples. Only permissively licensed generators are allowed.
-- **Formal slice:** <!-- n:data-formal -->pending<!-- /n --> short chats from Malagasy Wikipedia, for facts and spelling.
+- **Formal slice:** <!-- n:data-formal -->pending<!-- /n --> short chats from Malagasy Wikipedia, for facts and
+  spelling.
 - **Identity chats:** <!-- n:data-identity -->pending<!-- /n --> "who are you?" answers and polite refusals,
   written by the owner.
 - No outputs from closed-API models. Gemma 3 was only a comparison baseline; none of its outputs are used.
@@ -130,6 +132,9 @@ TODO(final): taken only from the public test prompts in `eval/prompts.jsonl`, ne
 CC-BY-4.0, the same as the base model (<!-- n:base-license -->CC-BY-4.0<!-- /n -->). Credit fy-m1 and
 the base model, AfriqueQwen by McGill-NLP. Code in the GitHub repo is Apache-2.0. Data credits (wordfreq,
 Malagasy Wikipedia, HPLT 2.0, INSEE first names, Belebele, FLORES+) are in the GitHub README.
+
+The formal chats are built from Malagasy Wikipedia text, which is CC-BY-SA 4.0. We credit it here. The
+model stays CC-BY-4.0, but if you reuse that training text, its ShareAlike terms apply to it.
 
 ## Citation
 
