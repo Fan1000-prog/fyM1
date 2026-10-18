@@ -224,11 +224,20 @@ PASSING_IDENTITY = {"n": 34, "passed": 32, "pass_rate": 32 / 34, "threshold": 0.
         ({"foreign_identity": 1, "gate_passed": False}, "identity check failed"),
         ({"foreign_identity": 1}, "does not match"),
         ({"pass_rate": 0.5}, "does not match"),
+        ({"threshold": 0.5, "pass_rate": 0.6}, "threshold is below"),
+        ({"threshold": 0.89}, "threshold is below"),
+        ({"threshold": 0.95, "gate_passed": False}, "identity check failed"),
     ],
 )
 def test_identity_gate_needs_a_consistent_pass(change, problem):
     problems = numbers.identity_gate_problems({numbers.IDENTITY_FILE: PASSING_IDENTITY | change})
     assert problems == [] if problem is None else any(problem in p for p in problems)
+
+
+def test_identity_gate_floor_matches_the_check():
+    from fym1.eval.identity_check import PASS_THRESHOLD
+
+    assert numbers.MIN_IDENTITY_THRESHOLD == PASS_THRESHOLD
 
 
 def test_identity_gate_without_report_is_left_to_missing_values():

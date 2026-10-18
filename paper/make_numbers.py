@@ -48,6 +48,8 @@ README_START = "<!-- numbers:start -->"
 README_END = "<!-- numbers:end -->"
 LEAK_FILE = "eval/leak_review.json"
 IDENTITY_FILE = "eval/identity_check.json"
+# The identity gate threshold the paper promises (fym1.eval.identity_check.PASS_THRESHOLD); a lower one blocks.
+MIN_IDENTITY_THRESHOLD = 0.9
 INLINE = re.compile(r"<!-- n:([\w-]+) -->.*?<!-- /n -->")
 YAML_LINE = re.compile(r"^(?P<head>\s*[\w-]+:[ \t]*)(?P<value>.*?)(?P<tail>[ \t]+#[ \t]*n:(?P<name>[\w-]+))$", re.M)
 
@@ -322,11 +324,14 @@ def leak_gate_problems(results: dict[str, Any]) -> list[str]:
 
 
 def identity_gate_problems(results: dict[str, Any]) -> list[str]:
-    """Why the identity check blocks release: it failed, or its verdict does not match its own counts."""
+    """Why the identity check blocks release: it failed, ran with a threshold below 0.9, or its verdict does not
+    match its own counts."""
     report = results.get(IDENTITY_FILE)
     values = {key: lookup(report, key) for key in ("pass_rate", "threshold", "foreign_identity", "gate_passed")}
     if any(v is None for v in values.values()):
         return []  # not measured yet; reported as missing values
+    if _number(values["threshold"]) < MIN_IDENTITY_THRESHOLD:
+        return [f"{IDENTITY_FILE}: threshold is below {MIN_IDENTITY_THRESHOLD}; rerun it with the default threshold"]
     recomputed = _number(values["foreign_identity"]) == 0 and _number(values["pass_rate"]) >= _number(values["threshold"])
     if values["gate_passed"] is not recomputed:
         return [f"{IDENTITY_FILE}: gate_passed does not match pass_rate, threshold and foreign_identity; rerun it"]
