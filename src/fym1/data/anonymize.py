@@ -378,15 +378,15 @@ _HIDING_CATEGORIES = frozenset({"Cf", "Me"})
 def _is_stray(c: str) -> bool:
     if c in _ZERO_WIDTH:
         return True
-    return unicodedata.category(c) == "Mn" and not _is_variation_selector(c)
+    return unicodedata.category(c) == "Mn" and not is_variation_selector(c)
 
 
-def _is_variation_selector(c: str) -> bool:
+def is_variation_selector(c: str) -> bool:
     return "\ufe00" <= c <= "\ufe0f" or "\U000e0100" <= c <= "\U000e01ef"
 
 
 def _hides_a_letter(c: str) -> bool:
-    return unicodedata.category(c) in _HIDING_CATEGORIES or _is_variation_selector(c)
+    return unicodedata.category(c) in _HIDING_CATEGORIES or is_variation_selector(c)
 
 
 def normalise(text: str) -> str:
@@ -411,6 +411,15 @@ def fold(s: str) -> str:
 def compare_key(word: str) -> str:
     """How words are compared: folded, with stretched letters collapsed ("SOAAA" -> "soa")."""
     return re.sub(r"(.)\1+", r"\1", fold(word))
+
+
+def name_keys(name: str) -> list[str]:
+    """Compare keys of a real name's words, read through the same `normalise()` as the text.
+
+    The one entry point for turning a real name into match keys: a zero-width space or soft hyphen
+    inside a display name ("Ni\u200brina") must not split it where the normalised text does not.
+    """
+    return [compare_key(part) for part in WORD.findall(normalise(name))]
 
 
 # Words found in the most Malagasy Wikipedia articles, most widespread first
@@ -486,12 +495,12 @@ class Anonymizer:
         self._full_names = {}  # compare keys of a multi-word name -> fake
         self._exact = {}  # compare key of a name part -> fake part
         for real in sorted(names):
-            real_parts, fake_parts = WORD.findall(real), names[real].split()
-            if len(real_parts) > 1:
-                self._full_names[tuple(compare_key(p) for p in real_parts)] = names[real]
-            for i, part in enumerate(real_parts):
+            keys, fake_parts = name_keys(real), names[real].split()
+            if len(keys) > 1:
+                self._full_names[tuple(keys)] = names[real]
+            for i, key in enumerate(keys):
                 # first name -> fake first name, any other part -> fake surname
-                self._exact.setdefault(compare_key(part), fake_parts[min(i, 1, len(fake_parts) - 1)])
+                self._exact.setdefault(key, fake_parts[min(i, 1, len(fake_parts) - 1)])
         self._longest_name = max(map(len, self._full_names), default=1)
         self._prefixable = [(part, fake) for part, fake in self._exact.items() if len(part) >= MIN_NAME_PREFIX]
         self._fake_words = {compare_key(w) for fake in names.values() for w in fake.split()}
@@ -626,7 +635,7 @@ def assign_fake_names(real_names: Iterable[str]) -> dict[str, str]:
     Deleted-account display names ("Facebook User") are left out.
     """
     real = sorted({name for name in real_names if name.casefold() not in DELETED_ACCOUNT_NAMES})
-    real_keys = {compare_key(w) for name in real for w in WORD.findall(name)}
+    real_keys = {key for name in real for key in name_keys(name)}
     firsts = [f for f in FIRST_NAMES if _is_free(f, real_keys)]
     lasts = [s for s in SURNAMES if _is_free(s, real_keys)]
     # surname-major order, so the first len(firsts) people all get different first names
