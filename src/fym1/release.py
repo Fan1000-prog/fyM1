@@ -1,8 +1,8 @@
 """Public release snapshot: tracked files of one clean commit, minus private paths, checked for names and secrets.
 
 The public repo is a fresh single-commit repo built from this snapshot, so private git history never ships.
-Release blocker (lead decision 21): the export's sender names are read at run time, removed from every word/name
-list, and searched for in every file. Everything this module reports is a count or a repo path; it never returns
+Release blocker (lead decision 21): the export's sender names are read at run time, removed from the hand-written
+name lists, and searched for in every file except the lists a script rebuilds from public data. Everything this module reports is a count or a repo path; it never returns
 a sender name, a message text or a matched secret value.
 """
 
@@ -41,10 +41,33 @@ EXCLUDES: tuple[Exclude, ...] = (
                                  "the public account is README, MODEL_CARD, paper and docs/anonymisation.md"),
     Exclude("scripts/serve_hf_token_once.py", "operator-only: hands the local HF token to the browser agent"),
     Exclude("tests/test_serve_hf_token_once.py", "tests the excluded scripts/serve_hf_token_once.py"),
+    Exclude("results/release_check.json", "this tool's own counts report: a private build record of what the "
+                                          "snapshot checked"),
 )
 
-# Word/name lists the export's sender names are removed from. Shipped under their own licences (see NOTICE).
+# Word/name lists, shipped under their own licences (see NOTICE).
 LIST_GLOBS: tuple[str, ...] = ("src/fym1/data/*.txt",)
+# Hand-edited lists: the export's sender names are removed from these. Nobody can rebuild them, so a removal
+# leaves no trace.
+HAND_LISTS: dict[str, str] = {
+    "src/fym1/data/mg_first_names.txt": "hand-edited Malagasy given names",
+    "src/fym1/data/mg_known_names.txt": "hand-edited places, brands and other non-person words",
+    "src/fym1/data/name_deny_list.txt": "hand-edited Malagasy given names that are also everyday words",
+}
+# Lists a script writes from public data. They are shipped exactly as built and the name scan skips them:
+# anyone can rebuild one and diff it, so a removed entry would point at a sender, and a common word in one
+# reveals nothing about the export. Secrets and private ids are still checked in them.
+_KNOWN_WORDS = "reproducible from public data by scripts/build_known_words.py"
+GENERATED_LISTS: dict[str, str] = {
+    "src/fym1/data/en_words.txt": f"{_KNOWN_WORDS} (wordfreq)",
+    "src/fym1/data/fr_words.txt": f"{_KNOWN_WORDS} (wordfreq)",
+    "src/fym1/data/first_names.txt": f"{_KNOWN_WORDS} (INSEE)",
+    "src/fym1/data/wordlike_first_names.txt": f"{_KNOWN_WORDS} (INSEE, wordfreq, Wikipedia)",
+    "src/fym1/data/mg_wiki_words.txt": f"{_KNOWN_WORDS} (Malagasy Wikipedia)",
+    "src/fym1/data/mg_corpus_words.txt": f"{_KNOWN_WORDS} (HPLT 2.0)",
+    "src/fym1/data/mg_common_words.txt": "reproducible from public data by scripts/build_common_words.py "
+                                         "(Malagasy Wikipedia)",
+}
 DATA_LICENCES: dict[str, str] = {
     "src/fym1/data/en_words.txt": "derived from wordfreq 3.1 by Robyn Speer (https://github.com/rspeer/wordfreq); "
                                   "word data CC BY-SA 4.0",
@@ -65,7 +88,6 @@ DATA_LICENCES: dict[str, str] = {
     "src/fym1/data/name_deny_list.txt": "hand list, this repo (Apache-2.0)",
 }
 NOTICE_NAME = "NOTICE"
-REPORT_NAME = "RELEASE_CHECK.json"
 
 MIN_NAME_TOKEN = 3  # shorter tokens ("ny", initials) are everyday words or letters; counted as skipped
 # Meta's label for a deleted or unknown account: not a person's name.
@@ -301,9 +323,8 @@ def notice_text() -> str:
         "",
         "wordfreq (https://github.com/rspeer/wordfreq) is by Robyn Speer. Its word frequency data is licensed",
         "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); the lists derived from it above are shared",
-        "under the same licence. Changes: lists were reduced to the most frequent words, folded to lower case",
-        "without accents, and entries were removed for privacy when this snapshot was made (counts in",
-        f"{REPORT_NAME}). Regenerate the lists with `uv run python scripts/build_known_words.py`.",
+        "under the same licence. Changes: lists were reduced to the most frequent words and folded to lower case",
+        "without accents. Regenerate the lists with `uv run python scripts/build_known_words.py`.",
         "",
     ]
     return "\n".join(lines)
@@ -345,7 +366,7 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path) -> Report:
         raise RefusedError(f"{NOTICE_NAME} already tracked; merge the licence notes by hand")
     (out / NOTICE_NAME).write_text(notice_text(), encoding="utf-8")
 
-    for path in filter(is_list_file, kept):
+    for path in (p for p in kept if p in HAND_LISTS):
         text, removed = strip_list((out / path).read_text("utf-8"), names)
         if removed:
             (out / path).write_text(text, encoding="utf-8")
@@ -357,7 +378,7 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path) -> Report:
         if text is None:
             report.unscannable.append(path)
             continue
-        if hits := count_name_hits(text, names) + count_name_hits(path, names):
+        if hits := (0 if path in GENERATED_LISTS else count_name_hits(text, names)) + count_name_hits(path, names):
             report.name_hits[path] = hits
         if secrets := secret_hits(path, text):
             report.secret_hits[path] = dict(sorted(secrets.items()))

@@ -104,7 +104,7 @@ def test_secret_hits_env_files_and_email_allow_list():
 # ---- end to end -----------------------------------------------------------------------------------------------
 
 
-def test_snapshot_drops_excluded_paths_strips_lists_and_passes(tmp_path):
+def test_snapshot_drops_excluded_paths_strips_hand_lists_only_and_passes(tmp_path):
     repo = make_repo(tmp_path, CLEAN_FILES)
     out = tmp_path / "public"
     report = build_snapshot(repo, "HEAD", out, make_export(tmp_path))
@@ -112,8 +112,14 @@ def test_snapshot_drops_excluded_paths_strips_lists_and_passes(tmp_path):
     assert not (out / "AGENTS.md").exists() and not (out / "docs/superpowers").exists()
     assert not (out / ".git").exists()
     assert (out / "src/fym1/data/mg_first_names.txt").read_text() == "# hand list\nmialy\nfanja\n"
-    assert report.list_entries_removed == {"src/fym1/data/fr_words.txt": 1, "src/fym1/data/mg_first_names.txt": 1}
-    assert "CC BY-SA 4.0" in (out / "NOTICE").read_text()
+    # A generated list ships exactly as built (a rebuild + diff would expose a removal) and is not name-scanned.
+    assert (out / "src/fym1/data/fr_words.txt").read_text() == CLEAN_FILES["src/fym1/data/fr_words.txt"]
+    assert report.list_entries_removed == {"src/fym1/data/mg_first_names.txt": 1}
+    assert report.name_hits == {}
+    notice = (out / "NOTICE").read_text()
+    assert "CC BY-SA 4.0" in notice
+    assert not any(word in notice.lower() for word in ("privacy", "removed", "release_check"))
+    assert sorted(p.name for p in out.iterdir()) == ["NOTICE", "README.md", "src"]
     assert {e["path"] for e in report.excluded} == {"AGENTS.md", "docs/superpowers/plan.md"}
     assert "AGENTS.md" not in report.excludes_unmatched
 
@@ -125,11 +131,12 @@ def test_name_and_secret_hits_fail_and_never_leak(tmp_path, capsys):
     code = cli.main(["--repo", str(repo), "--export", str(make_export(tmp_path)), "--out", str(out),
                      "--results", str(tmp_path / "results/release_check.json")])
     assert code == 1
-    report = json.loads((out / release.REPORT_NAME).read_text())
+    assert not list(out.rglob("*.json"))  # the report never goes into the snapshot
+    report = json.loads((tmp_path / "results/release_check.json").read_text())
     assert report["ok"] is False
     assert report["names"]["hits_per_file"] == {"docs/notes.md": 1, "<redacted path 1>": 1}
     assert report["secrets"]["hits_per_file"] == {"docs/notes.md": {"hf_token": 1}}
-    written = (out / release.REPORT_NAME).read_text() + (tmp_path / "results/release_check.json").read_text()
+    written = (tmp_path / "results/release_check.json").read_text()
     printed = capsys.readouterr()
     for blob in (written, printed.out + printed.err):
         assert "zafy" not in blob.lower() and "bodo" not in blob.lower() and FAKE_HF not in blob
@@ -181,7 +188,18 @@ def test_symlink_is_refused_unless_excluded(tmp_path):
 
 def test_cli_refusal_exits_2(tmp_path):
     repo = make_repo(tmp_path, CLEAN_FILES)
-    assert cli.main(["--repo", str(repo), "--export", str(make_export(tmp_path)), "--out", str(repo / "x")]) == 2
+    results = str(tmp_path / "r.json")
+    assert cli.main(["--repo", str(repo), "--export", str(make_export(tmp_path)), "--out", str(repo / "x"),
+                     "--results", results]) == 2
+
+
+def test_cli_refuses_results_inside_the_snapshot(tmp_path, capsys):
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    out = tmp_path / "public"
+    assert cli.main(["--repo", str(repo), "--export", str(make_export(tmp_path)), "--out", str(out),
+                     "--results", str(out / "check.json")]) == 2
+    assert "outside --out" in capsys.readouterr().err
+    assert not out.exists()
 
 
 # ---- policy on this repo --------------------------------------------------------------------------------------
@@ -198,6 +216,25 @@ def test_every_exclude_has_a_reason():
 def test_every_shipped_list_file_has_a_licence_line():
     lists = {p for p in tracked() if release.is_list_file(p) and not release.exclusion_reason(p)}
     assert lists == set(release.DATA_LICENCES)
+
+
+def test_every_list_is_either_hand_written_or_generated_with_a_reason():
+    lists = {p for p in tracked() if release.is_list_file(p)}
+    assert not set(release.HAND_LISTS) & set(release.GENERATED_LISTS)
+    assert lists == set(release.HAND_LISTS) | set(release.GENERATED_LISTS)
+    assert all(reason.strip() for reason in [*release.HAND_LISTS.values(), *release.GENERATED_LISTS.values()])
+
+
+@pytest.mark.parametrize("path", sorted(release.GENERATED_LISTS))
+def test_generated_list_is_written_by_its_build_script(path):
+    script = "build_common_words.py" if path.endswith("mg_common_words.txt") else "build_known_words.py"
+    assert script in release.GENERATED_LISTS[path]
+    assert Path(path).name in (REPO_ROOT / "scripts" / script).read_text("utf-8")
+
+
+@pytest.mark.parametrize("path", sorted(release.HAND_LISTS))
+def test_hand_list_says_it_is_hand_written(path):
+    assert (REPO_ROOT / path).read_text("utf-8").startswith("# Hand list")
 
 
 def test_no_shipped_file_imports_an_excluded_script():
