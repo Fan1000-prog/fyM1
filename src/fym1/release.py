@@ -10,6 +10,7 @@ or a matched secret value.
 
 import fnmatch
 import gzip
+import hashlib
 import html
 import io
 import json
@@ -103,6 +104,16 @@ BOMS = ((b"\xef\xbb\xbf", "utf-8"), (b"\xff\xfe\x00\x00", "utf-32-le"), (b"\x00\
 MAX_ARCHIVE_DEPTH = 3
 MAX_UNPACKED_BYTES = 200 << 20
 
+# The owner chose to publish the paper and the citations under their own name (lead decision 31), and the owner is a
+# sender in the export. So exactly that author string, two words, one space, as written, passes the name scan, and
+# only in these files; any other form, any other file, or either word alone is still a hit. Kept as a hash so this
+# file does not hold the name.
+AUTHOR_SHA256 = "44c9ff23a0c635faa8d70a28269daac1dcffa04e70ee5156c06ef7cbf3e453de"
+AUTHOR_FILES = frozenset({"README.md", "MODEL_CARD.md", "paper/fym1.tex", "paper/fym1.pdf",
+                          "tests/test_public_name.py"})
+_WORD_START = re.compile(r"(?<![^\W\d_])[^\W\d_]")
+_TWO_WORDS = re.compile(r"(?<![^\W\d_])[^\W\d_]+ [^\W\d_]+(?![^\W\d_])")
+
 MIN_NAME_TOKEN = 3  # shorter tokens ("ny", initials) are everyday words or letters; counted as skipped
 # A name this long is a hit anywhere inside a word no known-word list has ("xbodozafyx"). Shorter names are common
 # letter runs: a real 4-letter name sits inside everyday English words and code names the lists lack.
@@ -170,6 +181,7 @@ class Report:
     name_tokens: int = 0
     short_tokens_skipped: int = 0
     placeholder_senders_skipped: int = 0
+    author_strings_allowed: int = 0
     list_entries_removed: dict[str, int] = field(default_factory=dict)
     name_hits: dict[str, int] = field(default_factory=dict)
     private_ids: int = 0
@@ -195,6 +207,7 @@ class Report:
                 "name_tokens": self.name_tokens,
                 "short_tokens_skipped": self.short_tokens_skipped,
                 "placeholder_senders_skipped": self.placeholder_senders_skipped,
+                "author_strings_allowed": self.author_strings_allowed,
                 "list_entries_removed": self.list_entries_removed,
                 "list_entries_removed_total": sum(self.list_entries_removed.values()),
                 "hits_per_file": self.name_hits,
@@ -355,6 +368,21 @@ def strip_list(text: str, names: frozenset[str]) -> tuple[str, int]:
         else:
             kept.append(line)
     return "".join(kept), removed
+
+
+def without_author(path: str, text: str) -> tuple[str, int]:
+    """`text` with each exact author string (AUTHOR_SHA256) blanked when `path` is in AUTHOR_FILES, and how many."""
+    if path not in AUTHOR_FILES:
+        return text, 0
+    pieces, pos, found = [], 0, 0
+    for start in (m.start() for m in _WORD_START.finditer(text)):  # every word start: "Dr A B" also tries "A B"
+        if start < pos:
+            continue
+        match = _TWO_WORDS.match(text, start)
+        if match and hashlib.sha256(match.group().encode("utf-8")).hexdigest() == AUTHOR_SHA256:
+            pieces += [text[pos:start], " " * len(match.group())]
+            pos, found = match.end(), found + 1
+    return "".join(pieces) + text[pos:], found
 
 
 # ---- private ids ----------------------------------------------------------------------------------------------
@@ -656,7 +684,9 @@ def _write_and_check(files: dict[str, tuple[bytes, int]], excluded: list[dict], 
         if text is None:
             report.unscannable.append(path)
             text = ""  # the path itself is still checked
-        if hits := (0 if path in GENERATED_LISTS else count_name_hits(text, names)) + count_name_hits(path, names):
+        name_text, authors = without_author(path, text)
+        report.author_strings_allowed += authors
+        if hits := (0 if path in GENERATED_LISTS else count_name_hits(name_text, names)) + count_name_hits(path, names):
             report.name_hits[path] = hits
         if id_hits := count_private_ids(text, ids) + count_private_ids(path, ids):
             report.private_id_hits[path] = id_hits

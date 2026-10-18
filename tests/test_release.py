@@ -2,6 +2,7 @@
 
 import ast
 import gzip
+import hashlib
 import importlib.util
 import io
 import json
@@ -625,3 +626,37 @@ def test_every_flagged_path_is_redacted(tmp_path):
     assert all(path.startswith("<redacted path ") for path in report.secret_hits)
     written = json.dumps(report.as_dict())
     assert not any(path in written for path in named)
+
+
+# ---- the owner-chosen author string (lead decision 31) ---------------------------------------------------------
+
+
+def _author(monkeypatch, author: str = "Zafy Bodo") -> None:
+    monkeypatch.setattr(release, "AUTHOR_SHA256", hashlib.sha256(author.encode()).hexdigest())
+
+
+@pytest.mark.parametrize(("path", "text", "hits", "allowed"), [
+    ("README.md", "by Zafy Bodo, 2026", 0, 1),
+    ("paper/fym1.tex", "\\author{Zafy Bodo}\nZafy Bodo again", 0, 2),
+    ("README.md", "thanks Zafy", 1, 0),  # the name alone
+    ("README.md", "Zafy  Bodo", 2, 0),  # another form: two spaces
+    ("README.md", "zafy bodo", 2, 0),  # another form: lower case
+    ("README.md", "Zafy Bodoko", 2, 0),  # glued to a longer word
+    ("docs/notes.md", "by Zafy Bodo", 2, 0),  # another file
+])
+def test_only_the_exact_author_string_in_author_files_passes(monkeypatch, path, text, hits, allowed):
+    _author(monkeypatch)
+    stripped, found = release.without_author(path, text)
+    assert (count_name_hits(stripped, NAMES), found) == (hits, allowed)
+
+
+def test_author_string_passes_end_to_end_and_is_counted(tmp_path, monkeypatch):
+    _author(monkeypatch)
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "README.md": "# demo\nby Zafy Bodo\n"})
+    report = snap(repo, tmp_path / "public", make_export(tmp_path))
+    assert report.ok and report.author_strings_allowed == 1
+
+
+def test_the_real_author_string_is_in_every_author_file():
+    for path in release.AUTHOR_FILES - {"paper/fym1.pdf"}:
+        assert release.without_author(path, (REPO_ROOT / path).read_text("utf-8"))[1] >= 1, path
