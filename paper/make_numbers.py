@@ -26,7 +26,7 @@ Expected files (keys are dotted paths below):
                          belebele_acc, chrf_plt_eng, chrf_eng_plt}
   eval/judge.json        judge, {base,fym1}.{naturalness, correctness}
   eval/leak_review.json  matches, approved_generic, rejected (counts of distinct matched 8-word runs)
-  eval/identity_check.json  n, passed, pass_rate, threshold, foreign_identity, gate_passed
+  eval/identity_check.json  n, passed, pass_rate, threshold, foreign_identity, gate_passed (reasons checked)
   eval/arena.json        votes, raters, fym1_win_rate, ci_low, ci_high (early votes at v0.1)
   shrink.json            gates_passed, vocab_before, vocab_after, params_before, params_after,
                          gguf_bytes_before, gguf_bytes_after, tokens_per_sec_before, tokens_per_sec_after
@@ -325,8 +325,8 @@ def leak_gate_problems(results: dict[str, Any]) -> list[str]:
 
 
 def identity_gate_problems(results: dict[str, Any]) -> list[str]:
-    """Why the identity check blocks release: it failed, ran with a threshold below 0.9, or its pass rate or verdict
-    does not match its own counts."""
+    """Why the identity check blocks release: it failed, ran with a threshold below 0.9, or its pass rate, reason
+    counts or verdict do not match its own counts."""
     report = results.get(IDENTITY_FILE)
     keys = ("n", "passed", "pass_rate", "threshold", "foreign_identity", "gate_passed")
     values = {key: lookup(report, key) for key in keys}
@@ -334,9 +334,16 @@ def identity_gate_problems(results: dict[str, Any]) -> list[str]:
         return []  # not measured yet; reported as missing values
     if _number(values["threshold"]) < MIN_IDENTITY_THRESHOLD:
         return [f"{IDENTITY_FILE}: threshold is below {MIN_IDENTITY_THRESHOLD}; rerun it with the default threshold"]
-    n = _number(values["n"])
-    if n <= 0 or not math.isclose(_number(values["pass_rate"]), _number(values["passed"]) / n):
+    n, passed = _number(values["n"]), _number(values["passed"])
+    if n <= 0 or not 0 <= passed <= n:
+        return [f"{IDENTITY_FILE}: passed is not between 0 and n; rerun it"]
+    if not math.isclose(_number(values["pass_rate"]), passed / n):
         return [f"{IDENTITY_FILE}: pass_rate does not match passed / n; rerun it"]
+    # Each failed reply carries one or more reasons, so no reason count can exceed the number that failed.
+    reason_counts = [("foreign_identity", values["foreign_identity"]), *(lookup(report, "reasons") or {}).items()]
+    over = sorted({reason for reason, count in reason_counts if _number(count) > n - passed})
+    if over:
+        return [f"{IDENTITY_FILE}: {', '.join(over)} count exceeds the failed replies (n - passed); rerun it"]
     recomputed = _number(values["foreign_identity"]) == 0 and _number(values["pass_rate"]) >= _number(values["threshold"])
     if values["gate_passed"] is not recomputed:
         return [f"{IDENTITY_FILE}: gate_passed does not match pass_rate, threshold and foreign_identity; rerun it"]

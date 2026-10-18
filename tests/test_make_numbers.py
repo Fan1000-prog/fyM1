@@ -213,7 +213,9 @@ def test_cli_strict_fails_on_rejected_leak_run(results_dir, tmp_path):
 
 
 PASSING_IDENTITY = {"n": 34, "passed": 32, "pass_rate": 32 / 34, "threshold": 0.9, "foreign_identity": 0,
-                    "gate_passed": True}
+                    "gate_passed": True,
+                    "reasons": {"not_malagasy": 0, "no_name": 2, "no_lab": 0, "foreign_identity": 0,
+                                "foreign_mention": 1}}
 
 
 @pytest.mark.parametrize(
@@ -226,7 +228,12 @@ PASSING_IDENTITY = {"n": 34, "passed": 32, "pass_rate": 32 / 34, "threshold": 0.
         ({"pass_rate": 0.5}, "does not match"),
         ({"passed": 33}, "pass_rate does not match passed / n"),
         ({"n": 40}, "pass_rate does not match passed / n"),
-        ({"n": 0}, "pass_rate does not match passed / n"),
+        ({"n": 0}, "passed is not between 0 and n"),
+        ({"n": 30, "passed": 32, "pass_rate": 32 / 30}, "passed is not between 0 and n"),
+        ({"passed": -1, "pass_rate": -1 / 34}, "passed is not between 0 and n"),
+        ({"foreign_identity": 3, "gate_passed": False}, "foreign_identity count exceeds"),
+        ({"reasons": {"no_name": 3}}, "no_name count exceeds"),
+        ({"reasons": {"no_name": 2, "foreign_mention": 2}}, None),
         ({"threshold": 0.5, "pass_rate": 0.6}, "threshold is below"),
         ({"threshold": 0.89}, "threshold is below"),
         ({"threshold": 0.95, "gate_passed": False}, "identity check failed"),
