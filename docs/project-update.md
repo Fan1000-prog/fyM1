@@ -60,7 +60,7 @@ Recorded in spec §8 and the plan's "Changes from the plan" too.
 - **Privacy backstops**, kept whatever the cleaner does: owner's 100-sample review, leftover-names blocklist,
   count-only post-run phone check, strict 8-word leak gate. Raw answers and the arena A/B key stay private until v0.2.
 - **Anonymiser trade-offs (owner):** glued `tel34…`/`telO34…` and no-0 layouts like `34 123 45 67` stay known
-  limits; no narrower rule for `tel341234567`. PR #24 merged "as is" on the owner's word (see §5 known issue).
+  limits; no narrower rule for `tel341234567`. PR #24 merged "as is" and kept (no revert) on the owner's word; its date side effect gets fixed forward (§5).
 - **Model pick:** delegated to the lead; same tests for every candidate (plain-text 0-shot Belebele = `belebele_acc`,
   FLORES+ both ways, tokens per word, 15-step QLoRA smoke on a T4) plus the owner's 1–5 rating of 20 greeting answers.
 - **Compute:** $0. Kaggle is the main GPU (~30 h/week, 12 h sessions), Colab the backup. On a T4, Unsloth trains
@@ -90,7 +90,7 @@ owner's rating matters. Gemma 4's earlier unscripted smoke (≈126 s/step, loss 
 
 | Item | Who | State |
 |---|---|---|
-| **Known issue: #24 breaks dates followed by more numbers** | owner decides | "15/03/2026 1 500 Ar" → "15/<TEL> Ar"; date ranges broken (~1,080 per 97k everyday lines; a plain date or "le 15/03/2026 à 14h" is fine; not a privacy leak). Options: (a) revert #24 to the #16 cleaner, which brings back the rare leak #24 closed ("038 27 2000/5", "+261 038 27 2000/5" kept whole; the post-run phone count would flag them); (b) fix by masking whole real dates in the sentence before phone matching. Must be settled before `build_chats` runs on the real export |
+| **Known issue: #24 breaks dates followed by more numbers** | next team | "15/03/2026 1 500 Ar" → "15/<TEL> Ar"; date ranges broken (~1,080 per 97k everyday lines; a plain date or "le 15/03/2026 à 14h" is fine; not a privacy leak). Owner decision (2026-10-18): keep #24, no revert (a revert would bring back the rare leak it closed, "038 27 2000/5"). Next: a PR that masks whole real dates in the sentence before phone matching, tested on date ranges and date + price/time; merge it before `build_chats` runs on the real export |
 | Kaggle baseline run | trainer | kernel version 2 running since ~01:48 UTC on Gemma 3 (Hub code 6d13c89); results land on the Hub one section at a time |
 | PR #22 baseline guards (draft) | trainer | parked until Gemma 3's result shows `env.loaded_from == "google/gemma-3-12b-it"`; then sync with main, review, merge |
 | Messenger export | owner | waiting on Meta |
@@ -101,7 +101,7 @@ Run order: Gemma 3 (full) → Gemma 4 (plain-text Belebele, FLORES+, scripted 15
 
 ## 6. Steps to finish
 
-1. **Settle the #24 date issue** (owner's call; revert or fix), with its own PR and review.
+1. **Fix the #24 date issue** (owner kept #24): mask whole real dates before phone matching; own PR and review; before the real export run.
 2. **Finish the baseline** on Kaggle (run order above); merge result PRs; finish or drop PR #22.
 3. **Owner rates** the 20 greeting answers per model; **lead picks** the base model and sends the table + reason.
 4. **Export lands** in `~/malagasy-data/raw/`: `data` runs `build_chats.py` from `main`, then the post-run checks
