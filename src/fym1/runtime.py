@@ -1,7 +1,8 @@
 """Notebook runtime differences (Colab vs Kaggle) in one place.
 
 Notebooks need the HF token before they can download this package from the private checkpoint repo, so
-their first cell must carry a verbatim copy of `hf_token`; everything else imports it from here.
+their bootstrap cell carries a verbatim copy of `hf_token` and its helpers (`MISSING_TOKEN`, `on_kaggle`,
+`_secret`; tests/test_notebook_runtime.py checks the copy); everything else imports from here.
 Kaggle is checked first: its GPU image is built from Colab's, so `google.colab` may import there too.
 """
 
@@ -49,13 +50,14 @@ def hf_token() -> str:
 
 
 def output_dir() -> str:
-    """Where wanted outputs go. On Kaggle, /kaggle/working is saved with the run (~20 GB cap) and is
-    what `kaggle kernels output` downloads, so keep it for small results only."""
+    """Notebook-only: where wanted outputs go. On Kaggle, /kaggle/working is saved with the run (~20 GB cap)
+    and is what `kaggle kernels output` downloads, so keep it for small results only."""
     return KAGGLE_WORKING if on_kaggle() else "/content"
 
 
 def scratch_dir() -> str:
-    """Large throwaway files (model downloads, checkpoints, merged models): never saved as Kaggle output."""
+    """Notebook-only: large throwaway files (model downloads, checkpoints, merged models); never saved as
+    Kaggle output."""
     if not on_kaggle():
         return "/content"
     path = os.path.join(tempfile.gettempdir(), "fym1")
