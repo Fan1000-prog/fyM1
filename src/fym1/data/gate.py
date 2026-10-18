@@ -394,6 +394,13 @@ def unknown_capitalised_words(texts: Iterable[str], fake_names: Iterable[str], l
     return unknown
 
 
+def replaced_word_count(texts: Iterable[str], fake_names: Iterable[str], lexicon: Lexicon = KNOWN_WORDS) -> int:
+    """How many words of one conversation's turns strict_gate would replace as names, lower-case ones included.
+    A count only."""
+    fake_keys = fake_name_keys([*fake_names, *CURRENCY_WORDS])
+    return _clear_or_replace([normalise(text) for text in texts], fake_keys, lexicon, set()).replaced
+
+
 def _with_texts(record: dict, texts: list[str]) -> dict:
     messages = [{**turn, "content": text} for turn, text in zip(record["messages"], texts, strict=True)]
     return {**record, "messages": messages}
