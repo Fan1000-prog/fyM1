@@ -16,10 +16,9 @@ from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 
-from fym1.data.anonymize import FIRST_NAMES, SURNAMES, Anonymizer, compare_key
-from fym1.data.leftovers import leftover_names
+from fym1.data.anonymize import FALLBACK_NAME, FIRST_NAMES, SURNAMES, Anonymizer
+from fym1.data.gate import unknown_capitalised_words
 from fym1.data.segment import Conversation
-from fym1.eval.lang import MALAGASY_WORDS
 from fym1.eval.metrics import NgramIndex
 
 # Everyday situations; English, so the generator reads them reliably. The chat itself is in Malagasy.
@@ -55,16 +54,7 @@ MAX_CHAT_CHARS = 3000
 MAX_EXAMPLE_CHARS = 1500  # few-shot examples longer than this make the prompt too long
 NEW_CHAT_HEADER = "### New chat"
 
-# Capitalised words that are not names: French and texting words people start lines with.
-NOT_NAMES = frozenset(
-    compare_key(w)
-    for w in """
-    merci salut bonjour bonsoir bonne bon oui non mais donc bref alors enfin voila voilà déjà deja désolé desole
-    je tu il elle on nous vous ils moi toi lui quoi comment pourquoi quand ou où ça ca cest c'est trop grave
-    super cool top vraiment courage bisous bises allez allo allô attends attend normal sérieux serieux pardon
-    haha hahaha hihi mdr lol ptdr ouf bah ben hein ok okay oki dac stp svp rdv
-    """.split()
-) | frozenset(compare_key(w) for w in MALAGASY_WORDS)
+FAKE_POOL = (*FIRST_NAMES, *SURNAMES, FALLBACK_NAME)  # names the anonymiser writes: never a real person
 
 # Synthetic chats are training data, so the generator's licence reaches fy-m1. Owner decision 2026-10-18: fy-m1
 # ships under a simple open licence, so only permissively licensed generators (Gemma 3's terms of use would make
@@ -248,8 +238,12 @@ def _fits_length(messages: Conversation) -> bool:
 
 
 def _has_unknown_name(messages: Conversation) -> bool:
-    names = leftover_names((t["content"] for t in messages), fake_names=FIRST_NAMES + SURNAMES)
-    return any(compare_key(word) not in NOT_NAMES for word in names)
+    """A capitalised word no known-word list clears (fym1.data.gate rules, lead decision 30): dropped, never patched.
+
+    The fake-name pool passes. Lower-case words are not checked: the few-shot examples hold only fakes, and the
+    8-word leak check guards copying.
+    """
+    return unknown_capitalised_words((t["content"] for t in messages), fake_names=FAKE_POOL) > 0
 
 
 def _first_failure(
@@ -318,6 +312,29 @@ def synth_stats(raw: int, kept: int, dropped: Counter | dict, by_generator: dict
     """The counts-only stats dict; unknown meta keys are refused by validate_stats."""
     return {"raw": raw, "kept": kept, "dropped": {r: int(dropped.get(r, 0)) for r in DROP_REASONS},
             "by_generator": dict(sorted(by_generator.items())), **meta}  # fmt: skip
+
+
+def filter_raw_rows(
+    rows: list[dict], real: list[dict], is_malagasy: Callable[[str], bool], meta: dict
+) -> tuple[list[dict], dict]:
+    """04_synth's raw rows -> (kept `{"id", "messages"}` rows, validated counts-only stats).
+
+    Each row carries the model `output`, `generator`, `dtype`, `gen_seconds` and `new_tokens`; `meta` gives the
+    run settings the rows do not record (seed, few_shot_k, target_raw, gpus, code_sha, data_revision).
+    """
+    kept, dropped = filter_conversations((parse_conversation(r["output"]) for r in rows), real, is_malagasy)
+    generators = sorted({(r["generator"], r["dtype"]) for r in rows})
+    stats = synth_stats(
+        raw=len(rows), kept=len(kept), dropped=dropped, by_generator=Counter(r["generator"] for r in rows),
+        meta={**meta,
+              "generator": ", ".join(g for g, _ in generators),
+              "dtype": ", ".join(sorted({d for _, d in generators})),
+              "generator_licence": ", ".join(sorted({generator_licence(g) for g, _ in generators})),
+              "gen_seconds": round(sum(r["gen_seconds"] for r in rows), 1),
+              "new_tokens": sum(r["new_tokens"] for r in rows)},
+    )  # fmt: skip
+    validate_stats(stats)
+    return kept, stats
 
 
 def _is_count(value) -> bool:

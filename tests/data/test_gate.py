@@ -12,6 +12,7 @@ from fym1.data.gate import (
     has_long_number,
     pool_names_in,
     strict_gate,
+    unknown_capitalised_words,
 )
 from fym1.data.known_words import word_list
 
@@ -388,3 +389,11 @@ def test_lowercase_first_names_that_are_everyday_words_stay(text):
     result = strict_gate([record("a", text, "eny tsara ihany koa, eny tsara ihany koa")], fake_names=[])
 
     assert texts(result)[0] == text
+
+
+def test_unknown_capitalised_words_counts_capitalised_words_no_list_clears():
+    pool = ["Rindra"]
+    assert unknown_capitalised_words(("Salama Zebulon, aiza ianao?", "Efa tonga i Zebulon"), pool) == 2
+    assert unknown_capitalised_words(("Merci be, Rindra!", "Ok Tsara be"), pool) == 0  # mid-sentence list word
+    assert unknown_capitalised_words(("salama zebulon",), pool) == 0  # lower case is not checked
+    assert unknown_capitalised_words(("Efa tonga i Tsara",), pool) == 1  # a name slot needs the hand list
