@@ -1,6 +1,15 @@
+import itertools
+import re
+import time
+
 import pytest
 
 from fym1.data.anonymize import (
+    _MOBILE_START,
+    _RUN_ON,
+    _SEP,
+    _SPELLED_AT,
+    _ZERO_GAP,
     COMMON_WORDS,
     FIRST_NAMES,
     SURNAMES,
@@ -169,3 +178,65 @@ def test_assign_fake_names_beyond_pool_size_stays_distinct():
     real = [f"Olona{i} X" for i in range(len(FIRST_NAMES) * len(SURNAMES) + 5)]
 
     assert len(set(assign_fake_names(real).values())) == len(real)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        ("034" + " " * 50) * 190,
+        "0" + " " * 9999,
+        "15/03 0" + " " * 9993,  # _MOBILE_START: was cubic once a date is in the text
+        "15/03 0" + " \t" * 4996,
+        "15/03 (0" + " " * 9992,  # _ZERO_GAP in _STRONG_RUN
+        "15/03 0)" + " " * 9992,
+        "0 0 0 0 0 0 0 0 0 15/03 1 2 3 4 5 6 7 8 9" + " " * 9900,  # _RUN_ON: was quadratic
+        "hanta" + " " * 4995 + "@" + " " * 4995 + "x",  # _SPELLED_AT in EMAIL
+    ],
+    ids=[
+        "prefixes-and-gaps",
+        "zero-then-gap",
+        "date-zero-then-gap",
+        "date-zero-then-tabs",
+        "date-bracket-zero-then-gap",
+        "date-zero-bracket-then-gap",
+        "date-digits-then-gap",
+        "spaced-at",
+    ],
+)
+def test_long_digit_and_space_run_is_fast(text):
+    """Security finding #16 and its review: two \\s* around an optional piece let a regex backtrack for seconds."""
+    text = text[:10_000]
+    start = time.perf_counter()
+    anonymize(text, NAMES)
+    assert time.perf_counter() - start < 1.0
+
+
+def _short_strings(alphabet, max_len):
+    for n in range(max_len + 1):
+        yield from map("".join, itertools.product(alphabet, repeat=n))
+
+
+# Each old pattern is the piece exactly as it was before this PR; each rewrite must match the same strings,
+# and stop at the same place.
+@pytest.mark.parametrize(
+    ("old", "new", "alphabet", "max_len"),
+    [
+        (
+            r"[0Oo]\s*\)?\s*[./,_-]?\s*[23](?:\s*[./,_-]\s*)?\d",
+            _MOBILE_START,
+            [" ", "\t", ".", "-", "0", "O", "3", "5", ")", "a"],
+            6,
+        ),
+        (r"\s*[./,_-]?\s*", _SEP, [" ", "\t", ".", "_", "-", "/", "1", "a"], 6),
+        (r"[0Oo]\s*\)?\s*[./,_-]?\s*", _ZERO_GAP, [" ", "\t", ".", "_", "0", "o", "3", ")", "a"], 6),
+        (r"(?:\s*[./,_-]?\s*\d)+", _RUN_ON.pattern, [" ", "\t", ".", ",", "/", "1", "a", ")"], 6),
+        (r"\s*(?:\[at\]|\(at\)|\s@\s)\s*", _SPELLED_AT, [" ", "\t", "@", "[at]", "(at)", "a"], 5),
+    ],
+    ids=["mobile-start", "sep", "zero-gap", "run-on", "spelled-at"],
+)
+def test_rewritten_regex_matches_the_same_strings(old, new, alphabet, max_len):
+    old_re, new_re = re.compile(old), re.compile(new)
+    for text in _short_strings(alphabet, max_len):
+        assert bool(old_re.fullmatch(text)) == bool(new_re.fullmatch(text)), text
+        old_match, new_match = old_re.match(text), new_re.match(text)
+        assert (old_match and old_match.span()) == (new_match and new_match.span()), text
