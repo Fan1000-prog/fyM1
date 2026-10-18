@@ -101,7 +101,7 @@ comparison: its terms would make fy-m1 a Gemma derivative. Full table: the paper
 | Synthetic chats | An open model with a permissive licence, run by us, writes more everyday chats from cleaned examples. | Real chats are too few. No closed-model outputs. |
 | Formal slice | A small set of chats from Malagasy Wikipedia. | Keeps facts and spelling. Small, so the style stays casual. |
 | Identity chats | A few "who are you?" answers and polite refusals, written by the owner. | It says it is fy-m1, made by Fan's lab, and refuses harmful requests. Not a safety feature. |
-| Training | **QLoRA** on a Colab Pro A100 GPU (paid): the model stays frozen in 4-bit and we train small add-on weights. Loss on the assistant's replies only. | A model this size fits one GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). The free T4 is too slow for the full run. |
+| Training | **QLoRA** on a Colab Pro A100 GPU (paid): the model stays frozen in 4-bit and we train small add-on weights. Loss on the assistant's replies only. | A model this size fits one GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). I train on a Colab Pro A100; the free T4 is used for the baseline and smoke tests. |
 | Checkpoints | Saved to a private repo often; a new session resumes from the latest one. | Colab sessions can disconnect. |
 | Test prompts | Written fresh, never taken from the chats. | So they can be public and anyone can run them. |
 | Leak check | Any fy-m1 answer that shares a run of 8 words with the real chats blocks release, unless it is a generic phrase. | Privacy again. |

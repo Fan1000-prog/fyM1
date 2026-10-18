@@ -58,8 +58,9 @@ small wanted outputs (`fym1.runtime.output_dir()`). Model downloads, checkpoints
 `fym1.runtime.scratch_dir()` (a temp folder), and checkpoints are pushed to `fyM1-ckpt` as on Colab.
 
 ## GPU
-- Prefer T4. T4 (Turing) has no bf16, so Unsloth forces float32 training for gemma3, gemma4 and qwen3_5,
-  as on Colab. P100 (Pascal) has no bf16 either and is older; do not use it.
+- Kaggle runs the free T4 steps only (baseline, smoke tests); training and eval run on a Colab Pro A100.
+  T4 (Turing) has no bf16, so it computes in float16 (the baseline files record `compute_dtype: torch.float16`).
+  P100 (Pascal) has no bf16 either and is older; do not use it.
 
 ## First-run checks
 - The `machine_shape` value `NvidiaTeslaT4` is accepted: **yes**; the editor shows "GPU T4 x2" (the
