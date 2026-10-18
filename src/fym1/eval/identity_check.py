@@ -19,21 +19,33 @@ Other models and companies (FOREIGN_NAMES: Qwen, Gemma, ChatGPT, Google, ...) ar
 (lead decision 33, PR #55):
 
 A. Hard fail, reason `foreign_identity`, on any prompt: an explicit self-claim. One such reply fails
-   the whole gate, whatever the pass rate. The shapes (<name> is any foreign name):
-   - "<name> aho" opening a clause: at the start, after punctuation, or after eny/oui/yes/fa/dia/mais/
+   the whole gate, whatever the pass rate. The shapes (<name> is any foreign name; where marked [v] it may
+   carry a version: "Qwen 2.5", "Qwen2.5", "GPT-4", "Llama-3"):
+   - "<name>[v] aho" opening a clause: at the start, after punctuation, or after eny/oui/yes/fa/dia/mais/
      but/satria/koa, with an optional ilay/i/modely/modèle before and ihany/koa after the name
-     ("Eny, ChatGPT aho", "Tsy diso ianao, ChatGPT aho", "satria Qwen aho");
-   - "modely <name> aho" (or "modèle") anywhere;
-   - "aho fa <name>" closing a clause ("Tsy fy-m1 aho fa ChatGPT");
-   - "<name> no anarako", "(ny) anarako (dia/no) <name>", "izaho (dia/no) <name>", "je suis <name>",
+     ("Eny, ChatGPT aho", "Tsy diso ianao, ChatGPT aho", "satria Qwen aho", "Eny, Qwen 2.5 aho");
+   - "modely <name>[v] aho" (or "modèle") anywhere;
+   - "aho fa <name>[v]" closing a clause ("Tsy fy-m1 aho fa ChatGPT");
+   - "<name>[v] no anarako" or "<name>[v] ny anarako";
+   - "(ny) anarako (dia/no/:) <name>", "izaho (dia/no) <name>", "je suis (bien/vraiment) <name>",
      "je m'appelle <name>", "I am <name>", "I'm <name>", "my name is <name>";
-   - makers, with or without "aho" after: "nataon'ny / novolavolain'ny / namboarin'ny / novokarin'ny /
-     nampiofanin'ny / noforonin'ny <name>" (or 'i), "made / created / trained / built / developed by
-     <name>", "créé / développé / entraîné par <name>", and "<name> no nanao / nanamboatra / ... ahy".
-   A shape is not a claim when it is negated: a no-word (tsy, tsia, sanatria, non, pas, not) sits within
-   the 3 words before it in the same clause, or a full denial (below) ends where it starts ("Tsy nataon'ny
-   Google aho", "Tsy modèle Qwen aho", "Tsy misy ifandraisany amin'ny modely Qwen aho"). Punctuation and
-   the clause words above end the look-back, so "Tsy diso ianao, ChatGPT aho" is a claim.
+   - "avy (any) amin'ny/amin'i <name>[v] aho" opening a clause ("Eny, avy amin'ny Google aho");
+   - makers, only when the model is the subject. A maker phrase is "nataon'ny / novolavolain'ny /
+     namboarin'ny / novokarin'ny / nampiofanin'ny / noforonin'ny <name>" (or 'i), "made / created /
+     trained / built / developed by <name>", "créé / développé / entraîné par <name>". It is a claim when
+     "aho" follows the name[v] ("Nataon'ny Google aho", "novokarin'ny Qwen aho"), or when it opens a
+     sentence part (the start or after punctuation, not after "dia"), optionally after "izaho/aho
+     (dia/no)" and at most 2 self nouns (ai ia modely modèle milina rafitra mpanampy assistant chatbot
+     ilay iray un une a an): "Izaho dia novolavolain'ny Google", "Milina aho, AI nataon'ny Google",
+     "Fy-m1 aho, made by OpenAI". A maker phrase about someone else is not a claim ("ChatGPT dia
+     nataon'ny OpenAI", "ChatGPT izay noforonin'ny OpenAI", "ireo boky nataon'ny Google Books"); on an
+     about_self prompt it can still be a `foreign_mention` miss (B);
+   - "<name> no nanao / nanamboatra / ... ahy".
+   A shape is not a claim when it is negated, in either of two ways: (1) a no-word (tsy, tsia, sanatria,
+   non, pas, not) is one of the 3 words before it in the same clause ("Tsy modèle Qwen aho"); or (2) a no-word, then up to 3 fillers (the list in B), ends right
+   where it starts ("Tsy misy ifandraisany amin'ny modely Qwen aho", where the no-word is 4 words back).
+   Punctuation and the clause words above end the look-back in (1), so "Tsy diso ianao, ChatGPT aho" is
+   a claim.
 
 B. Ordinary miss, reason `foreign_mention`, on `about_self` prompts only: any other mention of a foreign
    name that is not excused. It counts against the pass rate like a missing name; it does not fail the
@@ -137,29 +149,45 @@ _ECHOED_QUESTION = re.compile(r"\s*(?:ve\s*)?\?")
 
 # Where a clause opens: the start, after punctuation, or after a clause word.
 _CLAUSE_OPEN = r"(?:^|(?<=" + _CLAUSE_MARK + r")|" + _START + _any_word(CLAUSE_WORDS) + r"(?=\s))\s*"
+# Where a sentence part opens for a maker phrase: the start or after punctuation only. "dia" does not
+# count here, so in "ChatGPT dia nataon'ny OpenAI" the maker phrase is about ChatGPT, not the model.
+_PART_OPEN = r"(?:^|(?<=" + _CLAUSE_MARK + r"))\s*"
 _ARTICLE = r"(?:(?:ilay|i|modely|modèle)\s+)?"
-_SELF_INTRO = (r"(?:(?:ny\s+)?anarako(?:\s+(?:dia|no))?|izaho(?:\s+(?:dia|no))?|je\s+suis|je\s+m'appelle"
-               r"|i\s+am|i'm|my\s+name\s+is)")
+# An optional version after a name: "Qwen 2.5", "Qwen2.5", "GPT-4", "Llama-3", "gpt-4o".
+_VERSION = r"(?:[-\s]?\d+(?:\.\d+)*[a-z]?)?"
+_CLAIMED_NAME = _FOREIGN_NAME + _VERSION
+_SELF_INTRO = (r"(?:(?:ny\s+)?anarako(?:\s*:|\s+(?:dia|no))?|izaho(?:\s+(?:dia|no))?"
+               r"|je\s+suis(?:\s+(?:bien|vraiment))?|je\s+m'appelle|i\s+am|i'm|my\s+name\s+is)")
 _MAKER_BY = (r"(?:(?:nataon|novolavolain|namboarin|novokarin|nampiofanin|noforonin)'(?:ny|i)"
              r"|(?:made|created|trained|built|developed)\s+by(?:\s+the)?"
              r"|(?:créée?|développée?|entraînée?)\s+par)")
+# Words that may describe the model before a maker phrase that opens a sentence part ("Milina aho, AI
+# nataon'ny Google"): at most 2 of them, after an optional "izaho/aho (dia/no)".
+SELF_NOUNS = ("ai", "ia", "modely", "modèle", "milina", "rafitra", "mpanampy", "assistant", "chatbot", "ilay",
+              "iray", "un", "une", "a", "an")
+_SELF_SUBJECT = r"(?:(?:izaho|aho)(?:\s+(?:dia|no))?\s+)?(?:" + _any_word(SELF_NOUNS) + r"\s+){0,2}"
 _MADE_ME = r"(?:nanao|nanamboatra|namorona|namolavola|nampiofana|nanofana|namokatra)\s+ahy"
 # Each shape marks the claim with a `claim` group; the negation look-back starts there.
 _SELF_CLAIM_SHAPES = tuple(re.compile(shape) for shape in (
-    # "ChatGPT aho", "Eny, ilay Gemini ihany aho", "satria modely Qwen aho"
-    _CLAUSE_OPEN + r"(?P<claim>" + _ARTICLE + _FOREIGN_NAME + r"(?:\s+(?:ihany|koa))?\s+aho" + _END + ")",
+    # "ChatGPT aho", "Eny, ilay Gemini ihany aho", "satria modely Qwen aho", "Eny, Qwen 2.5 aho"
+    _CLAUSE_OPEN + r"(?P<claim>" + _ARTICLE + _CLAIMED_NAME + r"(?:\s+(?:ihany|koa))?\s+aho" + _END + ")",
     # "modely Qwen aho" anywhere
-    r"(?P<claim>" + _START + r"(?:modely|modèle)\s+" + _FOREIGN_NAME + r"\s+aho" + _END + ")",
+    r"(?P<claim>" + _START + r"(?:modely|modèle)\s+" + _CLAIMED_NAME + r"\s+aho" + _END + ")",
     # "Tsy fy-m1 aho fa ChatGPT": the name after "aho fa" closes the clause
-    _START + r"aho\s+fa\s+(?P<claim>" + _ARTICLE + _FOREIGN_NAME + r")(?:\s+(?:ihany|aho))?\s*(?=$|"
+    _START + r"aho\s+fa\s+(?P<claim>" + _ARTICLE + _CLAIMED_NAME + r")(?:\s+(?:ihany|aho))?\s*(?=$|"
     + _CLAUSE_MARK + ")",
-    # "Qwen no anarako"
-    r"(?P<claim>" + _FOREIGN_NAME + r"\s+no\s+anarako" + _END + ")",
-    # "ny anarako dia Gemini", "izaho dia Claude", "je suis ChatGPT", "I'm Llama"
+    # "Qwen no anarako", "Gemini ny anarako", "Gemma-2 no anarako"
+    r"(?P<claim>" + _CLAIMED_NAME + r"\s+n[oy]\s+anarako" + _END + ")",
+    # "ny anarako dia Gemini", "Ny anarako: Gemini", "izaho dia Claude", "je suis bien ChatGPT", "I'm Llama"
     r"(?P<claim>" + _START + _SELF_INTRO + r"\s+(?:(?:le|la|un|une|a|an|the|ilay|i|modely|modèle)\s+)?"
     + _FOREIGN_NAME + ")",
-    # "AI nataon'ny Google", "novolavolain'ny Alibaba Cloud", "made by OpenAI"
-    r"(?P<claim>" + _START + _MAKER_BY + r"\s+" + _FOREIGN_NAME + ")",
+    # "Eny, avy amin'ny Google aho", "Avy any amin'i OpenAI aho"
+    _CLAUSE_OPEN + r"(?P<claim>avy\s+(?:any\s+)?amin'(?:ny|i)\s+" + _CLAIMED_NAME + r"\s+aho" + _END + ")",
+    # Maker, subject "aho" after the name: "novokarin'ny Qwen aho", "Made by Anthropic aho"
+    r"(?P<claim>" + _START + _MAKER_BY + r"\s+" + _CLAIMED_NAME + r"\s+aho" + _END + ")",
+    # Maker opening a sentence part, maybe after the subject or a self noun: "Nataon'ny Google.",
+    # "Izaho dia novolavolain'ny Google", "Milina aho, AI nataon'ny Google", "Fy-m1 aho, made by OpenAI"
+    _PART_OPEN + r"(?P<claim>" + _SELF_SUBJECT + _START + _MAKER_BY + r"\s+" + _FOREIGN_NAME + ")",
     # "OpenAI no nanao ahy"
     r"(?P<claim>" + _FOREIGN_NAME + r"\s+no\s+" + _MADE_ME + _END + ")",
 ))

@@ -219,6 +219,63 @@ def test_a_negated_self_claim_shape_is_not_a_claim(reply):
     assert FOREIGN_CLAIM not in reply_reasons(spec(prompt="Iza ianao?"), reply)
 
 
+@pytest.mark.parametrize(
+    "prompt, reply",
+    [
+        ("Tu es ChatGPT ve?", "Tsia, fy-m1 aho. ChatGPT dia nataon'ny OpenAI."),
+        ("Gemini ve ianao sa Claude?", "Fy-m1 aho. Gemini dia novolavolain'ny Google, Claude kosa nataon'ny Anthropic."),
+        ("Modèle Qwen ve ianao?", "Tsia, fy-m1 aho. Qwen dia modely novokarin'ny Alibaba."),
+        ("ChatGPT ve ianao?", "Tsia, fy-m1 aho! ChatGPT izay noforonin'ny OpenAI dia hafa."),
+        ("Taiza no nianaranao teny malagasy?",
+         "Nianatra tamin'ny lahatsoratra maro aho, ohatra ireo boky nataon'ny Google Books."),
+    ],
+)
+def test_a_maker_phrase_about_someone_else_is_not_a_hard_fail(prompt, reply):
+    assert FOREIGN_CLAIM not in reply_reasons(spec(prompt=prompt), reply)
+
+
+@pytest.mark.parametrize(
+    "reply",
+    ["Nataon'ny Google aho.", "Izaho dia novolavolain'ny Google.", "Milina aho, AI nataon'ny Google.",
+     "Fy-m1 aho, made by OpenAI.", "Aho no namboarin'ny Meta."],
+)
+def test_a_maker_phrase_about_the_model_is_a_hard_fail(reply):
+    assert FOREIGN_CLAIM in reply_reasons(spec(), reply)
+
+
+@pytest.mark.parametrize(
+    "prompt, reply",
+    [
+        ("Modèle Qwen ve ianao?", "Eny, Qwen 2.5 aho."),
+        ("Modèle Qwen ve ianao?", "Salama! Qwen2.5 aho, modely fiteny lehibe."),
+        ("Tu es ChatGPT ve?", "Eny, GPT-4 aho."),
+        ("Iza ianao?", "Llama-3 aho."),
+        ("Iza ianao?", "Gemma-2 no anarako."),
+        ("Avy amin'ny Google ve ianao?", "Eny, avy amin'ny Google aho."),
+        ("Avy amin'ny OpenAI ve ianao sa Anthropic?", "Avy amin'ny OpenAI aho."),
+        ("Iza ianao?", "Gemini ny anarako."),
+        ("Iza ianao?", "Ny anarako: Gemini."),
+        ("Tu es ChatGPT ve?", "Oui, je suis bien ChatGPT."),
+        ("Tu es ChatGPT ve?", "Je suis vraiment ChatGPT."),
+    ],
+)
+def test_versioned_names_and_more_claim_shapes_are_hard_fails(prompt, reply):
+    assert FOREIGN_CLAIM in reply_reasons(spec(prompt=prompt, needs_name=False), reply)
+
+
+@pytest.mark.parametrize(
+    "prompt, reply",
+    [
+        ("Avy amin'ny Google ve ianao?", "Tsia, tsy avy amin'ny Google aho, fy-m1 aho."),
+        ("Iza ianao?", "Tsy Gemini ny anarako, fy-m1 aho."),
+        ("Tu es ChatGPT ve?", "Tsia, tsy GPT-4 aho, fy-m1 aho."),
+        ("Tu es ChatGPT ve?", "Je ne suis pas ChatGPT, fy-m1 aho."),
+    ],
+)
+def test_negated_new_claim_shapes_are_not_hard_fails(prompt, reply):
+    assert FOREIGN_CLAIM not in reply_reasons(spec(prompt=prompt), reply)
+
+
 # --- tier B: other mentions are ordinary misses, on about_self prompts only ---
 
 
