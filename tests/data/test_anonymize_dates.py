@@ -108,6 +108,16 @@ def test_strong_phone_that_spans_a_date_shape_still_wins(text):
         ("Ar 35.000 00261 37 76 034 84 ok", "Ar 35.<TEL> ok"),
         ("Ar 25.000.000 0207 39 25 93 ok", "Ar 25.<TEL> ok"),
         ("Ar 2500 261 390-24-05-24 ok", "Ar 2500 <TEL> ok"),
+        # a number before a 261 phone whose last groups look like a date is not an amount
+        ("Ar 25 000 000 261-341-26-06-08", "Ar 25 000 000 <TEL>"),
+        ("Ar 1 500 261-321-14-10-84 15/03", "Ar 1 500 <TEL> 15/03"),
+        ("5 261-3-76-25-06-15", "5 <TEL>"),
+        ("olona 3 261 382-08-11-65", "olona 3 <TEL>"),
+        ("2 261.34.120.05.98", "2 <TEL>"),
+        # a date right after a whole phone stays a date
+        ("034 12 345 67 15/03/2026", "<TEL> 15/03/2026"),
+        ("261 34 12 345 67 15/03/2026", "<TEL> 15/03/2026"),
+        ("+261 34 12 345 67 01/02/26 ok", "<TEL> 01/02/26 ok"),
     ],
 )
 def test_phone_next_to_or_through_a_date_is_fully_masked(text, expected):
@@ -119,6 +129,21 @@ def test_phone_next_to_or_through_a_date_is_fully_masked(text, expected):
 )
 def test_amount_or_time_before_a_date_is_kept(text):
     assert ANON(text) == text
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("laharana03 41 23 45 67", "laharana<TEL>"),
+        ("laharana03-35-44-85-82 ok", "laharana<TEL> ok"),
+        ("laharana03/86/48/95/10", "laharana<TEL>"),
+        ("tel03.41.23.45.67", "tel<TEL>"),
+        # a clock time glued to the digits is not a word
+        ("2h03 50 12 34 56", "2h03 50 12 34 56"),
+    ],
+)
+def test_pair_style_phone_glued_to_a_word_is_masked(text, expected):
+    assert ANON(text) == expected
 
 
 @pytest.mark.xfail(strict=True, reason="known limit, see docs/anonymisation.md: a digit before 03x reads as an amount")

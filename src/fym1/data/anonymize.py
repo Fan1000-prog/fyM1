@@ -67,7 +67,10 @@ def _mg_phone(trunk: str) -> str:
 # Spaced, a letter O typed for the 0 counts when it touches the digits ("O34…"). Glued to a word it doesn't:
 # the word's own last "o" would be read as the 0 ("numero261 034…", "manao 300…").
 _MG_PHONE_SPACED = _mg_phone(rf"(?:{_ZERO_TRUNK}|[Oo])")
-_MG_PHONE_GLUED = _mg_phone(_ZERO_TRUNK)
+# Right after a word ("laharana03 41 …", "tel03.41.…") a pair-style number may stand apart after
+# its "03": two letters before it rule out a clock time ("2h03 50 …").
+_AFTER_A_WORD = r"(?<=[^\W\d_]{2})"
+_MG_PHONE_GLUED = rf"(?:{_mg_phone(_ZERO_TRUNK)}|{_AFTER_A_WORD}0[23]{_SEP}\d(?:{_SEP}\d){{7}})"
 PHONE = re.compile(
     r"(?<![\w+])(?:"
     rf"{_MG_PHONE_SPACED}"
@@ -106,26 +109,46 @@ _STRONG_PHONE_START = re.compile(rf"\(?\s*(?:\+|00[1-9]|261|{_MOBILE_START})")
 # carry a stray digit, so the exact-length PHONE misses them once a date shape sits inside.
 _STRONG_RUN = re.compile(
     rf"(?<![\w+])(?:{_MG_COUNTRY}{_SEP}(?:{_ZERO_TRUNK})?|(?:\(\s*)?(?={_MOBILE_START})[0Oo]\s*\)?{_SEP})"
-    rf"\d(?:{_SEP}\d){{8,}}"
+    rf"(?P<body>\d(?:{_SEP}\d){{8,}})"
 )
 # A grouped amount right before: "1 ", "25 000 " ("Ar 2500 261 …" and "35.000 261 …" are not one)
 _AMOUNT_BEFORE = re.compile(r"(?<!\d)(?<!\d[ .,])\d{1,3}(?P<groups>(?:[ .,]\d{3})*)(?P<sep>[ .,])$")
-_THOUSANDS_GROUP = re.compile(r"\d{3}(?!\d)")
+_DATE_FILLER = "\ue010"  # private-use: not a digit, word, space or separator
+# The amount's groups end here: no digit follows, and no date glued on by a mark ("382-08-11-65"
+# with the date blanked). A date after a space is its own word: "1 261 340 000 19/04".
+_AMOUNT_ENDS = re.compile(rf"(?!\s*\d|\s*[./,_-]\s*[\d{_DATE_FILLER}])")
 # Digit groups still glued on by a mark after a phone match ("05 58 0326-59-58-41": the match
 # takes "05 58 0326-59") belong to it, so no tail of the number is left in clear.
 _PHONE_TAIL = re.compile(r"(?:\s*[./_-]\s*\d+)+")
-_DATE_FILLER = "\ue010"  # private-use: not a digit, word, space or separator
 
 
-def _continues_amount(text: str, blanked: str, start: int) -> bool:
-    """A 3-digit group right after digits ("1 261 340 …"); dates and times before it are blanked,
-    so "15/03/2026 034 …" and "12h16 261 …" are not amounts, nor "3 500 03-47-…" (a 2-digit group)."""
+def _continues_amount(blanked: str, start: int) -> bool:
+    """The digits from `start` are more 3-digit groups of the amount right before them.
+
+    Dates and times are blanked, so "15/03/2026 034 …" and "12h16 261 …" have no amount before
+    them. The amount must go on to its end in clean 3-digit groups with its own separator:
+    "1 261 340 000 19/04" is one, but "Ar 25 000 000 261-341-26-06-08" and "5 261-3-76-…" are a
+    phone after a number (a missed phone is worse than a masked price).
+    """
     before = _AMOUNT_BEFORE.search(blanked, 0, start)
-    return bool(
-        before
-        and set(before["groups"][::4]) <= {before["sep"]}  # one separator all through
-        and _THOUSANDS_GROUP.match(text, start)
-    )
+    if not before or not set(before["groups"][::4]) <= {before["sep"]}:  # one separator all through
+        return False
+    groups = re.compile(rf"\d{{3}}(?:{re.escape(before['sep'])}\d{{3}})*")
+    rest = groups.match(blanked, start)
+    return bool(rest and _AMOUNT_ENDS.match(blanked, rest.end()))
+
+
+def _stop_before_trailing_date(match: re.Match, dates: list[tuple[int, int]]) -> int:
+    """Where a strong run ends: at the first date that starts once its 9 subscriber digits are in.
+
+    The run takes stray digits through a date shape ("034 12 01/02/26"), but a whole phone followed
+    by a date keeps the date: "034 12 345 67 15/03/2026" -> "<TEL> 15/03/2026".
+    """
+    body_start, end = match.span("body")
+    for date_start, _ in dates:
+        if body_start < date_start < end and sum(c.isdigit() for c in match.string[body_start:date_start]) >= 9:
+            return len(match.string[:date_start].rstrip())
+    return end
 
 
 def _strong_spans_through_dates(text: str, blanked: str, dates: list[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -134,7 +157,8 @@ def _strong_spans_through_dates(text: str, blanked: str, dates: list[tuple[int, 
     for pattern in (PHONE, _STRONG_RUN):
         pos = 0
         while match := pattern.search(text, pos):
-            start, end = match.span()
+            start = match.start()
+            end = _stop_before_trailing_date(match, dates) if pattern is _STRONG_RUN else match.end()
             date_end = next((e for s, e in dates if s <= start < e), None)
             if date_end is not None:
                 pos = date_end
@@ -142,7 +166,7 @@ def _strong_spans_through_dates(text: str, blanked: str, dates: list[tuple[int, 
             if (
                 any(s < end and start < e for s, e in dates)
                 and _STRONG_PHONE_START.match(match.group())
-                and not _continues_amount(text, blanked, start)
+                and not _continues_amount(blanked, start)
             ):
                 spans.append((start, end))
             pos = start + 1

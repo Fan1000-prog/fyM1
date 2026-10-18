@@ -32,10 +32,20 @@ as written, and "15/03/2026 034 12 345 67" keeps the date and masks the phone. A
 digits ("34/12/2019/5", "038 27 2000/5") is not a date. A phone that starts with `+`, `00`, `261` or
 `02x`/`03x` (also `03-24-…`) outside a date still wins when a date shape sits inside it ("034 01/02/26 7",
 "03-24-21-05-98"), even with a stray extra digit ("034 12 01/02/26", "261 32 01/11/12 12"). A date or time
-right before a phone is never read as an amount, so "15/03/2026 0324-21-05-98" masks the whole phone; a
-grouped amount right before one still is ("1 261 340 000 19/04" stays). Digit groups glued on by a mark
+right before a phone is never read as an amount, so "15/03/2026 0324-21-05-98" masks the whole phone. A
+number before a phone counts as an amount only if the digits after it are clean 3-digit groups with the
+amount's own separator, up to its end ("1 261 340 000 19/04" stays; "Ar 25 000 000 261-341-26-06-08" is masked). Digit groups glued on by a mark
 after a phone go with it, and a number right before a phone may be masked with it ("12 00 037-44-352-52"
 -> "12 <TEL>"): masking a bit too much beats leaving part of a number.
+
+| Rule | Kept | Masked |
+|---|---|---|
+| A date or time is never part of a phone | `15/03/2026 1 500 Ar`, `15/03/2026 14 30` | `15/03/2026 034 12 345 67` -> `15/03/2026 <TEL>` |
+| A strong start (`+`, `00`, `261`, `03x`, `03-x`) wins over a date shape inside | `03 45 15/03/2026` | `034 12 01/02/26` -> `<TEL>` |
+| A whole phone stops before a date after it | `034 12 345 67 15/03/2026` -> `<TEL> 15/03/2026` (date kept) | the phone |
+| An amount before a phone: only clean 3-digit groups, same separator | `1 261 340 000 19/04`, `1 020 000 15/03/2026` | `olona 3 261 382-08-11-65` -> `olona 3 <TEL>` |
+| Glued to a word, a pair-style `03` may stand apart (two letters before) | `2h03 50 12 34 56` | `laharana03 41 23 45 67` -> `laharana<TEL>` |
+| Digits glued on by a mark after a phone go with it | | `05 58 0326-59-58-41` -> `<TEL>` |
 
 Checked by a generated corpus of 5,000 everyday lines (dates, prices, times, quantities): none gets a
 `<TEL>` (before this rule, 1,568 did). A generated corpus of 2,000 phones in every Malagasy layout (pairs,
