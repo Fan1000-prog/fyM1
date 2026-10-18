@@ -1,5 +1,7 @@
 import importlib.util
+import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -26,3 +28,80 @@ def test_private_path_allows_folders_outside_git(tmp_path):
     target = tmp_path / "private" / "chats.jsonl"
 
     assert build_chats.private_path(target) == target.resolve()
+
+
+def _flat_export(path: Path) -> Path:
+    def msg(i: int, sender: str, text: str, ts: str) -> dict:
+        return {"id": i, "sender": sender, "text": text, "timestamp": ts}
+
+    messages = [
+        msg(1, "Alpha", "inona no vaovao", "2026-07-01T08:00:00"),
+        msg(2, "Owner", "tsy misy", "2026-07-01T08:05:00"),
+        msg(3, "Alpha", "aiza ianao", "2026-07-01T14:00:00"),
+        msg(4, "Owner", "ao an-trano", "2026-07-01T14:10:00"),
+    ]
+    conversation = {"title": "Synthetic", "participants": ["Alpha", "Bravo", "Owner"], "timezone": "UTC"}
+    path.write_text(json.dumps({"conversation": conversation, "messages": messages}), encoding="utf-8")
+    return path
+
+
+def _run(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)
+
+
+def test_dry_run_prints_counts_and_writes_nothing(tmp_path):
+    export = _flat_export(tmp_path / "group.json")
+    stats = tmp_path / "stats.json"
+
+    result = _run("--export", str(export), "--owner", "Owner", "--dry-run", "--stats", str(stats))
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"threads": 1, "messages": 4, "sessions": 2, "conversations": 2}
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["group.json"]
+
+
+def test_dry_run_still_checks_the_owner(tmp_path):
+    export = _flat_export(tmp_path / "group.json")
+
+    result = _run("--export", str(export), "--owner", "Nobody", "--dry-run")
+
+    assert result.returncode != 0
+    assert "not a participant" in result.stderr
+
+
+def test_full_run_still_requires_out_and_sheet(tmp_path):
+    export = _flat_export(tmp_path / "group.json")
+
+    result = _run("--export", str(export), "--owner", "Owner")
+
+    assert result.returncode != 0
+    assert "--out" in result.stderr and "--sheet" in result.stderr
+
+
+def test_all_senders_dry_run_counts_every_side_without_duplicates(tmp_path):
+    export = _flat_export(tmp_path / "group.json")
+
+    result = _run("--export", str(export), "--all-senders", "--dry-run")
+
+    assert result.returncode == 0, result.stderr
+    # Owner answers twice; Alpha answers nothing (always speaks first, so trimmed); Bravo is silent.
+    assert json.loads(result.stdout)["conversations"] == 2
+
+
+def test_dry_run_counts_exact_duplicates_once(tmp_path):
+    export = _flat_export(tmp_path / "group.json")
+    data = json.loads(export.read_text())
+    for msg in data["messages"]:
+        msg["text"] = "mitovy" if msg["sender"] == "Alpha" else "eny"
+    export.write_text(json.dumps(data))
+
+    result = _run("--export", str(export), "--owner", "Owner", "--dry-run")
+
+    assert json.loads(result.stdout)["conversations"] == 1
+
+
+def test_owner_and_all_senders_are_exclusive(tmp_path):
+    export = _flat_export(tmp_path / "group.json")
+
+    assert _run("--export", str(export), "--owner", "Owner", "--all-senders", "--dry-run").returncode != 0
+    assert _run("--export", str(export), "--dry-run").returncode != 0

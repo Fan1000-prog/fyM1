@@ -128,3 +128,23 @@ def test_build_records_reports_leftover_names():
     result = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
 
     assert result.leftover_names["Bema"] == 2
+
+
+def test_build_records_every_sender_drops_exact_duplicates():
+    group = Thread(
+        title="t",
+        participants=["Nirina Rakoto", "Tojo Randria", "Hery Rabe"],
+        messages=[
+            Message(sender=s, text=t, ts_ms=m * MIN)
+            for s, m, t in [
+                ("Nirina Rakoto", 0, "Salama"),
+                ("Tojo Randria", 1, "Eny"),
+                ("Nirina Rakoto", 600, "Salama"),  # same exchange again, hours later
+                ("Tojo Randria", 601, "Eny"),
+            ]
+        ],
+    )
+
+    records = build_records([group], owner=None, is_malagasy=says_malagasy).records
+
+    assert len(records) == 1  # Tojo as assistant, twice -> once; Nirina and Hery yield nothing

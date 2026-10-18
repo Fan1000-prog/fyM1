@@ -1,0 +1,167 @@
+{
+  "model": {
+    "slug": "afriqueqwen3.5-9b-instruct",
+    "hub_id": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
+    "quant": "bnb 4-bit nf4 (Unsloth load_in_4bit)"
+  },
+  "env": {
+    "gpu": "Tesla T4",
+    "torch": "2.11.0+cu130",
+    "model_dtype": "torch.float16",
+    "code_sha": "97e53e8",
+    "vram_after_load_gb": 7.98,
+    "load_s": 402,
+    "utc": "2026-10-18T00:18:55.335913+00:00"
+  },
+  "belebele": {
+    "acc": 0.7422,
+    "n": 900,
+    "nan_rows": 0,
+    "seconds": 629,
+    "protocol": "0-shot, chat template, English instruction, argmax of next-token logits over '1'-'4'",
+    "code_sha": "97e53e8"
+  },
+  "belebele_completion": {
+    "acc": 0.6667,
+    "n": 900,
+    "nan_rows": 0,
+    "seconds": 485,
+    "protocol": "0-shot plain-text completion (P/Q/A-D/Answer:), no chat template, argmax of next-token logits over ' A'-' D'",
+    "code_sha": "97e53e8"
+  },
+  "flores": {
+    "eng-plt_chrf++": 49.73,
+    "plt-eng_chrf++": 56.17,
+    "n": 200,
+    "seconds": 530,
+    "protocol": "devtest first 200, 0-shot chat prompt, greedy, max 256 new tokens, first line kept",
+    "code_sha": "97e53e8"
+  },
+  "tokens_per_word": {
+    "value": 2.826,
+    "n_sentences": 1000,
+    "source": "wikimedia/wikipedia 20231101.mg, shuffle seed 42, 5-60 words",
+    "code_sha": "97e53e8"
+  },
+  "greetings": {
+    "source": "eval/prompts.jsonl greetings, first 20",
+    "sampling": "temp 0.7, top_p 0.9, max 128 new tokens, seed 42, no system prompt",
+    "answers": [
+      {
+        "prompt": "Sali ahn",
+        "answer": "Kai ne ka tambaya: \"Sali ahn\".\n\nWannan kalma tana iya nufin abubuwa da dama, kamar haka:\n\n1. **Sali (Sally)**: Suna ne na Turanci da ake amfani da shi wajen kiran mata.\n2. **Ahn (안)**: Suna ne na iyalin Koriya.\n\nIdan kana nufin **Sali/Ahn**, kamar wani mutum da sunansa Sali Ahn, to wannan ba suna ne da aka saba da sh"
+      },
+      {
+        "prompt": "De ahoana?",
+        "answer": "De ahoana?"
+      },
+      {
+        "prompt": "De aona ry zalahy?",
+        "answer": "Mazava ho azy! Ity misy fanazavana feno momba ny **fomba fanoratana lahatsoratra amin'ny bilaogy**, miaraka amin'ny torohevitra, dingana, ary modely azonao ampiasaina:\n\n---\n\n## **Ahoana ny Fanoratana Lahatsoratra amin'ny Bilaogy: Dingana tsikelikely**\n\n### **1. Fidio ny Lohahevitra**\n- **Ampahafantaro tena ny tenanao:** Inona no fantatrao tsara? Inona no"
+      },
+      {
+        "prompt": "Salama e! Manao ahoana nareo ao?",
+        "answer": "Salama! Ahoana no ahafahako manampy anao?"
+      },
+      {
+        "prompt": "Akory aby e ?",
+        "answer": "Akory aby e ?"
+      },
+      {
+        "prompt": "Mbola velona ve ianao? 😂",
+        "answer": "Mbola velona sy salama tsara aho! 😊 Inona no azoko anampiana anao androany?"
+      },
+      {
+        "prompt": "Inona no vaovao any aminareo any?",
+        "answer": "Inona no vaovao any aminareo any?"
+      },
+      {
+        "prompt": "Manahoana tompoko",
+        "answer": "Manahoana, manao ahoana ianao?"
+      },
+      {
+        "prompt": "Salut, tsara ve ny andro ao?",
+        "answer": "Bonjour, ahoana ny vaovao androany?"
+      },
+      {
+        "prompt": "Hey, efa nifoha ve?",
+        "answer": "Salama, ahoana no azoko anampiana anao anio?"
+      },
+      {
+        "prompt": "Bonsoir! Mbola tsy matory ve?",
+        "answer": "Salama! Eny, mbola tsy matory aho, vonona hanampy anao amin'izay ilainao aho. Ianao kosa ahoana, mbola tsy matory ve ianao?"
+      },
+      {
+        "prompt": "Ahoana ny weekend-nao?",
+        "answer": "Tsy manana fihetseham-po aho, ka tsy manana weekend aho. Na izany aza, afaka manampy anao amin'ny fomba rehetra aho."
+      },
+      {
+        "prompt": "Tsara ve ny dia?",
+        "answer": "Ny hoe \"tsara\" ny dia dia miankina amin'ny fomba fijerinao sy ny toe-javatra. Raha jerena amin'ny lafiny ara-tsosialy, ara-kolontsaina, ary ara-toekarena, dia manome tombontsoa maro ny dia:\n\n### Tombontsoa amin'ny Dia\n1. **Fampivelarana ny fahatakarana sy fahaiza-mifanaraka:**  \n   Ny dia dia manampy anao hahafantatra kolontsaina, sakafo, ary"
+      },
+      {
+        "prompt": "Efa nisakafo ve ianao?",
+        "answer": "Tsy afaka mihinana sakafo aho, fa afaka manome vaovao momba izany aho. Inona no tianao ho fantatra?"
+      },
+      {
+        "prompt": "Inona no ataonao zao?",
+        "answer": "Miezaka manampy anao amin'izay fanontaniana na olana mety anananao aho."
+      },
+      {
+        "prompt": "Aiza ianao zao?",
+        "answer": "Izaho dia mpanampy virtoaly ary tsy manana toerana ara-batana. Afaka manampy anao amin'ny zavatra ilainao ve aho?"
+      },
+      {
+        "prompt": "Mbola miasa ve ialahy?",
+        "answer": "Eny, mbola miasa aho! 😊 Ahoana no ahafahako manampy anao androany?"
+      },
+      {
+        "prompt": "Reraka be aho androany 😩",
+        "answer": "Miala tsiny aho naheno fa reraka ianao! Indraindray dia tena mahatsapa ho toy ny zavona sy tsy misy aina. Raha mety aminao, andramo mihetsika kely—mandehana mitsangatsangana, manao yoga, na manao fanazaran-tena haingana fotsiny. Misy zavatra tianao hatao ve amin'izao fotoana izao?"
+      },
+      {
+        "prompt": "Sady mafana no feno be lé bus androany",
+        "answer": "Eny, androany dia tena feno be ny bus. Maro ny mpandeha tao anatiny ary tena mafana izy io. Sarotra ny nifindrafindra satria feno olona."
+      },
+      {
+        "prompt": "Faly mahita anao indray!",
+        "answer": "Faly mahita anao koa!"
+      }
+    ],
+    "code_sha": "97e53e8"
+  },
+  "qlora_smoke": {
+    "ok": true,
+    "steps": 15,
+    "steps_planned": 15,
+    "stopped_early": null,
+    "seq_len": 2048,
+    "batch": "1 x grad-accum 8",
+    "tokens_per_step": 16384,
+    "lr": 0.0002,
+    "peak_vram_gb": 9.8,
+    "sec_per_step": 83.3,
+    "seconds": 1470,
+    "loss_curve": [
+      1.0018116235733032,
+      1.0715248584747314,
+      0.9769207835197449,
+      0.9489361047744751,
+      0.9452099800109863,
+      0.893380343914032,
+      0.8433670997619629,
+      0.8399250507354736,
+      0.8413572311401367,
+      0.7899121046066284,
+      0.8417025804519653,
+      0.7608417868614197,
+      0.7276898622512817,
+      0.7255874872207642,
+      0.7703328132629395
+    ],
+    "nan_loss": false,
+    "lora": "r16 a16 all linear (language only)",
+    "compute_dtype": "torch.float16",
+    "code_sha": "97e53e8"
+  }
+}

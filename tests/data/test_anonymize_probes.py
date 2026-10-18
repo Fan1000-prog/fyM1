@@ -2,7 +2,7 @@
 
 import pytest
 
-from fym1.data.anonymize import Anonymizer, assign_fake_names, compare_key
+from fym1.data.anonymize import FIRST_NAMES, SURNAMES, Anonymizer, assign_fake_names, compare_key
 
 PEOPLE = ["Nirina Rakotomalala", "Soa Randria", "Haja Andrianasolo", "Fy Rakoto", "Jo Be", "Hélène Rabe"]
 REAL_PARTS = {compare_key(w) for name in PEOPLE for w in name.split()}
@@ -184,6 +184,9 @@ KNOWN_LIMITS = [
     "034 l2 345 67",  # letter l for digit 1
     "Cité 67Ha porte 12",  # addresses other than "Lot …"
     "Villa 23 Ivandry",
+    "tel34 12 345 67",  # glued mobile without the leading 0
+    "contactO320 000 000",  # glued letter O before an amount-shaped number: kept as an amount
+    "18/03/80 559 874",  # a phone whose first digits make a full date and whose rest reads as a price
 ]
 
 
@@ -192,6 +195,16 @@ KNOWN_LIMITS = [
 def test_known_limits(text):
     out = run(text)
     assert out != text and not leaked_parts(out)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["34 12 345 67", "34 1234567", "341234567", "34 123 45 67", "34 1 234 567", "34 123 4567", "32.45.678.90",
+     "laharana: 38 12 345 67", "Antsoy 33 123 45 67 ok"],
+)  # fmt: skip
+def test_mobile_without_the_0_is_masked_in_any_grouping(text):
+    out = run(text)
+    assert "<TEL>" in out and not any(c.isdigit() for c in out), out
 
 
 # --- final review (PR #3 round 3) -------------------------------------------------------
@@ -395,3 +408,200 @@ def test_glued_phones_with_gaps(text, expected):
 @pytest.mark.parametrize("text", ["Taona 2020-03-12 io", "ny 2023 12 345 olona"])
 def test_glued_phone_rule_skips_years(text):
     assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+# --- leak fix: mention echo, glued +261 phones --------------------------------------------------------
+
+NOBODY = Anonymizer({})
+
+
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_mention_fake_never_repeats_the_mentioned_first_name(first):
+    out = NOBODY(f"@{first} tonga ve?")
+
+    assert compare_key(out.split()[0]) != compare_key(first)
+    assert out.endswith(" tonga ve?")
+
+
+@pytest.mark.parametrize("first, last", [(f, s) for f in FIRST_NAMES for s in SURNAMES])
+def test_hashed_mention_fake_never_repeats_mentioned_words(first, last):
+    out = NOBODY(f"@{first} {last}")
+
+    assert not {compare_key(first), compare_key(last)} & {compare_key(w) for w in out.split()}
+
+
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_handle_fake_never_repeats_the_handle(first):
+    out = NOBODY(f"@{first.lower()}.rk salama")
+
+    assert compare_key(out.split()[0]) != compare_key(first)
+
+
+def test_exact_mention_of_participant_first_name_with_unknown_surname():
+    out = Anonymizer(FINAL_NAMES)("@Nirina Rabearisoa")
+
+    assert out == fake_first("Nirina Rakotomalala")
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("WhatsApp+261341234567", "WhatsApp<TEL>"),
+        ("wa+261341234567", "wa<TEL>"),
+        ("laharana+261341234567", "laharana<TEL>"),
+        ("laharana261341234567", "laharana<TEL>"),
+        ("laharana261 34 12 345 67", "laharana<TEL>"),
+        ("tel00261341234567", "tel<TEL>"),
+        ("tel+2610341234567", "tel<TEL>"),
+        ("tel2610341234567", "tel<TEL>"),
+        ("tel(034) 12 345 67", "tel<TEL>"),
+        ("tel+261 (0)34 123 45 67", "tel<TEL>"),
+        ("Tel(+261)34 123 45 67", "Tel<TEL>"),
+        ("tel(00261)34 123 45 67", "tel<TEL>"),
+        ("numero261 034 123 45 67", "numero<TEL>"),
+        ("ato261.034.123.45.67", "ato<TEL>"),
+        ("tel+261 3 4 1 2 3 4 5 6 7", "tel<TEL>"),
+        ("tel (089) 123 45 67", "tel <TEL>"),
+        ("tel (069) 1234567", "tel <TEL>"),
+        ("tel(044) 12 345 67", "tel<TEL>"),
+    ],
+)
+def test_glued_international_phones(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "20:30", "Amin'ny 20:30 isika", "1 000 000 Ar", "261 300 000 Ar", "1 261 340 000 Ar", "solo 34 olona",
+        "Manao 300 000 000 Ar ilay tany", "Mila vola ho 300 000 000 Ar", "valo 320 000 000",
+        "Tonga tao 2 345 678 90", "ho 2025 12 345 olona", "Ar350 000 000", "MGA320 000 000", "Fmg 320 000 000",
+        "Tamin'ny 7h35 1 500 000 Ar", "Nandoa 8h32 2 500 000 Ar", "tamin'ny 14h36 2 400 000 Ar",
+        "ilay320 000 000", "io200000000",
+        ") (010) 2171 2h02 1925 25/01/2019", "valo 20h02 592 10 212 590", "0h03 50,676,597", "(041) 10283 13h38",
+    ],
+)
+def test_times_and_amounts_stay(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+def test_mention_across_a_non_breaking_space():
+    out = NOBODY("@Fara\u00a0Rabe salama")
+
+    assert not {"fara", "rabe"} & {compare_key(w) for w in out.replace("\u00a0", " ").split()}
+    assert out.endswith(" salama")
+
+
+@pytest.mark.parametrize("prefix", ["its", "xx", "i_", "mr", "the", "real"])
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_handle_fake_never_repeats_a_name_inside_the_handle(prefix, first):
+    out = NOBODY(f"@{prefix}{first.lower()} salama")
+
+    assert compare_key(out.split()[0]) != compare_key(first)
+
+
+@pytest.mark.parametrize("gap", ["\u00a0", "\u202f", "\u2002", "\u2009", "\u3000", "\t"])
+def test_mention_across_unicode_spaces(gap):
+    out = NOBODY(f"@Fara{gap}Rabe salama")
+
+    assert "Rabe" not in out
+    assert out.endswith(" salama")
+
+
+@pytest.mark.parametrize("brk", ["\n", "\r\n", "\u2028", "\u2029", "\x85"])
+def test_mention_stops_at_a_line_break(brk):
+    out = NOBODY(f"@Fara{brk}Rabe salama")
+
+    assert out.endswith(f"{brk}Rabe salama")
+
+
+@pytest.mark.parametrize("split", ["{a}_{b}", "{a}.{b}", "its{a}_{b}", "{a}2{b}", "{a}_{a2}"])
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_handle_fake_never_rebuilds_a_split_name(split, first):
+    key = first.lower()
+    out = NOBODY("@" + split.format(a=key[:2], b=key[2:], a2=key[1:]) + " salama")  # {a}_{a2}: "lo_ova"
+
+    assert compare_key(out.split()[0]) != compare_key(first)
+
+
+# --- #16 review notes ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("+261 038 27 2000/5", "<TEL>"),
+        ("Antsoy +261 038 27 2000/5 aho", "Antsoy <TEL> aho"),
+        ("00261 038 27 2000/5", "<TEL>"),
+        ("(+261) 38 27 2000/5", "<TEL>"),
+        ("261 038 27 2000/5", "<TEL>"),
+    ],
+)
+def test_country_code_phone_wins_over_date_filter(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text", ["01/02/2026 03/04 no daty roa", "ny 03/10/2026 amin'ny 14h30", "Taona 2020-03-12 io", "2h03 50 olona"]
+)
+def test_dates_still_kept_after_country_code_rule(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Antsoy 038 27 2000/5 aho", "Antsoy <TEL> aho"),
+        ("034 12 2019-5", "<TEL>"),
+        ("0 34 12 2019/5", "<TEL>"),
+        ("034/12/2019/5", "<TEL>"),
+        ("(034) 12 2000/5", "<TEL>"),
+        ("laharana038 27 2000/5", "laharana<TEL>"),
+        ("34 12 2019/5", "<TEL>"),
+    ],
+)
+def test_local_phone_with_a_year_like_group_is_a_phone(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+@pytest.mark.parametrize("text", ["01/02/2026 03/04", "03/04/2026 12 30", "2020-03-12 034", "17/10/2026 1430"])
+def test_full_dates_next_to_numbers_are_kept(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "35 000, 3 500",
+        "35 000 - 3 500 = 31 500",
+        "38 500, 2 500 Ar",
+        "Vidiny 35 000, 5 000 ny livraison",
+        "35 000 / 5 000",
+        "35 000 3 500",
+        "35 000 000 / 2",
+    ],
+)
+def test_price_pairs_are_kept(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize("text", ["3412 345 67", "3412 34567", "3412345 67"])
+def test_glued_mobiles_without_the_zero_are_caught(text):
+    assert Anonymizer(PRIV_NAMES)(text) == "<TEL>"
+
+
+@pytest.mark.parametrize("text", ["34/12/2019/5", "+261-34-12-2019-5", "+261 34/12/2019/5"])
+def test_phone_containing_a_date_is_still_a_phone(text):
+    assert Anonymizer(PRIV_NAMES)(text) == "<TEL>"
+
+
+@pytest.mark.parametrize(
+    "text", ["01/02/2026 03/04", "03/04/2026 12 30", "2020-03-12 034", "17/10/2026 1430", "31/12/2025"]
+)
+def test_whole_dates_are_kept(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize("text", ["03/13/2026 12", "032/12/2026 1"])
+def test_impossible_dates_are_not_exempt(text):
+    assert "<TEL>" in Anonymizer(PRIV_NAMES)(text)

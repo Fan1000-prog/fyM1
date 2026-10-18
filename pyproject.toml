@@ -1,7 +1,7 @@
 [project]
 name = "fym1"
 version = "0.1.0"
-description = "fyM1: tooling to build, evaluate and publish an everyday-Malagasy chat model"
+description = "fy-m1: tooling to build, evaluate and publish an everyday-Malagasy chat model"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"

@@ -1,4 +1,4 @@
-# fyM1 judge rubric
+# fy-m1 judge rubric
 
 Used to score model replies to `eval/prompts.jsonl`. Judging is done by Claude agents running
 inside the build session (zero cost). The paper labels these scores as LLM-judge scores, not human

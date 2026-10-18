@@ -66,7 +66,7 @@ def test_present_values_are_formatted(results_dir):
     assert macro(tex, "drift-base") == r"40.0\%"
     assert macro(tex, "drift-fym1") == r"5.3\%"
     assert macro(tex, "natural-fym1") == "4.12"
-    assert macro(tex, "model-repo") == "Fan1000-Prog/fyM1-8B"
+    assert macro(tex, "model-repo") == "Fan1000-Prog/fy-m1-8B"
     assert (macro(tex, "leak-matches"), macro(tex, "leak-generic"), macro(tex, "leak-rejected")) == ("2", "2", "0")
 
 

@@ -90,7 +90,7 @@ Two audiences:
 ### 5.6 Publishing
 - **HF model repo** (public): merged 4-bit weights + LoRA adapter + GGUF (Q4_K_M) for CPU/llama.cpp/Ollama; model card with data description (no private content), limits, eval table, example chats.
 - **HF Space** (public, free CPU tier): Gradio chat running the GGUF. Slow but free. Pre-filled example prompts ("Sali ahn", "De ahoana?").
-- **GitHub repo** `Fan1000-prog/fy-m-1` (public; name per §7.5, was `fyM1`): code, notebook, eval scripts, paper source + PDF, README (goals, what this is, how and why the model was chosen and trained — every decision with its reason, CTA "Try it" → Space, links to the model and paper). Private data paths are git-ignored.
+- **GitHub repo** `Fan1000-prog/fy-m1` (public; name per §7.5 and §8.6): code, notebook, eval scripts, paper source + PDF, README (goals, what this is, how and why the model was chosen and trained — every decision with its reason, CTA "Try it" → Space, links to the model and paper). Private data paths are git-ignored.
 - **Paper:** short (4–6 page) LaTeX PDF: motivation, model selection, data (described, not shared), method, trimming/pruning, results, limits, ethics/privacy.
 
 ### 5.7 Team split (agents)
@@ -131,13 +131,13 @@ Owner will recruit a few other native speakers. They need **one easy link**: a s
 - After today (v0.2): the panel's blind A/B results (raters vote over the following days), layer-pruning experiment, longer training. The paper and README say clearly which results are in and which are pending.
 
 ### 7.5 Name and identity
-- Name: **fy-m-1** ("fy", Malagasy: sweet, pleasant; version "m-1"), written `fy-m-1` everywhere public: README, model card, paper, Space titles, system prompt, identity lines. Public ids: HF model `Fan1000-Prog/fy-m-1-<size>`, Spaces `Fan1000-Prog/fy-m-1-chat` and `Fan1000-Prog/fy-m-1-arena`, GitHub `Fan1000-prog/fy-m-1` (recreated at release, §8.2). Private repos keep `fyM1-*`; the Python package stays `fym1`. (Supersedes "fyM1" and the "Resaka" placeholder.)
+- Name: **fy-m1** ("fy", Malagasy: sweet, pleasant; version "m1"), written `fy-m1` everywhere public: README, model card, paper, Space titles, system prompt, identity lines. Public ids: HF model `Fan1000-Prog/fy-m1-<size>`, Spaces `Fan1000-Prog/fy-m1-chat` and `Fan1000-Prog/fy-m1-arena`, GitHub `Fan1000-prog/fy-m1` (recreated at release, §8.2). Private repos keep `fyM1-*`; the Python package stays `fym1`. (Supersedes "fyM1", the earlier hyphenated spelling and the "Resaka" placeholder; §8.6.)
 - System prompt (in Malagasy, with an English gloss in the model card): a helpful Malagasy assistant trained by **Fan's lab**. Training data includes 16 "who are you?" and polite-refusal chats consistent with this, written by the owner in their own words.
 
 ### 7.6 Calls made by the designer after the builder check
 - Data volume unknown until the export arrives; the mix adapts — the fewer real chats, the more checked synthetic chats.
 - Test prompts are written fresh (owner-approved), not taken from private chats, so the test set is public and rerunnable.
-- **Leak gate:** before release, any fyM1 answer that shares a run of 8 words with the real chats blocks release. The owner sees only the matched 8 words (never the chat) and release goes ahead only if every match is a generic phrase. Counts go to `results/eval/leak_review.json` `{matches, approved_generic, rejected}`.
+- **Leak gate:** before release, any fy-m1 answer that shares a run of 8 words with the real chats blocks release. The owner sees only the matched 8 words (never the chat) and release goes ahead only if every match is a generic phrase. Counts go to `results/eval/leak_review.json` `{matches, approved_generic, rejected}`.
 - **Safety:** small set of polite refusals + identity answers in training; a basic safety check before release; limits stated in the model card.
 
 ## 8. Updates from the build session (2026-10-17)
@@ -168,3 +168,10 @@ Decisions made while building. They override earlier sections where they conflic
 
 ### 8.5 Judge disclosure
 - The LLM judge is named in the paper as a method: "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code; rubric in `src/fym1/eval/judge_rubric.md`." This is a methods disclosure, not authorship.
+
+### 8.6 Name, data and process (owner, new run)
+- Public name is **fy-m1** (lowercase, one hyphen; §7.5). `tests/test_public_name.py` guards it.
+- The Messenger export has arrived in `~/malagasy-data/raw/` (custom JSON, not Meta's native shape: the parser needs an adapter tested on synthetic fixtures). It holds well under 2,000 conversations, so checked synthetic chats from an open-weight model fill the mix (§7.6).
+- PR loop: review blocked → a fresh ML-engineer agent fixes → a fresh reviewer → repeat until safe-to-merge and CI green. No round cap. The same blocker 3 rounds in a row → the lead decides and records the call and reason in the PR body and the handoff.
+- Owner-review gates (100-sample sheet, leftover names, leak gate, identity check, greeting ratings) are strict automatic gates run by fresh agents: drop any conversation with an unresolved name or number; fail the leak gate on any 8-word match (fix data, retrain or filter); list what was auto-decided for the owner's later look.
+- Any agent near 25% context used writes a handoff and is replaced by a fresh agent.

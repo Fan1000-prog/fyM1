@@ -13,6 +13,8 @@ a commit that has this wiring (the kaggle-wiring PR); older notebooks read the t
 - Credentials: Kaggle → Settings → API → **Generate New Token**, saved where Kaggle says (the CLI reads
   its default access token). Agents never read or handle it.
 - Tell the lead the Kaggle username (not a secret); agents pass it as `--user` or `KAGGLE_USERNAME`.
+  It must be the account the saved token belongs to: the push goes to the token's account whatever `--user`
+  says (this happened once). The private handoff names the account.
 - The first push of each kernel runs before any secret is attached, so that first run fails at the HF
   token step. Then open the kernel on kaggle.com → **Add-ons → Secrets** → add `HF_TOKEN` and tick it for
   this notebook, and push again.

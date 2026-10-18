@@ -4,8 +4,13 @@ Runs on the owner's laptop only. Prints counts, never text. Also writes leftover
 next to the review sheet: capitalised words that survived anonymising, with counts. Tick the
 real names, save blocklist.txt, and run again with --blocklist to replace them everywhere.
 
+--export takes a "Download your information" folder, a folder of one-file JSON exports, or one
+such file. --dry-run prints thread, message, session and conversation counts and writes nothing.
+
     uv run python scripts/build_chats.py --export ~/malagasy-data/raw --owner "<name>" \
         --out ~/malagasy-data/private/chats.jsonl --sheet ~/malagasy-data/private/review.html
+    uv run python scripts/build_chats.py --export ~/malagasy-data/raw --owner "<name>" --dry-run
+    uv run python scripts/build_chats.py --export ~/malagasy-data/raw --all-senders --dry-run
 """
 
 import argparse
@@ -15,24 +20,47 @@ import sys
 from pathlib import Path
 
 from fym1.data.leftovers import read_blocklist, render_leftover_sheet
-from fym1.data.messenger import load_threads
+from fym1.data.messenger import Thread, load_threads
 from fym1.data.pipeline import build_records, merge_data_stats
 from fym1.data.review_sheet import render_review_sheet, sample_for_review
+from fym1.data.segment import count_sessions, to_conversations
 
 REPO = Path(__file__).resolve().parents[1]
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--export", type=Path, required=True, help="unzipped Messenger export folder")
-    parser.add_argument("--owner", required=True, help="owner's name exactly as Messenger shows it")
-    parser.add_argument("--out", type=Path, required=True, help="JSONL of anonymised conversations")
-    parser.add_argument("--sheet", type=Path, required=True, help="HTML review sheet")
+    parser.add_argument("--export", type=Path, required=True, help="unzipped export folder, or one export file")
+    speaker = parser.add_mutually_exclusive_group(required=True)
+    speaker.add_argument("--owner", help="owner's name exactly as Messenger shows it")
+    speaker.add_argument(
+        "--all-senders", action="store_true", help="every sender takes the assistant side in turn (all consented)"
+    )
+    parser.add_argument("--out", type=Path, help="JSONL of anonymised conversations")
+    parser.add_argument("--sheet", type=Path, help="HTML review sheet")
+    parser.add_argument("--dry-run", action="store_true", help="print segmenting counts only; write nothing")
     parser.add_argument("--blocklist", type=Path, help="blocklist.txt saved from leftover_names.html")
     parser.add_argument("--sample", type=int, default=100, help="conversations on the review sheet")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--stats", type=Path, default=REPO / "results/data_stats.json", help="counts only")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not args.dry_run and not (args.out and args.sheet):
+        parser.error("--out and --sheet are required unless --dry-run")
+    return args
+
+
+def dry_run_counts(threads: list[Thread], owner: str | None) -> dict[str, int]:
+    """Counts after time-gap segmenting, before anonymising and the Malagasy filter. No text.
+
+    Exact-duplicate conversations count once, as in `build_records`.
+    """
+    conversations = {json.dumps(c, sort_keys=True) for t in threads for c in to_conversations(t, owner)}
+    return {
+        "threads": len(threads),
+        "messages": sum(len(t.messages) for t in threads),
+        "sessions": sum(count_sessions(t) for t in threads),
+        "conversations": len(conversations),
+    }
 
 
 def private_path(path: Path) -> Path:
@@ -54,15 +82,19 @@ def private_path(path: Path) -> Path:
 
 def main() -> None:
     args = parse_args()
-    out, sheet = private_path(args.out), private_path(args.sheet)
-    leftover_sheet = private_path(sheet.with_name("leftover_names.html"))
-    blocklist = read_blocklist(args.blocklist.expanduser()) if args.blocklist else []
     export = args.export.expanduser()
     threads = load_threads(export)
     if not threads:
         sys.exit(f"No Messenger threads found under {export}. Point --export at the unzipped export folder.")
-    if not any(args.owner in t.participants for t in threads):
+    if args.owner is not None and not any(args.owner in t.participants for t in threads):
         sys.exit(f"--owner {args.owner!r} is not a participant of any thread. Use the name exactly as Messenger shows it.")
+    if args.dry_run:
+        print(json.dumps(dry_run_counts(threads, args.owner)))
+        return
+
+    out, sheet = private_path(args.out), private_path(args.sheet)
+    leftover_sheet = private_path(sheet.with_name("leftover_names.html"))
+    blocklist = read_blocklist(args.blocklist.expanduser()) if args.blocklist else []
 
     try:
         from fym1.eval.lang import is_malagasy  # loads the language-ID model; only needed here
