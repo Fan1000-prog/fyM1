@@ -171,6 +171,7 @@ INNER_NAME_ALLOWED: dict[tuple[str, str], str] = {
     ("scripts/build_notebooks.py", "random"): REASON_RANDOM,
     ("scripts/build_pairs.py", "random"): REASON_RANDOM,
     ("scripts/trim_cost.py", "random"): REASON_RANDOM,
+    ("src/fym1/data/synth_gate.py", "random"): REASON_RANDOM,
     ("spaces/arena/README.md", "random"): REASON_RANDOM,
     ("spaces/arena/app.py", "random"): REASON_RANDOM,
     ("spaces/arena/votes.py", "random"): REASON_RANDOM,
@@ -223,6 +224,9 @@ EMAIL_PROBE_FILES: dict[str, frozenset[tuple[str, str]]] = {
     "tests/data/test_gate.py": frozenset({("olona", "example.mg")}),
     # synthetic address in a link-and-handle line that known_words must not read as words.
     "tests/data/test_known_words.py": frozenset({("fanja", "mail.mg")}),
+    # "vola" is the Malagasy word for "money": a synthetic address in a synthetic chat the synth gate must drop as a
+    # contact.
+    "tests/data/test_synth_gate.py": frozenset({("vola.test", "gmail.com")}),
 }
 SECRET_FILE_NAMES = frozenset({".env", "kaggle.json", "access_token", "id_rsa", "id_ed25519", ".netrc"})
 SECRET_FILE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
