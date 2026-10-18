@@ -3,9 +3,7 @@
 One block per finding. Over-replacing is fine; a name or number getting through is not.
 """
 
-import importlib.util
 import re
-from pathlib import Path
 
 import pytest
 
@@ -15,11 +13,6 @@ from fym1.data.gate import contact_left, has_long_number, pool_names_in, strict_
 from fym1.data.known_words import KNOWN_WORDS, known_by, word_list
 from fym1.data.messenger import Message, Thread
 from fym1.data.pipeline import build_records
-
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "build_known_words.py"
-_spec = importlib.util.spec_from_file_location("build_known_words", SCRIPT)
-build_known_words = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(build_known_words)
 
 FILLER = "eny tsara ihany koa, eny tsara ihany koa, eny tsara ihany koa"
 
@@ -172,7 +165,7 @@ def test_f5_committed_lists_hold_no_pool_or_deny_list_names(name):
         assert name not in KNOWN_WORDS[list_name].folded, (list_name, name)
 
 
-def test_f5_build_subtracts_pool_and_deny_list_names():
+def test_f5_build_subtracts_pool_and_deny_list_names(build_known_words):
     cases = build_known_words.count_cases(["ny vola sy ny soa sy ny trano"] * 5)
 
     names = build_known_words.name_list(["sandrine"])
@@ -182,7 +175,7 @@ def test_f5_build_subtracts_pool_and_deny_list_names():
     assert "trano" in words_ and "vola" not in words_ and "soa" not in words_
 
 
-def test_f5_name_capitalised_a_few_times_and_never_lower_looks_like_a_name():
+def test_f5_name_capitalised_a_few_times_and_never_lower_looks_like_a_name(build_known_words):
     cases = build_known_words.count_cases(["hoy i Bema"] * 3)
 
     assert build_known_words.looks_like_a_name("bema", cases)
