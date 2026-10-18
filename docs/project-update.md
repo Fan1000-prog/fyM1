@@ -194,7 +194,8 @@ simple open licence (owner rule). Gemma 4's FLORES+ and smoke were not waited fo
 7. **Eval** (Task 5): 150 answers from base and fy-m1, Belebele + FLORES+ rerun, perplexity, blind judge,
    `scores.json`; merge LoRA, 4-bit + GGUF Q4_K_M.
 8. **Leak gate** (automatic, strict): any 8-word match fails → fix data, filter or retrain. Automatic identity
-   check of the 20 identity/safety answers.
+   check (`scripts/identity_check.py`, strict): the 20 identity/safety answers plus the extra identity
+   prompts in `eval/identity_check.jsonl`; zero claims to be another model and a pass rate of at least 90%.
 9. **Trim** (Task 7): run `03_trim`; ship trimmed GGUF only if all three gates pass.
 10. **Deploy Spaces** `fy-m1-chat` and `fy-m1-arena` (Task 6); Playwright smoke test.
 11. **Write-up** (Task 8) from `results/` via `paper/make_numbers.py --strict`; licence = the picked base's.
