@@ -19,6 +19,19 @@ def test_metadata_is_private_gpu_t4_with_internet():
     assert meta["machine_shape"] == "NvidiaTeslaT4"
 
 
+def test_04_synth_is_a_private_gpu_t4_kernel_with_internet():
+    meta = push.kernel_metadata("croixrousse69", "04_synth")
+    assert meta["id"] == "croixrousse69/fym1-04-synth"
+    assert meta["code_file"] == "04_synth.ipynb"
+    assert meta["is_private"] is True and meta["enable_gpu"] is True and meta["enable_internet"] is True
+    assert meta["machine_shape"] == "NvidiaTeslaT4"
+
+
+def test_every_kaggle_notebook_exists():
+    for notebook in push.NOTEBOOKS:
+        assert (push.REPO_ROOT / "notebooks" / f"{notebook}.ipynb").is_file()
+
+
 def test_unknown_notebook_is_refused():
     with pytest.raises(KeyError):
         push.kernel_metadata("someone", "99_nope")

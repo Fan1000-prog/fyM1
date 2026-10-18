@@ -1,6 +1,6 @@
 """Push a notebook to Kaggle as a private GPU kernel (T4) and start a run.
 
-Usage: python scripts/kaggle_push.py {00_baseline,01_train} [--user KAGGLE_USERNAME]
+Usage: python scripts/kaggle_push.py {00_baseline,01_train,04_synth} [--user KAGGLE_USERNAME]
 Builds a folder with the notebook and its kernel-metadata.json and runs the pinned Kaggle CLI
 `kernels push`. The username (not a secret) comes from --user or KAGGLE_USERNAME. Kaggle credentials
 are left to the CLI (its default access token); this script never uses or prints them. The HF_TOKEN
@@ -20,6 +20,7 @@ KAGGLE_CLI = ["uvx", "--from", "kaggle==2.2.4", "kaggle"]
 NOTEBOOKS = {
     "00_baseline": ("fym1-00-baseline", "fyM1 00 baseline"),
     "01_train": ("fym1-01-train", "fyM1 01 train"),
+    "04_synth": ("fym1-04-synth", "fyM1 04 synth"),
 }
 # T4 (Turing): no bf16, so Unsloth's float32 forcing applies as on Colab. P100 (Pascal) is older still.
 MACHINE_SHAPE = "NvidiaTeslaT4"
