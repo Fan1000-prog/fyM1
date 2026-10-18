@@ -50,3 +50,31 @@ def test_other_errors_are_not_swallowed():
 
     with pytest.raises(ValueError):
         run_batched([1], 4, run, is_oom, lambda: None)
+
+
+def test_on_retry_gets_the_size_of_each_retried_batch():
+    retried = []
+
+    def run(batch):
+        if len(batch) > 1 and 3 in batch:
+            raise FakeOOM()
+        return batch
+
+    run_batched([1, 2, 3, 4, 5], 2, run, is_oom, lambda: None, on_retry=retried.append)
+    assert retried == [2]
+
+
+@pytest.mark.parametrize("bad", [lambda batch: batch[:-1], lambda batch: batch + batch])
+def test_result_count_must_match_the_batch(bad):
+    with pytest.raises(ValueError, match="results for a batch"):
+        run_batched([1, 2], 2, bad, is_oom, lambda: None)
+
+
+def test_result_count_is_checked_on_the_one_at_a_time_retry():
+    def run(batch):
+        if len(batch) > 1:
+            raise FakeOOM()
+        return []
+
+    with pytest.raises(ValueError, match="0 results for a batch of 1"):
+        run_batched([1, 2], 2, run, is_oom, lambda: None)
