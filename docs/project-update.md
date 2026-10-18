@@ -23,8 +23,8 @@ This file says where the project stands and how to pick it up; the spec and plan
 Tooling is built and merged. Baseline tests are half done; no model is picked or trained yet.
 
 - **Blocking training:** the owner's Messenger export (waiting on Meta). `~/malagasy-data/raw/` doesn't exist.
-- **GPU:** Kaggle works (owner's account; HF token attached to the baseline kernel). Colab's free quota ran out at
-  01:15 UTC and is the backup only.
+- **GPU:** Kaggle's CLI works, but the first real run failed for setup reasons (§5). Colab's free quota ran out at
+  01:15 UTC and resets daily; it's the backup.
 - **Ship date:** when the export is in (owner chose this over a Wikipedia-only model that would still talk formally).
 
 `main`: 2,077 tests pass, 1 skipped, 14 expected failures with default groups (`uv run pytest -q`); ~2,140 pass
@@ -91,7 +91,7 @@ owner's rating matters. Gemma 4's earlier unscripted smoke (≈126 s/step, loss 
 | Item | Who | State |
 |---|---|---|
 | **Known issue: #24 breaks dates followed by more numbers** | next team | "15/03/2026 1 500 Ar" → "15/<TEL> Ar"; date ranges broken (~1,080 per 97k everyday lines; a plain date or "le 15/03/2026 à 14h" is fine; not a privacy leak). Owner decision (2026-10-18): keep #24, no revert (a revert would bring back the rare leak it closed, "038 27 2000/5"). Next: a PR that masks whole real dates in the sentence before phone matching, tested on date ranges and date + price/time; merge it before `build_chats` runs on the real export |
-| Kaggle baseline run | trainer | kernel version 2 running since ~01:48 UTC on Gemma 3 (Hub code 6d13c89); results land on the Hub one section at a time |
+| Kaggle baseline run | owner, then trainer | version 2 (Gemma 3) **failed** with no GPU, no internet and no HF_TOKEN, so nothing was measured. Likely the Kaggle account isn't phone-verified (needed for GPU and internet) and the secret isn't switched on for the notebook. Owner: verify phone, check the notebook's Accelerator (GPU T4), Internet on, HF_TOKEN on; then the trainer re-pushes (details in LEAD-HANDOFF §15) |
 | PR #22 baseline guards (draft) | trainer | parked until Gemma 3's result shows `env.loaded_from == "google/gemma-3-12b-it"`; then sync with main, review, merge |
 | Messenger export | owner | waiting on Meta |
 | 20-greeting ratings per model | owner | after all four candidates have answers |
