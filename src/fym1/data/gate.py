@@ -8,10 +8,10 @@ fine, letting a name or number through is not. A whole conversation is dropped i
   is plain digits or clean 3-digit groups, is followed by a currency word (`1 500 000 Ar`,
   `2500000 ariary`, `1 250 000,50 €`), and does not look like a phone: no `+` before it and its
   digits do not start with `0`, `261` or read `3[2-9]` + 7 digits. A run of 9-10 digits is a phone's
-  length, so it is a price only with grouped thousands ending `000` or cents ("150 000 000 Ar",
-  "123 456 789,00 €"). Cents never save digits that read as a phone once removed: a 9-10 digit
-  run starting `0`, `261` or `3[2-9]` needs grouped thousands ending `000` ("320 000 000,00 Ar"
-  passes, "341234567,50 Ar" does not). A full date (8 digits) counts too.
+  length, counted with or without its cents, so it is a price only with grouped thousands ending
+  `000` before any cents ("150 000 000 Ar", "320 000 000,00 Ar", "1 250 000,50 €"); cents alone
+  never make a price ("123 456 789,00 €", "6123456,78 €" are dropped). A full date (8 digits)
+  counts too.
 - `contact`: an email, a link with a path or query, an `@` before a word or a placeholder (spaces
   allowed: "@ njaka", "njaka@ <URL>"), an `at`/`arobase`/`(at)`/`[at]` before a placeholder or a
   mail host ("njaka at gmail"), or a private-use mark the anonymiser leaves only when a
@@ -110,11 +110,9 @@ PRICE = re.compile(r"\d{1,3}(?:([ \u00a0\u202f.,])\d{3})?(?:\1\d{3})*(?:[.,]\d{1
 # Digits of a Malagasy phone: trunk 0, country code 261 (or 00261), or a 9-digit mobile without the 0.
 PHONE_DIGITS = re.compile(r"(?:0|261|3[2-9]\d{7}$)")
 # A phone's length without its trunk 0 or with it (Malagasy mobiles 3x and landlines 2x, French mobiles
-# [67] without the 0, ...). Too many shapes to list, so a run this long fails closed: it is a price only
-# with grouped thousands ending 000 ("150 000 000") or cents ("123 456 789,00") on digits that are not a phone's.
+# [67] without the 0, ...). Too many shapes to list, so a run this long, with or without its cents, fails
+# closed: it is a price only with grouped thousands ending 000 before any cents ("150 000 000", "1 250 000,50").
 PHONE_LENGTHS = (9, 10)
-# A 9-10 digit run starting like a Malagasy mobile without its 0 is a phone unless grouped thousands end 000.
-MOBILE_START = re.compile(r"3[2-9]")
 CENTS = re.compile(r"[.,]\d{1,2}$")
 
 LINK_WITH_PATH = re.compile(r"\b(?:https?://|www\.)\S+|\b(?:[\w-]+\.)+[a-z]{2,}[/?]\S*", re.IGNORECASE)
@@ -195,12 +193,14 @@ def _is_price(text: str, run: re.Match) -> bool:
     if not shape or not CURRENCY_AFTER.match(text, run.end()) or _looks_like_a_phone(text, run):
         return False
     whole = CENTS.sub("", run.group())
-    digits = re.sub(r"\D", "", whole)
-    if len(digits) not in PHONE_LENGTHS or (shape.group(1) is not None and whole.endswith("000")):
+    lengths = {_digit_count(whole), _digit_count(run.group())}  # without and with the cents
+    if lengths.isdisjoint(PHONE_LENGTHS):
         return True
-    # Cents mark a price only when the digits before them are not a phone's ("341234567,50 Ar" is one).
-    has_cents = whole != run.group()
-    return has_cents and not PHONE_DIGITS.match(digits) and not MOBILE_START.match(digits)
+    return shape.group(1) is not None and whole.endswith("000")  # "150 000 000", "1 250 000,50"
+
+
+def _digit_count(text: str) -> int:
+    return sum(c.isdigit() for c in text)
 
 
 def has_long_number(text: str) -> bool:
