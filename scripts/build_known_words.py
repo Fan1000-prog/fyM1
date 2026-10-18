@@ -16,7 +16,16 @@ Writes, into src/fym1/data/:
   does not mostly capitalise it (the name filter below). French and English Wikipedia are read as
   the first --wiki-sample articles of the same pinned revision. "pierre" and "max" stay names.
 
-Name filter, on all three lists: every person name is dropped (`name_list`: first_names.txt, the
+- mg_corpus_words.txt: the --corpus-top words Malagasy web text (HPLT 2.0 cleaned, plt_Latn, CC0 1.0)
+  types in lower case most often, at least --min-lower times. Wikipedia is formal; web text adds the
+  everyday and texting spellings people chat in. Read row group by row group (streamed, nothing kept
+  on disk). Web addresses, emails and @handles are cut before counting: names hide there in lower case.
+  Web text types given names that are also words in lower case far more than Wikipedia ("riana",
+  "nambinina"), so a stricter name rule applies on top of the one below: a word is kept only if web text
+  capitalises it mid-sentence at most CORPUS_MAX_CAPITALISED (0.25) times as often as in lower case.
+  Everyday words sit far below that ("trano" 0.04, "tsara" 0.03); those names above it (0.4-1.3).
+
+Name filter, on all four lists: every person name is dropped (`name_list`: first_names.txt, the
 anonymiser's fake-name pool, the Malagasy name deny list name_deny_list.txt and mg_first_names.txt), and so is a word
 that Wikipedia writes capitalised mid-sentence at least NAME_MIN_CAPITALISED times and more than
 NAME_RATIO times as often as in lower case in Malagasy Wikipedia. (French and English Wikipedia are not
@@ -29,6 +38,7 @@ and never in lower case is a name. (It was 10, which let rarer names through.)
 All words are folded (lower case, no accents), letters only, sorted, under one `#` source line.
 
     uv sync --group data && uv run python scripts/build_known_words.py
+    uv run python scripts/build_known_words.py --corpus-only   # only mg_corpus_words.txt
 """
 
 import argparse
@@ -39,11 +49,13 @@ import re
 import urllib.request
 import zipfile
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import NamedTuple
 
+import pyarrow.parquet as pq
 from datasets import load_dataset
+from huggingface_hub import HfFileSystem
 from wordfreq import top_n_list
 
 from fym1.data.anonymize import FALLBACK_NAME, FIRST_NAMES, SURNAMES, fold
@@ -59,6 +71,12 @@ WIKIPEDIA_REVISION = "b04c8d1ceb2f5cd4588862100d08de323dccfbaa"  # wikimedia/wik
 INSEE_URL = "https://www.insee.fr/fr/statistiques/fichier/7633685/nat2022_csv.zip"
 INSEE_SHA256 = "c13b45e770c684b3c8531f28b6e3eae62194dc6dc86205fa17e4c6447b01b81d"
 MG_WORD_MIN_LOWER = 150
+CORPUS_MAX_CAPITALISED = 0.25  # mid-sentence capitalised / lower case, at most, for a web-text word
+HPLT_REPO = "datasets/HPLT/HPLT2.0_cleaned"
+HPLT_REVISION = "d1324a5283f762ee62c2a5c81de08fc6450ea540"
+HPLT_FILES = ("plt_Latn/train-00000-of-00002.parquet", "plt_Latn/train-00001-of-00002.parquet")
+# A link, a bare domain, an email or an @handle, as one non-space run: "fb.com/rakoto.jean", "x@y.mg".
+WEB_ADDRESS = re.compile(r"\S*(?:https?://|www\.|@|\.(?:com|net|org|mg|fr|io|me)\b)\S*", re.IGNORECASE)
 SOURCES = {
     "mg_wiki_words.txt": f"Malagasy Wikipedia (wikimedia/wikipedia 20231101.mg @ {WIKIPEDIA_REVISION[:12]}), "
     "CC BY-SA 4.0",
@@ -67,6 +85,8 @@ SOURCES = {
     "wordlike_first_names.txt": "INSEE first names (Licence Ouverte / Etalab 2.0) that wordfreq (CC BY-SA 4.0) "
     f"or Malagasy Wikipedia has as words and French/English/Malagasy Wikipedia @ {WIKIPEDIA_REVISION[:12]} "
     "(CC BY-SA 4.0) types mostly in lower case",
+    "mg_corpus_words.txt": f"HPLT 2.0 cleaned, Malagasy plt_Latn (HPLT/HPLT2.0_cleaned @ {HPLT_REVISION[:12]}), "
+    "CC0 1.0",
     "first_names.txt": f"INSEE fichier des prenoms 2022 ({INSEE_URL}), Licence Ouverte / Etalab 2.0",
 }
 
@@ -169,15 +189,49 @@ def frequent_words(lang: str, top: int, cases: CaseCounts, names: set[str]) -> l
     )
 
 
+def without_web_addresses(text: str) -> str:
+    return WEB_ADDRESS.sub(" ", text)
+
+
+def corpus_texts() -> Iterator[str]:
+    """Malagasy web text from the pinned HPLT files, one parquet row group at a time, web addresses cut."""
+    fs = HfFileSystem()
+    for name in HPLT_FILES:
+        with fs.open(f"{HPLT_REPO}@{HPLT_REVISION}/{name}", block_size=16 << 20) as file:
+            parquet = pq.ParquetFile(file)
+            for group in range(parquet.metadata.num_row_groups):
+                for text in parquet.read_row_group(group, columns=["text"]).column("text").to_pylist():
+                    yield without_web_addresses(text)
+
+
+def corpus_words(cases: CaseCounts, min_lower: int, names: set[str], top: int) -> list[str]:
+    """The `top` most frequent `lower_case_words` that are rarely capitalised mid-sentence, sorted."""
+    words = [
+        w
+        for w in lower_case_words(cases, min_lower, names)
+        if cases.capitalised[w] <= CORPUS_MAX_CAPITALISED * cases.lower[w]
+    ]
+    return sorted(sorted(words, key=lambda w: (-cases.lower[w], w))[:top])
+
+
 def write(words: list[str], name: str) -> None:
     path = DATA / name
     path.write_text(f"# {SOURCES[name]}\n" + "\n".join(words) + "\n", encoding="utf-8")
     print(f"{len(words)} words -> {path}")
 
 
-def hand_listed() -> set[str]:
-    lines = (DATA / "mg_known_names.txt").read_text("utf-8").splitlines()
+def read_words(name: str) -> set[str]:
+    lines = (DATA / name).read_text("utf-8").splitlines()
     return {fold(line.strip()) for line in lines if line.strip() and not line.startswith("#")}
+
+
+def hand_listed() -> set[str]:
+    return read_words("mg_known_names.txt")
+
+
+def write_corpus_words(names: set[str], args: argparse.Namespace) -> None:
+    cases = count_cases(corpus_texts())
+    write(corpus_words(cases, args.min_lower, names, args.corpus_top), "mg_corpus_words.txt")
 
 
 def main() -> None:
@@ -187,7 +241,13 @@ def main() -> None:
     parser.add_argument("--top", type=int, default=30_000)
     parser.add_argument("--min-births", type=int, default=1_000)
     parser.add_argument("--wiki-sample", type=int, default=100_000, help="French/English Wikipedia articles read")
+    parser.add_argument("--corpus-top", type=int, default=50_000, help="most frequent web-text words kept")
+    parser.add_argument("--corpus-only", action="store_true", help="rebuild mg_corpus_words.txt only")
     args = parser.parse_args()
+
+    if args.corpus_only:
+        write_corpus_words(name_list(read_words("first_names.txt")), args)
+        return
 
     cases = wikipedia_cases(args.config)
     all_cases = {"mg": cases, **{lang: wikipedia_cases(f"20231101.{lang}", args.wiki_sample) for lang in ("fr", "en")}}
@@ -198,6 +258,8 @@ def main() -> None:
     write(lower_case_words(cases, args.min_lower, names), "mg_wiki_words.txt")
     for lang in ("fr", "en"):
         write(frequent_words(lang, args.top, cases, names), f"{lang}_words.txt")
+
+    write_corpus_words(names, args)
 
     vocabularies = {lang: {fold(w) for w in top_n_list(lang, args.top)} for lang in ("fr", "en")}
     vocabularies["mg"] = set(cases.lower)

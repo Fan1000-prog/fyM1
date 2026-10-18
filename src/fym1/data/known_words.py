@@ -6,10 +6,13 @@ Lists, checked in this order (the first that knows a word gets the credit in the
   texting words. The common list is ranked by article count whatever the case, so it holds
   first names ("jean", "marie"); keeping only what `mg_wiki` has drops them.
 - `mg_wiki`: words Malagasy Wikipedia (CC BY-SA 4.0) types in lower case 3+ times.
+- `mg_corpus`: the 50,000 words Malagasy web text (HPLT 2.0, CC0 1.0) types in lower case most
+  often, 3+ times, and capitalises mid-sentence at most a quarter as often (a stricter name rule: web
+  text types names like "riana" in lower case too). Wikipedia is formal; this adds everyday spellings.
 - `known_names`: a short hand list of places, brands and religious words (`mg_known_names.txt`).
 - `fr`, `en`: the 30,000 most frequent French and English words from `wordfreq` (data CC BY-SA 4.0).
 
-`mg_wiki`, `fr` and `en` are built by scripts/build_known_words.py, which drops words Wikipedia
+`mg_wiki`, `mg_corpus`, `fr` and `en` are built by scripts/build_known_words.py, which drops words Wikipedia
 mostly capitalises mid-sentence ("Marie", "David") and every word in `first_names.txt`.
 
 `first_names.txt` (French first names given 1,000+ times since 1900, INSEE, Licence Ouverte)
@@ -22,7 +25,7 @@ is checked before every list: a first name never clears, whatever list has it ("
 `name_deny_list.txt` holds common Malagasy given names that are also words ("Hery", "Soa", "Vola");
 `mg_first_names.txt` those that are not ("Mialy", "Njaka"), a name even in lower case.
 `PERSON_NAMES` (first names, both Malagasy lists and the anonymiser's fake-name pool) never clear and are
-taken out of `mg_wiki`, `fr` and `en` when they are built.
+taken out of `mg_wiki`, `mg_corpus`, `fr` and `en` when they are built.
 
 A word matches folded (lower case, no accents). Stretched letters are collapsed only for real
 stretching, a letter typed 3+ times ("Bonjouuur" -> "bonjour"), and never when the collapsed word
@@ -80,6 +83,7 @@ _MG_WIKI = word_list(_words("mg_wiki_words.txt"))
 KNOWN_WORDS: Lexicon = {
     "mg_common": word_list({fold(w) for w in COMMON_WORDS} & _MG_WIKI.folded | TEXTING_WORDS),
     "mg_wiki": _MG_WIKI,
+    "mg_corpus": word_list(_words("mg_corpus_words.txt")),
     "known_names": word_list(_words("mg_known_names.txt")),
     "fr": word_list(_words("fr_words.txt")),
     "en": word_list(_words("en_words.txt")),

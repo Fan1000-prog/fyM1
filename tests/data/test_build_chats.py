@@ -70,6 +70,7 @@ GATE_KEYS = {
     "kept",
     "cleared_mg_common",
     "cleared_mg_wiki",
+    "cleared_mg_corpus",
     "cleared_known_names",
     "cleared_fr",
     "cleared_en",

@@ -23,7 +23,7 @@ def test_known_by_names_the_first_list_that_has_the_word():
 
 
 def test_every_list_is_loaded_in_checking_order():
-    assert list(KNOWN_WORDS) == ["mg_common", "mg_wiki", "known_names", "fr", "en"]
+    assert list(KNOWN_WORDS) == ["mg_common", "mg_wiki", "mg_corpus", "known_names", "fr", "en"]
     assert all(len(words.folded) > 0 for words in KNOWN_WORDS.values())
 
 
@@ -70,7 +70,7 @@ def _first_line(name):
 
 
 def test_every_word_list_file_starts_with_a_source_line():
-    for name in ("mg_wiki_words.txt", "fr_words.txt", "en_words.txt", "first_names.txt", "mg_known_names.txt"):
+    for name in ("mg_wiki_words.txt", "mg_corpus_words.txt", "fr_words.txt", "en_words.txt", "first_names.txt", "mg_known_names.txt"):
         assert _first_line(name).startswith("# "), name
 
 
@@ -79,6 +79,8 @@ def test_build_pins_the_wikipedia_revision():
     pinned = re.search(r'^WIKIPEDIA_REVISION = "([0-9a-f]+)"', BUILD_SCRIPT.read_text("utf-8"), re.MULTILINE)
 
     assert pinned and len(pinned.group(1)) == 40
+    hplt = re.search(r'^HPLT_REVISION = "([0-9a-f]+)"', BUILD_SCRIPT.read_text("utf-8"), re.MULTILINE)
+    assert hplt and len(hplt.group(1)) == 40
 
 
 def test_build_keeps_first_names_a_wikipedia_uses_as_words_and_not_names(build_known_words):
@@ -95,3 +97,39 @@ def test_build_keeps_first_names_a_wikipedia_uses_as_words_and_not_names(build_k
 
 def test_wordlike_first_names_file_starts_with_a_source_line():
     assert _first_line("wordlike_first_names.txt").startswith("# ")
+
+
+def test_corpus_words_keep_the_most_frequent_lower_case_words_and_never_names(build_known_words):
+    texts = (
+        ["tsara be ilay izy"] * 9  # "be" has 2 letters: kept like any word
+        + ["mbola tsy vita"] * 4
+        + ["hoy i Bema, i Bema, i Bema"] * 3  # capitalised mid-sentence, never lower case: a name
+        + ["bema bema"]  # lower case twice only: below --min-lower
+        + ["salut sandrine"] * 5  # a first name, typed in lower case often
+        + ["vary"] * 2  # too rare
+    )
+    cases = build_known_words.count_cases(texts)
+
+    words = build_known_words.corpus_words(cases, min_lower=3, names={"sandrine"}, top=5)
+
+    assert words == sorted(["tsara", "be", "ilay", "izy", "salut"])  # top 5 by count; ties by word
+    assert "bema" not in build_known_words.corpus_words(cases, min_lower=2, names=set(), top=100)
+
+
+def test_web_addresses_are_cut_before_counting_so_names_in_them_never_become_words(build_known_words):
+    text = "jereo www.example.mg/fanja sy fb.com/rakoto.jean na fanja@mail.mg na @njaka https://x.io/koto ok"
+
+    left = build_known_words.without_web_addresses(text).split()
+
+    assert left == ["jereo", "sy", "na", "na", "ok"]
+
+
+def test_corpus_words_drop_names_web_text_also_types_in_lower_case(build_known_words):
+    # "riana" is a word and a given name: 10 times lower case, 4 capitalised mid-sentence (0.4)
+    texts = ["ny riana sy ny trano"] * 10 + ["hoy i Riana, i Riana"] * 2 + ["tonga ny Trano"]
+    cases = build_known_words.count_cases(texts)
+
+    words = build_known_words.corpus_words(cases, min_lower=3, names=set(), top=100)
+
+    assert not build_known_words.looks_like_a_name("riana", cases)  # the Wikipedia rule alone keeps it
+    assert "riana" not in words and "trano" in words  # "trano": 1 capitalised in 10 (0.1)
