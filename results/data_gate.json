@@ -1,14 +1,20 @@
 {
   "conversations_before_gate": 260,
-  "dropped": 52,
+  "dropped": 68,
   "dropped_long_number": 0,
   "dropped_contact": 4,
-  "dropped_too_many_unknown": 48,
-  "kept": 208,
+  "dropped_too_many_unknown": 15,
+  "dropped_too_many_fakes": 56,
+  "dropped_hidden_char": 0,
+  "kept": 192,
   "cleared_mg_common": 509,
   "cleared_mg_wiki": 269,
+  "cleared_mg_corpus": 280,
   "cleared_known_names": 44,
-  "cleared_fr": 153,
+  "cleared_fr": 121,
   "cleared_en": 0,
-  "tokens_replaced": 1189
+  "tokens_replaced": 351,
+  "words_kept": 3656,
+  "fakes_per_kept_median": 2,
+  "fakes_per_kept_max": 5
 }
