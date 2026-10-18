@@ -66,6 +66,16 @@ NOT_NAMES = frozenset(
     """.split()
 ) | frozenset(compare_key(w) for w in MALAGASY_WORDS)
 
+# Synthetic chats are training data, so the generator's licence reaches fy-m1. Owner decision 2026-10-18: fy-m1
+# ships under a simple open licence, so only permissively licensed generators (Gemma 3's terms of use would make
+# fy-m1 a Gemma derivative). Licences as on each model card, lower case; a new generator is added here with its own.
+PERMISSIVE_LICENCES = frozenset({"apache-2.0", "mit", "cc-by-4.0"})
+GENERATOR_LICENCES = {
+    "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1": "cc-by-4.0",
+    "google/gemma-4-12B-it": "apache-2.0",
+}
+_NOT_FETCHED = object()
+
 DROP_REASONS = (
     "unparseable", "length", "not_malagasy", "placeholder", "unknown_name", "leak_8gram", "duplicate",
     "near_duplicate",
@@ -106,6 +116,22 @@ def seed_grid(n: int, seed: int) -> list[Seed]:
             names = tuple(rng.sample(ALLOWED_NAMES, NAMES_PER_SEED))
             seeds.append(Seed(topic, user, assistant, rng.choice(REGISTERS), rng.choice(SEED_TURNS), names))
     return seeds[:n]
+
+
+def generator_licence(hub_id: str, card_licence: str | None | object = _NOT_FETCHED) -> str:
+    """The licence of an allowed generator, or ValueError. `card_licence` is the Hub model card's, when fetched:
+    it must agree, so a relicensed model is refused until GENERATOR_LICENCES is checked again."""
+    licence = GENERATOR_LICENCES.get(hub_id)
+    if licence not in PERMISSIVE_LICENCES:
+        raise ValueError(f"{hub_id} is not an allowed generator (permissive only): {sorted(GENERATOR_LICENCES)}")
+    if card_licence is not _NOT_FETCHED and str(card_licence or "").lower() != licence:
+        raise ValueError(f"{hub_id}: model card licence {card_licence!r} is not the checked {licence!r}")
+    return licence
+
+
+def is_sampling_overflow(error: BaseException) -> bool:
+    """True for torch's sampling error on inf/nan probabilities (float16 overflow): the next generator should run."""
+    return isinstance(error, RuntimeError) and "probability tensor contains" in str(error)
 
 
 def _chars(messages: Conversation) -> int:
@@ -281,7 +307,7 @@ def filter_conversations(
 # results/synth_stats.json: counts and run settings only, never text.
 STATS_META_KEYS = (
     "seed", "few_shot_k", "target_raw", "generator", "dtype", "gpus", "code_sha", "data_revision",
-    "gen_seconds", "new_tokens",
+    "gen_seconds", "new_tokens", "generator_licence",
 )  # fmt: skip
 _STATS_KEYS = {"raw", "kept", "dropped", "by_generator", *STATS_META_KEYS}
 _MODEL_ID = re.compile(r"^[\w.-]+/[\w.-]+$")
@@ -311,6 +337,8 @@ def validate_stats(stats: dict) -> None:
     by_generator = stats.get("by_generator", {})
     if not all(_MODEL_ID.match(k) and _is_count(v) for k, v in by_generator.items()):
         raise ValueError("by_generator must map model ids to counts")
+    for hub_id in by_generator:
+        generator_licence(hub_id)
     for key in STATS_META_KEYS:
         value = stats.get(key)
         ok = value is None or _is_count(value) or isinstance(value, float) and not isinstance(value, bool)
