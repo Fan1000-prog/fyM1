@@ -40,6 +40,18 @@ def _train_ngrams(train_texts: Iterable[str], n: int) -> set[tuple[str, ...]]:
     return train_ngrams
 
 
+class NgramIndex:
+    """Word n-grams of a set of texts, normalised as in `leak_rate`, for checking many texts against them."""
+
+    def __init__(self, texts: Iterable[str], n: int = 8):
+        self.n = n
+        self._ngrams = _train_ngrams(texts, n)
+
+    def shares_with(self, text: str) -> bool:
+        """`text` contains at least one of the indexed n-grams."""
+        return not self._ngrams.isdisjoint(_ngrams(text, self.n))
+
+
 def leak_rate(responses: list[str], train_texts: Iterable[str], n: int = 8) -> float:
     """Share of replies that contain any word n-gram found in the training texts."""
     _require_responses(responses)
