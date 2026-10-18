@@ -1,9 +1,13 @@
 """fym1.release and scripts/release_snapshot.py, on synthetic repos and exports only."""
 
+import gzip
 import importlib.util
+import io
 import json
+import shutil
+import zipfile
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import pytest
 
@@ -26,11 +30,14 @@ def git(repo: Path, *args: str) -> str:
                            "-c", "commit.gpgsign=false", *args], check=True, capture_output=True, text=True).stdout
 
 
-def make_repo(tmp_path: Path, files: dict[str, str]) -> Path:
+def make_repo(tmp_path: Path, files: dict[str, str | bytes]) -> Path:
     repo = tmp_path / "repo"
     for name, text in files.items():
         (repo / name).parent.mkdir(parents=True, exist_ok=True)
-        (repo / name).write_text(text, encoding="utf-8")
+        if isinstance(text, bytes):
+            (repo / name).write_bytes(text)
+        else:
+            (repo / name).write_text(text, encoding="utf-8")
     git(repo.parent, "init", "-q", str(repo))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "init")
@@ -142,6 +149,49 @@ def test_count_name_hits_is_whole_word(text, hits):
     assert count_name_hits(text, NAMES) == hits
 
 
+@pytest.mark.parametrize(("text", "hits"), [
+    # the strict gate's tokeniser: a lower-to-upper case change splits a word
+    ("salutZafy", 1),
+    ("helloBodoAndZafy", 2),
+    # spaced-out letters read as one word
+    ("Z a f y", 1),
+    ("Z.a.f.y", 1),
+    ("B_o_d_o", 1),
+    # \\x, \\U, HTML and percent escapes, and escapes inside escapes
+    ("\\x5aafy", 1),
+    ("\\U0000005aafy", 1),
+    ("&#90;afy &#x42;odo", 2),
+    ("&amp;#90;afy", 1),
+    ("%5Aafy", 1),
+    ("%255Aafy", 1),
+    # a 4+ letter name inside a longer word no known-word list has; known words stay
+    ("bodozafy", 1),
+    ("xxzafyxx", 1),
+    ("contest attestation", 0),
+    # digits for letters around a gate word
+    ("B0d0", 1),
+])
+def test_count_name_hits_reads_text_as_the_gate_does(text, hits):
+    assert count_name_hits(text, NAMES) == hits
+
+
+def test_short_names_are_checked_before_stretched_letters_collapse():
+    names, short, _ = name_tokens(["Ann Lee", "Bo"])
+    assert names == {"an", "le"} and short == 1  # "Bo" is short; "Ann" and "Lee" are not
+    assert count_name_hits("Ann, ANNN and Lée", names) == 3
+    assert count_name_hits("an apple, le chat", names) == 0  # the everyday words their keys collapse to
+    assert strip_list("# hand list\nann\nan\nlee\nle\n", names) == ("# hand list\nan\nle\n", 2)
+
+
+def test_hidden_characters_are_read_both_as_a_break_and_as_nothing():
+    lee = name_tokens(["Lee"])[0]
+    assert count_name_hits("xq\u200blee", lee) == 1  # as a break: "xq lee" (3 letters: no infix rule)
+    assert count_name_hits("Le\u0903e", lee) == 1  # as nothing: "Lee"
+    names = name_tokens(["Zafy\u0903bodo"])[0]
+    assert {"zafy", "bodo", "zafybodo"} <= names  # the sender read both ways
+    assert count_name_hits("salama bodo", names) == 1
+
+
 # ---- secrets --------------------------------------------------------------------------------------------------
 
 
@@ -197,7 +247,7 @@ def test_snapshot_drops_excluded_paths_strips_hand_lists_only_and_passes(tmp_pat
 
 def test_name_and_secret_hits_fail_and_never_leak(tmp_path, capsys):
     files = {**CLEAN_FILES, "docs/notes.md": f"Thanks to Zafy.\nkey {FAKE_HF}\n", "zafy/readme.md": "x\n",
-             "docs/inbox/xbodox_1.md": f"{FAKE_HF}\n"}  # a name inside a path word: redacted too
+             "docs/inbox/xbodox_1.md": f"{FAKE_HF}\n"}  # a name inside an unknown path word: a hit, redacted
     repo = make_repo(tmp_path, files)
     out = tmp_path / "public"
     code = cli.main([*cli_args(tmp_path, repo, out), "--results", str(tmp_path / "results/release_check.json")])
@@ -205,8 +255,8 @@ def test_name_and_secret_hits_fail_and_never_leak(tmp_path, capsys):
     assert not list(out.rglob("*.json"))  # the report never goes into the snapshot
     report = json.loads((tmp_path / "results/release_check.json").read_text())
     assert report["ok"] is False
-    assert report["names"]["hits_per_file"] == {"docs/notes.md": 1, "<redacted path 1>": 1}
-    assert report["secrets"]["hits_per_file"] == {"<redacted path 2>": {"hf_token": 1},
+    assert report["names"]["hits_per_file"] == {"docs/notes.md": 1, "<redacted path 1>": 1, "<redacted path 2>": 1}
+    assert report["secrets"]["hits_per_file"] == {"<redacted path 1>": {"hf_token": 1},
                                                   "docs/notes.md": {"hf_token": 1}}
     written = (tmp_path / "results/release_check.json").read_text()
     printed = capsys.readouterr()
@@ -381,3 +431,138 @@ def test_tracked_notice_is_refused_before_anything_is_written(tmp_path):
     with pytest.raises(RefusedError, match="NOTICE already tracked"):
         snap(repo, tmp_path / "public", make_export(tmp_path))
     assert not (tmp_path / "public").exists()
+
+
+# ---- reading files: only known text types; archives and PDFs through readers -----------------------------------
+
+
+def _zip(members: dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    return buffer.getvalue()
+
+
+def _pdf(info: str) -> bytes:
+    """A minimal one-page PDF with no text and `info` as its document info dictionary."""
+    objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+               "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] >>", info]
+    body, offsets = "%PDF-1.4\n", []
+    for number, obj in enumerate(objects, 1):
+        offsets.append(len(body))
+        body += f"{number} 0 obj\n{obj}\nendobj\n"
+    xref = len(body)
+    body += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n" + "".join(f"{o:010d} 00000 n \n" for o in offsets)
+    body += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R /Info 4 0 R >>\nstartxref\n{xref}\n%%EOF\n"
+    return body.encode("latin-1")
+
+
+@pytest.mark.parametrize(("name", "data", "readable", "hits"), [
+    ("docs/a.md", "Salama Zafy".encode(), True, 1),
+    ("docs/a.md", b"\xef\xbb\xbfSalama Zafy", True, 1),  # UTF-8 BOM
+    ("docs/a.md", "Salama Zafy".encode("utf-16"), True, 1),  # UTF-16 with its BOM
+    ("docs/a.md", "Salama Zafy".encode("utf-16-le"), False, 0),  # no BOM: NUL bytes
+    ("docs/a.md", "Salama Zafy caf\u00e9".encode("latin-1"), False, 0),  # not UTF-8: no guessing
+    ("assets/logo.png", b"\x89PNG\r\n\x1a\nZafy", False, 0),  # not a text type
+    ("LICENSE", b"Apache", True, 0),
+    ("data/a.zip", _zip({"notes/x.txt": b"Zafy"}), True, 1),
+    ("data/a.zip", _zip({"zafy/x.txt": b"ok"}), True, 1),  # member names are read too
+    ("data/a.zip", _zip({"x.txt": b"ok", "y.bin": b"\x00\x01"}), False, 0),
+    ("data/a.zip", b"PK broken", False, 0),
+    ("data/a.txt.gz", gzip.compress(b"Zafy"), True, 1),
+    ("data/a.tar.gz", gzip.compress(b"Zafy"), False, 0),  # a tar is not a text type
+])
+def test_only_known_text_types_and_archives_are_read(tmp_path, name, data, readable, hits):
+    path = tmp_path / PurePath(name).name
+    path.write_bytes(data)
+    text = release.read_text(path)
+    assert (text is not None) == readable
+    assert count_name_hits(text or "", NAMES) == hits
+
+
+needs_poppler = pytest.mark.skipif(not all(map(shutil.which, ("pdftotext", "pdfinfo", "pdfdetach"))),
+                                   reason="poppler not installed (a PDF is then unscannable and fails the check)")
+
+
+@needs_poppler
+def test_pdf_metadata_is_scanned(tmp_path):
+    path = tmp_path / "paper.pdf"
+    path.write_bytes(_pdf("<< /Author (Zafy Bodo) /Title (notes) >>"))
+    assert count_name_hits(release.read_text(path), NAMES) == 2
+
+
+@needs_poppler
+def test_pdf_inside_a_zip_is_read_with_its_metadata(tmp_path):
+    path = tmp_path / "a.zip"
+    path.write_bytes(_zip({"paper.pdf": _pdf("<< /Author (Zafy) >>")}))
+    assert count_name_hits(release.read_text(path), NAMES) == 1
+
+
+def test_unscannable_files_fail_end_to_end(tmp_path):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/old.md": "caf\u00e9 Zafy".encode("latin-1"),
+                                "assets/logo.png": b"\x89PNG\r\n"})
+    report = snap(repo, tmp_path / "public", make_export(tmp_path))
+    assert sorted(report.unscannable) == ["assets/logo.png", "docs/old.md"]
+    assert not report.ok
+
+
+# ---- no partial output ----------------------------------------------------------------------------------------
+
+
+def _leftovers(tmp_path: Path) -> list[Path]:
+    return [p for p in tmp_path.iterdir() if p.name.startswith(".public.partial-")]
+
+
+def test_failed_check_writes_nothing(tmp_path):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/notes.md": "Thanks to Zafy.\n"})
+    out = tmp_path / "public"
+    report = snap(repo, out, make_export(tmp_path))
+    assert not report.ok
+    assert not out.exists() and not _leftovers(tmp_path)
+
+
+def test_failed_check_keeps_an_empty_output_dir_empty(tmp_path):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/notes.md": "Thanks to Zafy.\n"})
+    out = tmp_path / "public"
+    out.mkdir()
+    assert not snap(repo, out, make_export(tmp_path)).ok
+    assert list(out.iterdir()) == [] and not _leftovers(tmp_path)
+
+
+def test_error_while_writing_deletes_the_partial_snapshot(tmp_path, monkeypatch):
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    out = tmp_path / "public"
+    write_files = release.write_files
+
+    def write_then_fail(files, folder):
+        write_files(files, folder)
+        raise OSError("disk full")
+
+    monkeypatch.setattr(release, "write_files", write_then_fail)
+    with pytest.raises(OSError):
+        snap(repo, out, make_export(tmp_path))
+    assert not out.exists() and not _leftovers(tmp_path)
+
+
+def test_clean_snapshot_is_moved_into_place(tmp_path):
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    out = tmp_path / "public"
+    out.mkdir()
+    assert snap(repo, out, make_export(tmp_path)).ok
+    assert (out / "README.md").exists() and not _leftovers(tmp_path)
+
+
+# ---- report paths -----------------------------------------------------------------------------------------------
+
+
+def test_every_flagged_path_is_redacted(tmp_path):
+    named = ["docs/%5Aafy.md", "docs/salutBodo.md", "docs/Z_a_f_y.md", "docs/&#90;afy.md", "docs/B0d0.md",
+             f"docs/{FAKE_ID}.md"]
+    repo = make_repo(tmp_path, {**CLEAN_FILES, **{path: f"{FAKE_HF}\n" for path in named}})
+    report = snap(repo, tmp_path / "public", make_export(tmp_path))
+    assert not report.ok
+    assert len(report.secret_hits) == len(named)
+    assert all(path.startswith("<redacted path ") for path in report.secret_hits)
+    written = json.dumps(report.as_dict())
+    assert not any(path in written for path in named)
