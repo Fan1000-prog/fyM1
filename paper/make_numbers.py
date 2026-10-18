@@ -16,6 +16,9 @@ Expected files (keys are dotted paths below):
   data_gate.json         conversations_before_gate, kept, dropped, dropped_{long_number, contact,
                          too_many_unknown, too_many_fakes}, tokens_replaced, fakes_per_kept_{median, max}
   synth_stats.json       raw, kept, generator, generator_licence
+  synth_gate.json        checked, dropped, kept, status (strict automatic sample gate on the filtered chats)
+  lora_budget.json       lora_r, lora_alpha, example.{d, k, full_params, lora_params, lora_share}
+  shrink/trim_cost.json  vocab_before, vocab_after, held_out.<set>.{untrimmed,trimmed}.tokens_per_word
   model_selection.json   chosen (HF repo id), chosen_size (e.g. "8B"), license, hf_license (HF license id),
                          candidates[{model, license, belebele_acc, belebele_chat_acc, chrf_plt_eng,
                          chrf_eng_plt, tokens_per_word, sec_per_step, greeting_gate.judge_mean}]
@@ -49,6 +52,7 @@ README_START = "<!-- numbers:start -->"
 README_END = "<!-- numbers:end -->"
 LEAK_FILE = "eval/leak_review.json"
 IDENTITY_FILE = "eval/identity_check.json"
+TRIM_COST = "shrink/trim_cost.json"
 # The identity gate threshold the paper promises (fym1.eval.identity_check.PASS_THRESHOLD); a lower one blocks.
 MIN_IDENTITY_THRESHOLD = 0.9
 INLINE = re.compile(r"<!-- n:([\w-]+) -->.*?<!-- /n -->")
@@ -94,6 +98,19 @@ def percent(v: Any) -> str:
     if not 0 <= share <= 1:
         raise ValueError(f"expected a share between 0 and 1, got {v!r}")
     return f"{share * 100:.1f}%"
+
+
+def percent2(v: Any) -> str:
+    """A small share with two decimals: 0.0052 -> '0.52%'."""
+    share = _number(v)
+    if not 0 <= share <= 1:
+        raise ValueError(f"expected a share between 0 and 1, got {v!r}")
+    return f"{share * 100:.2f}%"
+
+
+def gb(v: Any) -> str:
+    """A size already in GB: 9.8 -> '9.8 GB'."""
+    return f"{_number(v):.1f} GB"
 
 
 def billions(v: Any) -> str:
@@ -208,6 +225,19 @@ NUMBERS: list[Number] = [
     Number("synth-kept", "synth_stats.json", "kept", count),
     Number("synth-generator", "synth_stats.json", "generator", text),
     Number("synth-licence", "synth_stats.json", "generator_licence", text),
+    Number("synth-checked", "synth_gate.json", "checked", count),
+    Number("synth-gate-dropped", "synth_gate.json", "dropped", count),
+    Number("synth-gate-kept", "synth_gate.json", "kept", count),
+    Number("synth-gate-status", "synth_gate.json", "status", text),
+    # LoRA size of one up-projection (scripts/lora_budget.py: base config + 01_train rank)
+    Number("budget-r", "lora_budget.json", "lora_r", count),
+    Number("budget-alpha", "lora_budget.json", "lora_alpha", count),
+    Number("budget-d", "lora_budget.json", "example.d", count),
+    Number("budget-k", "lora_budget.json", "example.k", count),
+    Number("budget-full", "lora_budget.json", "example.full_params", count),
+    Number("budget-lora", "lora_budget.json", "example.lora_params", count),
+    Number("budget-share", "lora_budget.json", "example.lora_share", percent2),
+    Number("smoke-vram", "model_selection.json", ("candidates", Pick("model", QWEN), "peak_vram_gb"), gb),
     # model selection
     Number("base-model", "model_selection.json", "chosen", text),
     Number("model-size", "model_selection.json", "chosen_size", text),
@@ -225,6 +255,7 @@ NUMBERS: list[Number] = [
     Number("lora-alpha", "train_log.json", "config.lora_alpha", count),
     Number("learning-rate", "train_log.json", "config.lr", lambda v: f"{_number(v):g}"),
     Number("lr-scheduler", "train_log.json", "config.lr_scheduler", text),
+    Number("warmup-steps", "train_log.json", "config.warmup_steps", count),
     Number("max-seq-len", "train_log.json", "config.max_seq_len", count),
     Number("effective-batch", "train_log.json", "config.effective_batch", count),
     # automatic eval
@@ -271,6 +302,13 @@ NUMBERS: list[Number] = [
     Number("gguf-after", "shrink.json", "gguf_bytes_after", gigabytes),
     Number("tps-before", "shrink.json", "tokens_per_sec_before", fixed(1)),
     Number("tps-after", "shrink.json", "tokens_per_sec_after", fixed(1)),
+    # tokenizer cost of the public keep set (scripts/trim_cost.py)
+    Number("cost-vocab-before", TRIM_COST, "vocab_before", count),
+    Number("cost-vocab-after", TRIM_COST, "vocab_after", count),
+    Number("cost-tpw-chats-before", TRIM_COST, "held_out.chats_anonymised_private.untrimmed.tokens_per_word", fixed(3)),
+    Number("cost-tpw-chats-after", TRIM_COST, "held_out.chats_anonymised_private.trimmed.tokens_per_word", fixed(3)),
+    Number("cost-tpw-prompts-before", TRIM_COST, "held_out.eval_prompts.untrimmed.tokens_per_word", fixed(3)),
+    Number("cost-tpw-prompts-after", TRIM_COST, "held_out.eval_prompts.trimmed.tokens_per_word", fixed(3)),
     *candidate_numbers(),
 ]
 # fmt: on
