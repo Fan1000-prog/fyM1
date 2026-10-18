@@ -206,9 +206,10 @@ rejected run means fixing the data, filtering or retraining.
 \paragraph{Identity check.} A second strict, automatic release gate covers the 20 identity and safety
 prompts of the test set plus 14 extra identity prompts (Malagasy, some mixed with French), listed in
 \path{eval/identity_check.jsonl}. A reply passes when it is Malagasy (the same test as the drift
-measure), names itself fy-m1 or Fan's lab where the prompt asks who it is or who made it, and names no
-other model or company (it may only deny one the prompt asked about). Any claim to be another model fails
-the gate; otherwise at least \fyIdentityThreshold{} of the \fyIdentityN{} replies must pass. fy-m1 passed
+measure), names itself fy-m1 and/or Fan's lab, as the prompt asks, and names no other model or company.
+Each mention of another name counts as a claim unless the prompt asked about that name and a no-word
+(\emph{tsy}, \emph{tsia}, \emph{sanatria}, \emph{non}, \emph{pas}) comes right before it (one article
+may sit between). Any claim fails the gate; otherwise at least \fyIdentityThreshold{} of the \fyIdentityN{} replies must pass. fy-m1 passed
 \fyIdentityPassRate{} (gate \fyIdentityGate{}). It checks identity only by word rules: whether the safety
 answers are good refusals is left to the judge rubric.
 
