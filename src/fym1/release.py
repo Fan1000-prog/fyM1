@@ -131,19 +131,22 @@ SECRET_PATTERNS: dict[str, re.Pattern[str]] = {
     ),
 }
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
-ALLOWED_EMAILS: dict[str, str] = {
-    "x@y.mg": "placeholder example in scripts/build_known_words.py, not an address",
-}
-# Under tests/ only: the made-up domains the synthetic fixtures use.
-TEST_EMAIL_DOMAINS: dict[str, str] = {
-    "example.mg": "made-up domain of the synthetic anonymiser and gate probes",
-    "mail.example": "reserved .example domain, release tests",
-    "mail.mg": "made-up domain of a synthetic known-words probe",
-    "t.invalid": "reserved .invalid domain, the git identity of synthetic test repos",
-}
-# Test files whose synthetic probes need a real provider's shape (plus-tags, upper case) to test email masking.
-EMAIL_PROBE_FILES: dict[str, str] = {
-    "tests/data/test_anonymize_probes.py": "synthetic anonymiser probes at real providers' domains",
+# An address on a reserved test domain (RFC 2606/6761) is never a person's, anywhere in the snapshot.
+RESERVED_EMAIL_TLDS = (".example", ".invalid", ".test")
+# Every other address must be listed here, exactly, for the one file that holds it: a placeholder in a script or a
+# synthetic probe that needs a real provider's shape (plus-tags, upper case) to test email masking. Any other
+# address in any file is a secret hit. Stored as (local part, domain), case-folded, so this file holds no address.
+EMAIL_PROBE_FILES: dict[str, frozenset[tuple[str, str]]] = {
+    "scripts/build_known_words.py": frozenset({("x", "y.mg")}),  # placeholder in a comment
+    "tests/data/test_synth.py": frozenset({("x", "y.mg")}),
+    "tests/data/test_anonymize.py": frozenset({("hanta.r", "example.mg")}),
+    "tests/data/test_kept_checks.py": frozenset({("rabe.sample", "example.mg")}),
+    "tests/data/test_gate.py": frozenset({("olona", "example.mg")}),
+    "tests/data/test_known_words.py": frozenset({("fanja", "mail.mg")}),
+    "tests/data/test_anonymize_probes.py": frozenset({
+        ("hanta+tag", "gmail.com"), ("hanta.rk+fy", "yahoo.fr"), ("hanta", "gmail.com"),
+        ("marie-claire.rasoanaivo", "gmail.com"),
+    }),
 }
 SECRET_FILE_NAMES = frozenset({".env", "kaggle.json", "access_token", "id_rsa", "id_ed25519", ".netrc"})
 SECRET_FILE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
@@ -402,11 +405,9 @@ def secret_hits(path: str, text: str) -> Counter:
 
 
 def email_allowed(path: str, email: str) -> bool:
-    """`email` is a known placeholder, or a synthetic test address on a made-up domain or the probe list."""
-    address = email.casefold()
-    if address in ALLOWED_EMAILS:
-        return True
-    return path in EMAIL_PROBE_FILES or (path.startswith("tests/") and address.rsplit("@", 1)[1] in TEST_EMAIL_DOMAINS)
+    """`email` is on a reserved test domain, or listed exactly for `path` in EMAIL_PROBE_FILES."""
+    local, domain = email.casefold().rsplit("@", 1)
+    return domain.endswith(RESERVED_EMAIL_TLDS) or (local, domain) in EMAIL_PROBE_FILES.get(path, frozenset())
 
 
 def allowed_email_count(path: str, text: str) -> int:

@@ -197,21 +197,37 @@ def test_hidden_characters_are_read_both_as_a_break_and_as_nothing():
 
 def test_secret_hits_count_patterns_and_files_without_values():
     pem = "-----BEGIN RSA PRIVATE " + "KEY-----"
-    text = f"token = {FAKE_HF}\n{pem}\n" + '{"username": "u", "key": "' + "a" * 32 + '"}\nmail me: zz@mail.example\n'
+    text = f"token = {FAKE_HF}\n{pem}\n" + '{"username": "u", "key": "' + "a" * 32 + '"}\nmail me: zz' + "@corp.mg\n"
     hits = secret_hits("kaggle.json", text)
     assert hits == {"secret_file": 1, "hf_token": 1, "private_key": 1, "kaggle_key_json": 1, "email": 1}
     assert FAKE_HF not in json.dumps(hits)
 
 
 def test_secret_hits_env_files_and_email_allow_list():
+    placeholder = "x" + "@y.mg"  # built at run time so this file holds no address the scan would see
     assert secret_hits("config/.env", "") == {"secret_file": 1}
-    assert secret_hits("scripts/x.py", "see x@y.mg") == {}
-    assert secret_hits("tests/data/test_x.py", "probe zz@mail.example") == {}
-    assert secret_hits("tests/data/test_anonymize_probes.py", "PROBE" + "@GMAIL.COM") == {}
+    # Reserved test domains pass anywhere.
+    assert secret_hits("docs/x.md", "zz@mail.example, a@b.invalid, c@d.TEST") == {}
     assert release.allowed_email_count("tests/data/test_x.py", "probe zz@mail.example") == 1
-    # Only the made-up domains and the listed probes are allowed under tests/, and nothing outside tests/.
-    assert secret_hits("tests/data/test_x.py", "real.person" + "@gmail.com") == {"email": 1}
-    assert secret_hits("docs/x.md", "zz@mail.example") == {"email": 1}
+    # Any other address passes only where it is listed, exactly.
+    assert secret_hits("scripts/build_known_words.py", f"see {placeholder}") == {}
+    assert secret_hits("scripts/x.py", f"see {placeholder}") == {"email": 1}
+    assert secret_hits("tests/data/test_x.py", f"see {placeholder}") == {"email": 1}  # no folder-wide pass
+
+
+def test_email_probe_files_allow_only_their_listed_addresses():
+    probes = "tests/data/test_anonymize_probes.py"
+    assert secret_hits(probes, "PROBE" + "@GMAIL.COM") == {"email": 1}
+    assert secret_hits(probes, "HANTA" + "@GMAIL.COM") == {}  # listed, any case
+    assert secret_hits(probes, "olona" + "@example.mg") == {"email": 1}  # listed for another file only
+    assert secret_hits("tests/data/test_gate.py", "olona" + "@example.mg") == {}
+
+
+def test_every_listed_probe_address_is_in_its_file():
+    for path, addresses in release.EMAIL_PROBE_FILES.items():
+        text = (REPO_ROOT / path).read_text()
+        found = {tuple(email.casefold().rsplit("@", 1)) for email in release.EMAIL.findall(text)}
+        assert addresses <= found, path
 
 
 def test_secret_hits_google_oauth_jwt_and_telegram_tokens():
