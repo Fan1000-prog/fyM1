@@ -1,4 +1,6 @@
-from fym1.train.run_state import config_mismatch, session_progress
+import pytest
+
+from fym1.train.run_state import check_hub_id, config_mismatch, session_progress
 
 
 def test_config_mismatch_lists_changed_and_missing_keys():
@@ -27,3 +29,12 @@ def test_train_notebook_puts_code_sha_in_the_checked_run_config():
     run_config = source[source.index("RUN_CONFIG = {"):source.index("}", source.index("RUN_CONFIG = {"))]
     assert '"code_sha": CODE_SHA' in run_config
     assert "config_mismatch(saved_config, RUN_CONFIG)" in source
+
+
+def test_check_hub_id_ignores_case():
+    check_hub_id("loaded model", "google/gemma-4-12b-it", "google/gemma-4-12B-it")
+
+
+def test_check_hub_id_refuses_a_remapped_name():
+    with pytest.raises(ValueError, match="unsloth/gemma-3-12b-it-unsloth-bnb-4bit"):
+        check_hub_id("loaded model", "unsloth/gemma-3-12b-it-unsloth-bnb-4bit", "google/gemma-3-12b-it")

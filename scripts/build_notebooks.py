@@ -91,6 +91,7 @@ CODE_SHA = open(sha_file).read().strip() if os.path.exists(sha_file) else "unkno
 from fym1.eval import baseline as bl
 from fym1.eval.batching import StillOutOfMemory, run_batched
 from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS
+from fym1.train.run_state import check_hub_id
 from fym1.runtime import output_dir, scratch_dir
 
 OUTPUT, SCRATCH = output_dir(), scratch_dir()  # small wanted results vs big throwaway files
@@ -125,6 +126,7 @@ for name, section_result in R.items():  # sections saved before code SHA / FORCE
         section_result.setdefault("code_sha", "unrecorded")
         section_result.setdefault("force", "unrecorded")
 R.setdefault("model", {"slug": SLUG, "hub_id": HUB_ID, "quant": "bnb 4-bit nf4 (Unsloth load_in_4bit)"})
+check_hub_id(f"saved results/baseline/{SLUG}.json hub_id", R["model"]["hub_id"], HUB_ID)  # new id: new slug
 print("CANDIDATE", SLUG, "| missing:", bl.missing_sections(R, BASE))"""),
 code("""import torch
 from unsloth import FastModel
@@ -146,6 +148,7 @@ except Exception as e:  # gated/403 or unsupported architecture: record and move
     R["skipped"] = {"error": f"{type(e).__name__}: {str(e)[:300]}"}  # missing_sections() then treats it as complete
     save_results(SLUG, R)
     raise
+check_hub_id("loaded model", model.config._name_or_path, HUB_ID)
 tok = getattr(processor, "tokenizer", processor)
 tok.padding_side = "left"
 R["env"] = {"gpu": torch.cuda.get_device_name(0), "torch": torch.__version__, "model_dtype": str(model.dtype),
@@ -388,7 +391,7 @@ CODE_SHA = open(f"{code_dir}/code/SHA").read().strip()
 from fym1.train.resume import latest_checkpoint
 from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text, turn_markers
 from fym1.train.supervise import best_eval, eval_losses, should_stop
-from fym1.train.run_state import config_mismatch, session_progress
+from fym1.train.run_state import check_hub_id, config_mismatch, session_progress
 from fym1.runtime import output_dir, scratch_dir
 
 OUTPUT, SCRATCH = output_dir(), scratch_dir()  # small wanted results vs big throwaway files
@@ -415,11 +418,14 @@ if saved_config:
 print("RUN", RUN_ID, "| resume from", resume or "scratch", "| stopped earlier:", STOPPED, "| code", CODE_SHA)"""),
 code("""import torch
 
+LOADED_FROM = None  # what this session loaded; stays None when the run stopped in an earlier session
 if not STOPPED:
     from unsloth import FastModel
 
     model, processor = FastModel.from_pretrained(MODEL_ID, max_seq_length=MAX_LEN, load_in_4bit=True,
                                                  full_finetuning=False, use_exact_model_name=True)
+    LOADED_FROM = model.config._name_or_path
+    check_hub_id("loaded model", LOADED_FROM, MODEL_ID)
     tok = getattr(processor, "tokenizer", processor)
     lora = dict(r=LORA_R, lora_alpha=LORA_ALPHA, lora_dropout=0, bias="none", random_state=SEED,
                 use_gradient_checkpointing="unsloth")
@@ -530,7 +536,8 @@ for dest in (f"{RUN_ID}/final", "final"):
 
 losses = [h["loss"] for h in history if "loss" in h]
 log = {
-    "run_id": RUN_ID, "model": MODEL_ID, "code_sha": CODE_SHA, "gpu": torch.cuda.get_device_name(0),
+    "run_id": RUN_ID, "model": MODEL_ID, "loaded_from": LOADED_FROM, "code_sha": CODE_SHA,
+    "gpu": torch.cuda.get_device_name(0),
     "steps": steps, "epochs": EPOCHS, "wall_time_s": progress["wall_time_s"], "sessions": progress["sessions"],
     "final_train_loss": losses[-1] if losses else None, "best_eval_loss": best[1] if best else None,
     "best_step": best[0] if best else None, "final_adapter": final_src,
