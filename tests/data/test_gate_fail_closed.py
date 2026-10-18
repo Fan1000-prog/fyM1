@@ -11,7 +11,7 @@ import pytest
 
 from fym1.data import known_words
 from fym1.data.anonymize import Anonymizer
-from fym1.data.gate import contact_left, has_long_number, pool_names_in, strict_gate
+from fym1.data.gate import contact_left, has_long_number, normalise, pool_names_in, strict_gate
 from fym1.data.known_words import KNOWN_WORDS, known_by, word_list
 from fym1.data.messenger import Message, Thread
 from fym1.data.pipeline import build_records
@@ -411,3 +411,107 @@ def test_r4_ordinary_and_texting_words_stay(text):
 
 def test_r4_stretched_known_word_stays():
     assert gated_text("tsaraaa be") == "tsaraaa be"
+
+
+# --- round 5: a name broken into one-letter pieces ---------------------------------------
+
+STRIKE, UNDERLINE = "\u0336", "\u0332"
+
+
+def marked(word, mark):
+    return "".join(c + mark for c in word)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"salut {marked('Rakoto', STRIKE)}",
+        f"salut {marked('rakoto', STRIKE)}",
+        f"salut {marked('Rakoto', UNDERLINE)}",
+    ],
+)
+def test_r5_combining_marks_left_after_nfkc_are_stripped(text):
+    out = gated_text(f"{text}, {FILLER}")
+    assert STRIKE not in out and UNDERLINE not in out
+    assert "rakoto" not in out.lower()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"salut {marked('Rakoto', STRIKE)}",
+        "salut r a k o t o",
+        "salut R.a.k.o.t.o",
+        "salut R-a-k-o-t-o",
+        "salut N j a k a R a b e",
+    ],
+)
+def test_r5_name_through_the_anonymiser_and_gate_is_replaced(text):
+    out = pipeline_text(f"{text}, {FILLER}")
+    assert out is None or not re.search(r"r\W{0,2}a\W{0,2}k\W{0,2}o\W{0,2}t\W{0,2}o|n\W*j\W*a\W*k\W*a", out.lower())
+
+
+@pytest.mark.parametrize(
+    "text, gone",
+    [
+        ("salut r a k o t o", "r a k o t o"),
+        ("salut R.a.k.o.t.o", "R.a.k.o.t.o"),
+        ("salut R-a-k-o-t-o", "R-a-k-o-t-o"),
+        ("salut N j a k a R a b e", "N j a k a R a b e"),
+        ("salut R. a. k. o. t. o.", "R. a. k. o. t. o"),
+    ],
+)
+def test_r5_single_letters_in_a_run_are_one_word(text, gone):
+    out = gated_text(f"{text}, {FILLER}")
+    assert gone not in out
+    assert len(out.split(",")[0].split()) == 2  # "salut <one fake name>"
+
+
+@pytest.mark.parametrize("text", ["salut t s a r a", "t.s.a.r.a be"])
+def test_r5_spelled_out_known_word_is_kept_as_written(text):
+    assert gated_text(text) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "il y a du monde",
+        "ça a été dur",
+        "a ny trano e",
+        "e, tonga aho",
+        "J.P. tonga",
+        "à demain",
+        "o a",
+    ],
+)
+def test_r5_ordinary_single_letter_words_stay(text):
+    assert gated_text(text) == text
+
+
+@pytest.mark.parametrize("text", ["côté", "voilà", "été", "niño", "Ô ry namana", "à bientôt", "Ñ", "ankehitriny"])
+def test_r5_normalise_keeps_accented_letters(text):
+    assert normalise(text) == text
+
+
+@pytest.mark.parametrize("text", ["voilà", "à demain", "tsara ô"])
+def test_r5_accented_known_words_stay_through_the_gate(text):
+    assert gated_text(text) == text
+
+
+def test_r5_decomposed_accents_compose_and_survive():
+    assert normalise("vite\u0301 o\u0302 a\u0300 n\u0303") == "vit\u00e9 \u00f4 \u00e0 \u00f1"
+
+
+def test_r5_emoji_variation_selectors_and_keycaps_stay():
+    text = "tsara \u2764\ufe0f be 1\ufe0f\u20e3"
+    assert normalise(text) == text
+
+
+def test_r5_anonymiser_drops_stray_marks_too():
+    out = Anonymizer({"Nirina Rakoto": "Soa Rabe"})(f"salut {marked('Rakoto', STRIKE)}")
+    assert STRIKE not in out and "rakoto" not in out.lower()
+
+
+def test_r5_zero_width_space_inside_a_name_is_stripped():
+    out = gated_text(f"salut R\u200bakoto, {FILLER}")
+    assert "\u200b" not in out and "akoto" not in out.lower()

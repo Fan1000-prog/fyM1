@@ -15,11 +15,14 @@ fine, letting a name or number through is not. A whole conversation is dropped i
 - `too_many_unknown`: more than 30% of its words would be replaced as names (below).
 
 Every turn is NFKC-normalised first, so full-width (`＠`, `Ｒ`) and circled (`Ⓡ`) letters are
-checked as plain ones; kept turns are returned normalised.
+checked as plain ones; combining marks NFKC leaves loose (strike-through, underline) and zero-width
+spaces are dropped. Kept turns are returned normalised.
 
 Words are letter runs, split at digits, underscores, punctuation, `<`/`>` and a lower-to-upper case change
 ("Rakoto2", "jean_r", "salutRakoto", "<<Njaka"); only the exact placeholders (`<TEL>`, `<EMAIL>`, ...)
-are skipped. Letters with digits inside ("Rak0to", "n1r1na") are one word and always a name.
+are skipped. Letters with digits inside ("Rak0to", "n1r1na") are one word and always a name. A run of
+3+ single letters joined by one or two spaces, dots or hyphens ("r a k o t o", "R.a.k.o.t.o") is one
+word ("rakoto"), checked by the rules below and replaced whole.
 
 Capitalised words that are not fakes the anonymiser wrote (`fake_names`) or currency words are:
 
@@ -48,12 +51,11 @@ Only counts leave this module; never text or words.
 
 import hashlib
 import re
-import unicodedata
 from collections import Counter
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from typing import NamedTuple
 
-from fym1.data.anonymize import EMAIL, FALLBACK_NAME, FIRST_NAMES, SURNAMES, compare_key, fold
+from fym1.data.anonymize import EMAIL, FALLBACK_NAME, FIRST_NAMES, SURNAMES, compare_key, fold, normalise
 from fym1.data.known_words import (
     FIRST_NAME_WORDS,
     KNOWN_WORDS,
@@ -94,7 +96,10 @@ PLACEHOLDERS = ("<TEL>", "<EMAIL>", "<URL>", "<HANDLE>", "<ADDRESS>")  # what th
 # An exact placeholder, letters with digits inside ("Rak0to", "n1r1na": one word, always a name), or a
 # letter run ("Ra-be" taken whole); otherwise digits and "_" end a run.
 _LEET = r"[^\W\d_]+(?:\d+[^\W\d_]+)+"
-_PIECE = re.compile("|".join(map(re.escape, PLACEHOLDERS)) + rf"|{_LEET}|(?:[Rr]a-)?[^\W\d_]+")
+# 3+ single letters joined by one or two spaces, dots or hyphens ("r a k o t o", "R.a.k.o.t.o"): one word.
+_ONE = r"(?<![^\W\d_])[^\W\d_](?![^\W\d_])"
+_SPELLED = rf"(?P<spelled>{_ONE}(?:[\s.-]{{1,2}}{_ONE}){{2,}})"
+_PIECE = re.compile("|".join(map(re.escape, PLACEHOLDERS)) + rf"|{_LEET}|{_SPELLED}|(?:[Rr]a-)?[^\W\d_]+")
 LETTER_RUN = re.compile(r"[^\W\d_]+")
 PERSON_MARKER = re.compile(r"(?:(?<![\w'’])(?:i|ry|ra)|\w['’]i)\s+$", re.IGNORECASE)
 MARKER_WINDOW = 12  # characters looked back for a marker
@@ -120,16 +125,14 @@ class Token(NamedTuple):
     word: str
 
 
-def normalise(text: str) -> str:
-    """`text` NFKC-normalised: full-width and circled forms read as plain letters, digits and `@`."""
-    return unicodedata.normalize("NFKC", text)
-
-
 def tokens(text: str) -> Iterator[Token]:
     """Words of `text`: letter runs split at a lower-to-upper case change; placeholders skipped."""
     for match in _PIECE.finditer(text):
         piece, start = match.group(), match.start()
         if piece in PLACEHOLDERS:
+            continue
+        if match.group("spelled"):  # "N j a k a R a b e": checked whole as "NjakaRabe"
+            yield Token(start, match.end(), "".join(LETTER_RUN.findall(piece)))
             continue
         if any(c.isdigit() for c in piece):  # "Rak0to": kept whole
             yield Token(start, match.end(), piece)
@@ -242,11 +245,11 @@ def _clear_or_replace(texts: list[str], fake_keys: set[str], lexicon: Lexicon, d
         word, key = token.word, compare_key(token.word)
         if not _is_lowercase_name(text, token, lexicon):
             if not _is_capitalised(word, fake_keys):
-                return word
+                return text[token.start : token.end]
             source = None if key in disallowed else _clearing_list(text, token, lexicon)
             if source:
                 cleared[source] += 1
-                return word
+                return text[token.start : token.end]
         if key not in fakes:
             fakes[key] = _fake_for(key, taken)
             taken.add(compare_key(fakes[key]))

@@ -86,10 +86,13 @@ tests `tests/data/test_gate.py`). It drops a whole conversation if any turn stil
 
 The gate fails closed: replacing or dropping too much is fine, a leak is not. The anonymiser and the
 gate both NFKC-normalise text first, so full-width (`＠`, `Ｒ`) and circled (`Ⓡ`) characters are read as
-plain ones (kept text comes out normalised: no-break spaces become plain spaces). Words are letter runs
+plain ones (kept text comes out normalised: no-break spaces become plain spaces). Combining marks left
+loose after that (strike-through, underline "fancy text") and zero-width spaces are dropped; accents NFKC
+composes ("é", "ô", "à", "ñ") stay. Words are letter runs
 split at digits, underscores, punctuation and a lower-to-upper case change, so "Rakoto2", "2Rakoto",
 "jean_r" and "salutRakoto" are checked; only the exact placeholders (`<TEL>`, `<EMAIL>`, `<URL>`,
-`<HANDLE>`, `<ADDRESS>`) are skipped. A hyphenated `Ra-be` is one word.
+`<HANDLE>`, `<ADDRESS>`) are skipped. A hyphenated `Ra-be` is one word, and so is a run of 3+ single
+letters joined by spaces, dots or hyphens ("r a k o t o", "R.a.k.o.t.o"): it is checked whole.
 
 Every capitalised word (2+ letters) that is not a fake the anonymiser actually wrote (participants'
 fakes and @mention fakes, reported by `Anonymizer.mention_fakes`) or a currency word is cleared or
@@ -187,12 +190,16 @@ When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit ref
   are replaced by a fake name: over-masking, not a leak.
 - A pool name that is also an everyday word ("Soa", "Vola", "Mamy") typed in lower case and not after
   a name particle ("hitako mamy") stays.
-- Names spelled out or disguised: "Ni-ri-na", "N i r i n a". ("N1r1na", "Rak0to" are replaced: letters
-  with digits inside are always a name.)
+- Names spelled out in pieces of two or more letters: "Ni-ri-na". (The gate reads 3+ single letters
+  joined by spaces, dots or hyphens as one word, so "N i r i n a" and "R.a.k.o.t.o" are replaced; it
+  drops loose strike-through/underline marks, so "R̶a̶k̶o̶t̶o̶" is too. "N1r1na", "Rak0to" are replaced:
+  letters with digits inside are always a name.)
 - A phone split over two turns ("nomerao 034 12", then "345 67 io"): the gate checks one turn at a time.
+- A phone split by a word inside one turn ("034 12 dia 345 67"): a word ends the digit run.
 - Digits joined by any non-letter characters count as one number, so a list of times or numbered
   lines ("14:30-15:30") can drop a conversation: over-dropping, not a leak.
-- Phone numbers written in words ("aotra telo efatra…", "034 douze …") or with letters for digits ("l2").
+- Phone numbers written in words, Malagasy or French ("aotra telo efatra…", "034 douze …"), or with
+  letters for digits ("l2").
 - A phone whose first digits make a full date and whose rest reads as a price ("18/03/80 559 874",
   "18/03/80 559000"): kept as a date and a price.
 - Phone numbers glued to a word without the leading 0 ("tel34 12 345 67"): a word's own last letters

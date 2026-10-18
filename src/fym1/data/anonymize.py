@@ -366,6 +366,27 @@ _PLACEHOLDER_SLOT = "{}"  # private-use marks: never part of a \w word
 _SLOT = re.compile("(\\d+)")
 
 
+# Left after NFKC: combining marks no letter absorbed ("fancy text" strike-through U+0336, underline U+0332)
+# and zero-width spaces. Both split a name into one-letter pieces. Variation selectors (emoji) are kept.
+_ZERO_WIDTH = frozenset("\u200b\u2060\ufeff")
+
+
+def _is_stray(c: str) -> bool:
+    if c in _ZERO_WIDTH:
+        return True
+    is_variation_selector = "\ufe00" <= c <= "\ufe0f" or "\U000e0100" <= c <= "\U000e01ef"
+    return unicodedata.category(c) == "Mn" and not is_variation_selector
+
+
+def normalise(text: str) -> str:
+    """`text` NFKC-normalised (full-width, circled forms read as plain), stray marks and zero-width spaces dropped.
+
+    NFKC composes accents first ("e" + U+0301 -> "é"), so only marks no letter absorbed are dropped.
+    """
+    text = unicodedata.normalize("NFKC", text)
+    return "".join(c for c in text if not _is_stray(c))
+
+
 def fold(s: str) -> str:
     """Lower-case and strip accents, so "Hélène" and "helene" compare equal."""
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)).casefold()
@@ -465,7 +486,7 @@ class Anonymizer:
         self.mention_fakes: set[str] = set()  # every fake written for an @mention, for the strict gate
 
     def __call__(self, text: str) -> str:
-        text = unicodedata.normalize("NFKC", text)  # full-width "＠", circled "Ⓡ" read as plain
+        text = normalise(text)  # full-width "＠", circled "Ⓡ" read as plain; stray marks dropped
         text = EMAIL.sub("<EMAIL>", text)
         text = URL.sub("<URL>", text)
         text = _mask_phones(text)
