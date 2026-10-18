@@ -50,23 +50,31 @@ _SEP = r"\s*[./,_-]?\s*"
 _INTL = r"(?:\+|(?<!\d[ .,])00)"  # "00" not inside a long amount: "1 000 000 000 Ar"
 # A Malagasy number, written once so the spaced and glued rules accept the same forms.
 _MG_COUNTRY = rf"(?:\(\s*{_INTL}?261\s*\)|{_INTL}?261)"  # +261, 00261, 261, (+261)
-# 0 or (0), then any gap; a letter O only when it touches the digits ("O34…", never "manao 300…")
-_MG_TRUNK = rf"(?:(?:\(\s*0\s*\)|0){_SEP}|[Oo])"
-_MG_PHONE = (
-    rf"(?:{_MG_COUNTRY}{_SEP}{_MG_TRUNK}?\d(?:{_SEP}\d){{8}}"  # +261 34 …, +261 (0)34 …, (+261)34 …
-    rf"|{_MG_TRUNK}[23](?:{_SEP}\d){{8}}"  # 034 12 345 67, any grouping
-    rf"|\(\s*[0Oo]\d\d\s*\)(?:{_SEP}\d){{7}})"  # area code in brackets: (034) 12 345 67, (089) …
-)
+_ZERO_TRUNK = rf"(?:\(\s*0\s*\)|0){_SEP}"  # 0 or (0), then any gap
+
+
+def _mg_phone(trunk: str) -> str:
+    """A Malagasy number with the given leading-0 form."""
+    return (
+        rf"(?:{_MG_COUNTRY}{_SEP}(?:{trunk})?\d(?:{_SEP}\d){{8}}"  # +261 34 …, +261 (0)34 …, (+261)34 …
+        rf"|{trunk}[23]\d(?:{_SEP}\d){{7}}"  # 034 12 345 67; "03" kept together so "2h03 50 …" isn't a phone
+        rf"|\(\s*[0Oo]\d\d\s*\)(?:{_SEP}\d){{7}}(?!\w))"  # area code in brackets: (034) 12 345 67, (089) …
+    )
+
+
+# Spaced, a letter O typed for the 0 counts when it touches the digits ("O34…"). Glued to a word it doesn't:
+# the word's own last "o" would be read as the 0 ("numero261 034…", "manao 300…").
+_MG_PHONE_SPACED = _mg_phone(rf"(?:{_ZERO_TRUNK}|[Oo])")
+_MG_PHONE_GLUED = _mg_phone(_ZERO_TRUNK)
 PHONE = re.compile(
     r"(?<![\w+])(?:"
-    rf"{_MG_PHONE}"
+    rf"{_MG_PHONE_SPACED}"
     rf"|{_INTL}\d{{1,3}}(?:\s*\(\d{{1,4}}\))?(?:{_SEP}\d){{6,13}}"  # other intl: +33 6 …, +1 (555) …
     rf"|[0Oo](?:{_SEP}\d){{9}}"  # national, 10 digits however grouped; "O34" typed with a letter O
     rf"|3[2-9]{_SEP}\d\d{_SEP}\d{{3}}{_SEP}\d\d"  # mobile without the 0: 34 12 345 67
     r"|\d{9,15}"  # any other long run of digits
     r")(?!\w)"
-    rf"|(?<![\d+]){_MG_PHONE}(?!\d)"  # glued to a word: "laharana034 …", "wa+26134…", "tel(034) …"
-    rf"|(?<=[^\W\d_])(?<![Aa][Rr])(?<!MGA)(?<![Ff][Mm][Gg])3[2-9](?:{_SEP}\d){{7}}(?!\d)"  # glued, no 0: "tel34 12 345 67", not "Ar350 000 000"
+    rf"|(?<![\d+]){_MG_PHONE_GLUED}(?!\d)"  # glued to a word: "laharana034 …", "wa+26134…", "tel(034) …"
 )
 # "01/02/2026 03/04" is dates, not a phone: a year next to / or -.
 _DATE_LIKE = re.compile(r"[/-](?:19|20)\d\d\b|\b(?:19|20)\d\d[/-]")

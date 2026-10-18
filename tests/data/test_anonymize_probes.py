@@ -184,6 +184,8 @@ KNOWN_LIMITS = [
     "034 l2 345 67",  # letter l for digit 1
     "Cité 67Ha porte 12",  # addresses other than "Lot …"
     "Villa 23 Ivandry",
+    "tel34 12 345 67",  # glued mobile without the leading 0
+    "telO34 12 345 67",  # glued, letter O typed for the 0
 ]
 
 
@@ -445,9 +447,8 @@ def test_exact_mention_of_participant_first_name_with_unknown_surname():
         ("tel+261 (0)34 123 45 67", "tel<TEL>"),
         ("Tel(+261)34 123 45 67", "Tel<TEL>"),
         ("tel(00261)34 123 45 67", "tel<TEL>"),
-        ("tel34 12 345 67", "tel<TEL>"),
-        ("tel341234567", "tel<TEL>"),
-        ("telO34 12 345 67", "tel<TEL>"),
+        ("numero261 034 123 45 67", "numero<TEL>"),
+        ("ato261.034.123.45.67", "ato<TEL>"),
         ("tel+261 3 4 1 2 3 4 5 6 7", "tel<TEL>"),
         ("tel (089) 123 45 67", "tel <TEL>"),
         ("tel (069) 1234567", "tel <TEL>"),
@@ -464,6 +465,9 @@ def test_glued_international_phones(text, expected):
         "20:30", "Amin'ny 20:30 isika", "1 000 000 Ar", "261 300 000 Ar", "1 261 340 000 Ar", "solo 34 olona",
         "Manao 300 000 000 Ar ilay tany", "Mila vola ho 300 000 000 Ar", "valo 320 000 000",
         "Tonga tao 2 345 678 90", "ho 2025 12 345 olona", "Ar350 000 000", "MGA320 000 000", "Fmg 320 000 000",
+        "Tamin'ny 7h35 1 500 000 Ar", "Nandoa 8h32 2 500 000 Ar", "tamin'ny 14h36 2 400 000 Ar",
+        "ilay320 000 000", "io200000000",
+        ") (010) 2171 2h02 1925 25/01/2019", "valo 20h02 592 10 212 590", "0h03 50,676,597", "(041) 10283 13h38",
     ],
 )
 def test_times_and_amounts_stay(text):
