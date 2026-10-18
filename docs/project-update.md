@@ -1,143 +1,123 @@
 # fyM1 project update
 
-Snapshot: 2026-10-18, ~00:00 UTC, `main` at b2f2aa3. Status moves fast; check `gh pr list` for anything newer. Read with the spec (`docs/superpowers/specs/2026-10-17-resaka-design.md`)
-and the plan (`docs/superpowers/plans/2026-10-17-fym1-v0.1.md`). This file says where the project stands; the
-spec and plan say what it is and how it is built.
+Snapshot: 2026-10-18, ~02:30 UTC, `main` at acc6265. Check `gh pr list` for anything newer. Read with the spec
+(`docs/superpowers/specs/2026-10-17-resaka-design.md`) and the plan (`docs/superpowers/plans/2026-10-17-fym1-v0.1.md`).
+This file says where the project stands and how to pick it up; the spec and plan say what it is and how it is built.
+
+## 0. Start here (new session or new team)
+
+1. Read this file, then `AGENTS.md`, then spec §7–§8 and the plan's "Changes from the plan".
+2. Read the private operator handoff on the owner's laptop (not in this repo; it names accounts and machines):
+   `~/fyM1-handoff/LEAD-HANDOFF.md` (start at §13 "CURRENT STATE", then §14) and `~/fyM1-handoff/TRAINER-HANDOFF.md`.
+3. Set up the team: a **lead** (owns calls, merges, run order; talks to the owner through the main session) and,
+   as needed, a **trainer** (the only agent that drives Kaggle/Colab), **data** (cleaner + export), **eval**
+   (Task 5), **publish** (Spaces), **shrink** (03_trim), **writer** (paper/README/model card).
+4. Check what's running before starting anything: the Kaggle kernel status and the result JSONs on the Hub
+   (commands in `docs/kaggle_operator.md` and LEAD-HANDOFF §13). Never run the same model on Kaggle and Colab.
+5. Rules that bite: one branch + worktree per change, fresh reviewer per PR, at most 2 fix rounds then ask the
+   owner, squash-merge only on safe-to-merge + green CI, clean up merged branches, no AI attribution, no deletions
+   or architecture changes without the owner, never print or pass the HF/Kaggle tokens, never hand-type a number.
 
 ## 1. Where we are
 
-The tooling is built and merged. No model is picked or trained yet. Two things gate training:
+Tooling is built and merged. Baseline tests are half done; no model is picked or trained yet.
 
-1. **The Messenger export is not on the laptop.** `~/malagasy-data/raw/` does not exist, so there are no real
-   chats yet. Without them the model can't learn everyday style.
-2. **A GPU with enough hours.** Colab's free limit was hit at 23:12 UTC (back at ~23:57; the Gemma 3 baseline is
-   running there). Training moves to Kaggle: the owner has an account; its token file is being saved.
+- **Blocking training:** the owner's Messenger export (waiting on Meta). `~/malagasy-data/raw/` doesn't exist.
+- **GPU:** Kaggle works (owner's account; HF token attached to the baseline kernel). Colab's free quota ran out at
+  01:15 UTC and is the backup only.
+- **Ship date:** when the export is in (owner chose this over a Wikipedia-only model that would still talk formally).
 
-Ship date moved from 2026-10-17 to **when the export is in** (owner: tomorrow is fine). The owner chose this
-over shipping a model trained only on Wikipedia + identity lines, which would still talk formally.
-
-`main`: 635 tests pass, 1 skipped, 9 expected failures (known anonymiser limits, strict xfail).
+`main`: 2,077 tests pass, 1 skipped, 14 expected failures with default groups (`uv run pytest -q`); ~2,140 pass
+with `uv sync --all-groups`. The 14 strict xfails pin known anonymiser limits.
 
 ## 2. Done
 
 | Plan task | What | PRs |
 |---|---|---|
 | 1 Repos + scaffold | Private GitHub repo, package layout, `.gitignore` tests, private HF repos `fyM1-chats`, `fyM1-ckpt`, `fyM1-votes` | #1 |
-| 2 Data | Messenger parser, anonymiser, segmenter, review sheet, `build_chats.py`, `build_formal.py` | #3 (+ #16 open) |
-| 2 Data | Uploaded to private `fyM1-chats`: 1,500 Wikipedia chats (`formal.jsonl`), 16 identity/refusal chats written by the owner, system prompt. Private both before and after upload | — |
-| 2 Data | Dry run of cleaner + post-run checks on a made-up export (reported by `data`): all planted phones counted, planted names listed | — |
-| 3 Eval | `is_malagasy`, `drift_rate`, `leak_rate`, 150 owner-approved test prompts, judge rubric; greeting words "akory", "aby" | #4, #15 |
-| 4 Train infra | `latest_checkpoint` resume, Colab smoke notebook, token-safe Colab operator flow, one-shot local token server (one extra fix round, owner-approved) | #2 |
-| 4 Baseline + training | `00_baseline` and `01_train` notebooks, scout table `results/model_selection.json`, per-run folders that refuse a resume on changed settings or code, training time across disconnects, own early-stop rule, `sync_code_to_hub.py` | #13 |
-| 4 Kaggle runtime | Token helper that checks Kaggle before Colab, `kaggle_push.py` (reads only the username), `docs/kaggle_operator.md` | #18 |
+| 2 Data | Messenger parser, anonymiser, segmenter, review sheet, `build_chats.py`, `build_formal.py` | #3 |
+| 2 Data | Anonymiser leak fixes: a mention's fake never echoes the real name (also inside or split across a handle); glued `+261`/`00261`/`(034)` phones caught | #16 |
+| 2 Data | Phone-vs-date follow-up: local numbers with a year-like group, price pairs kept (see the known issue in §5) | #24 |
+| 2 Data | Uploaded to private `fyM1-chats`: 1,500 Wikipedia chats, 16 owner-written identity/refusal chats, system prompt | — |
+| 2 Data | Dry run on a made-up export with the new cleaner: 0 phone-like numbers left, owner name absent, planted outsider name listed on the leftover sheet | — |
+| 3 Eval | `is_malagasy`, `drift_rate`, `leak_rate`, 150 owner-approved prompts, judge rubric | #4, #15 |
+| 4 Train infra | Checkpoint resume, smoke notebook, token-safe Colab flow | #2 |
+| 4 Baseline + training | `00_baseline`, `01_train`, per-run folders that refuse a resume on changed settings or code, training time across disconnects, own early stop, `sync_code_to_hub.py` | #13 |
+| 4 Kaggle | Runtime helper (Kaggle before Colab), `kaggle_push.py`, notebooks run on either, one GPU pinned, fresh code folder per run, notebook builder in the repo | #18, #19, #20 |
+| 4 Gemma 3 load | Load `google/gemma-3-12b-it` quantised on load (no silent swap to the oversized copy), out-of-memory guard records `"oom"`, never a number | #21 |
+| 4 Results | AfriqueQwen3.5-9B-Instruct baseline + selection table | #23 |
 | 5 Scoring | `score.py`: blind judge batch, judge means, `scores.json`, leak matches, owner leak review, strict leak gate | #6, #10, #11, #15 |
-| 6 Spaces | Chat + arena apps, `make_vote`, vote tally, owner-approved Malagasy text, `fy-m-1` Space names | #7, #9, #12 |
-| 7 Shrink | Vocabulary trim that keeps BPE merges valid (notebook not run yet) | #8 |
-| 8 Writing | Paper, README and model card skeletons (numbers pending) | #5 |
+| 6 Spaces | Chat + arena apps, votes, owner-approved Malagasy text, `fy-m-1` names | #7, #9, #12 |
+| 7 Shrink | Vocabulary trim (notebook not run yet) | #8 |
+| 8 Writing | Paper, README, model card skeletons; this update, spec §8, plan status | #5, #17 |
 
 ## 3. Decisions made outside the spec and plan
 
-Recorded in the spec (§8) and plan ("Changes from the plan") as well.
+Recorded in spec §8 and the plan's "Changes from the plan" too.
 
-**Naming and identity**
-- Public name is **`fy-m-1`**: model `Fan1000-Prog/fy-m-1-<size>`, Spaces `fy-m-1-chat` / `fy-m-1-arena`,
-  GitHub repo recreated as `Fan1000-prog/fy-m-1` at release. Private repos keep `fyM1-*`; package stays `fym1`.
-- Identity/refusal lines (16) are written by the owner in their own words.
-
-**Data and privacy**
-- PR #3 merged by owner override with two known anonymiser leaks open (mention fake equal to the real name;
-  glued `+261` phones). Owner then reversed course: PR #16 closes both, plus the forms its reviewers found
-  (names inside or split across handles, glued bracket/`00261`/`+2610`/no-leading-0 phones).
-- Backstops kept even with the fix: owner's 100-sample review, a "leftover names" blocklist the owner ticks,
-  a count-only post-run check for phone-like digit runs, and the strict leak gate.
-- Raw per-prompt answers and the arena A/B key stay private until the arena closes (v0.2). v0.1 publishes
-  aggregates only. The owner's own arena votes count as "early votes".
-- Release: the GitHub repo is deleted and recreated from one clean snapshot (owner pre-approved), with no old
-  history, screenshots or browser files, then made public.
-
-**Model selection**
-- Lead picks the base model (owner delegated). Candidates: Gemma 4 12B, AfriqueQwen-8B, Gemma 3 12B, and
-  AfriqueQwen3.5-9B-50Langs-Instruct-v1 (added because AfriqueQwen-8B has no chat version).
-- One Belebele protocol for all: plain-text 0-shot, no chat template. The chat-template score is a second
-  column, empty for base models. (AfriqueQwen-8B's chat-format score, 0.236, is not valid for a base model.)
-- Smoke training tests cut to 15 steps for the remaining models to save GPU time.
-- Baseline runs may use the trainer's branch code (each result records its code sha). Real training runs only on
-  code synced from clean `origin/main` (`scripts/sync_code_to_hub.py` refuses otherwise).
-- No paid compute. **Training moves to Kaggle** (owner suggested, lead decided): ~30 free GPU h/week and 12 h
-  sessions fit slow float32 training; driven from the terminal with Kaggle's own CLI, no browser clicking. The owner
-  types the HF token into Kaggle Secrets themselves.
-
-**Training details** (PR #13)
-- `CHAT_TEMPLATE_KWARGS = {"enable_thinking": False}` shared by train, eval and trim.
-- Every assistant turn gets the same empty thinking block the model sees at answer time, so training matches use.
-- Own tested early-stop rule (the Hugging Face callback breaks after a Colab restart).
-- On a T4, Unsloth trains Gemma 3, Gemma 4 and the 9B instruct model in float32 (slower); only AfriqueQwen-8B
-  uses fp16. If Gemma 4 is picked: lr 1e-4 or a longer warmup.
-- Saving 4-bit weights during the baseline is off (filled Colab RAM and hung).
-
-**Process**
-- One extra fix round for PR #2 beyond the usual two, approved by the owner.
-- Judge disclosure: "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code; rubric in
+- **Name:** public `fy-m-1`; private repos keep `fyM1-*`; package stays `fym1`. GitHub repo recreated clean as
+  `Fan1000-prog/fy-m-1` at release (owner pre-approved deleting and recreating it).
+- **Privacy backstops**, kept whatever the cleaner does: owner's 100-sample review, leftover-names blocklist,
+  count-only post-run phone check, strict 8-word leak gate. Raw answers and the arena A/B key stay private until v0.2.
+- **Anonymiser trade-offs (owner):** glued `tel34…`/`telO34…` and no-0 layouts like `34 123 45 67` stay known
+  limits; no narrower rule for `tel341234567`. PR #24 merged "as is" and kept (no revert) on the owner's word; its date side effect gets fixed forward (§5).
+- **Model pick:** delegated to the lead; same tests for every candidate (plain-text 0-shot Belebele = `belebele_acc`,
+  FLORES+ both ways, tokens per word, 15-step QLoRA smoke on a T4) plus the owner's 1–5 rating of 20 greeting answers.
+- **Compute:** $0. Kaggle is the main GPU (~30 h/week, 12 h sessions), Colab the backup. On a T4, Unsloth trains
+  Gemma 3 and Gemma 4 in float32 (slow); the 9B instruct and AfriqueQwen-8B ran in 16-bit.
+- **Training code** reaches the GPU only by syncing clean `origin/main` to the Hub; never during a training run.
+- **Judge disclosure:** "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code; rubric in
   `src/fym1/eval/judge_rubric.md`." Methods disclosure, not attribution.
 
 ## 4. Baseline numbers so far
 
-| | Gemma 4 12B | AfriqueQwen-8B | Gemma 3 12B | AfriqueQwen3.5-9B-Instruct |
+From `results/model_selection.json` on `main` (written by `scripts/build_model_selection.py`). Gemma 3 has no results file yet; its license is from the script's license table.
+
+| | AfriqueQwen3.5-9B-Instruct | Gemma 4 12B | AfriqueQwen-8B (base) | Gemma 3 12B |
 |---|---|---|---|---|
-| Belebele, chat format, 0-shot | 0.750 | not valid (base model) | pending | pending |
-| Belebele, plain text, 0-shot | pending | pending | pending | pending |
-| FLORES+ chrF++ | pending | pending | pending | pending |
-| Tokens per Malagasy word | 2.79 | 2.95 | pending | pending |
-| Seconds per training step (8×2048 tokens)* | 126 (float32) | 74 | pending | pending |
-| Peak GPU memory* | 9.18 GB | 7.79 GB | pending | pending |
-| Smoke loss* | best at step 9, then rising | smooth, 1.13 → 0.70 | pending | pending |
-| 20 greetings | fluent, formal "AI assistant" | unusable (no chat tuning) | pending | pending |
+| Belebele, plain text 0-shot | 0.667 | pending | pending | pending |
+| Belebele, chat format | 0.742 | 0.750 | not valid (base) | pending |
+| FLORES+ chrF++ eng→mg / mg→eng | 49.73 / 56.17 | pending | pending | pending |
+| Tokens per Malagasy word | 2.826 | 2.792 | 2.952 | pending |
+| Smoke: s/step, peak GPU | 83.3, 9.8 GB | pending (re-run) | 74.3, 7.79 GB | pending |
+| Smoke loss | 1.00 → 0.73 (0.77 last) | pending | 1.13 → 0.70 | pending |
+| License | CC-BY-4.0 | Apache-2.0 | CC-BY-4.0 | Gemma Terms of Use |
 
-\* Gemma 4's speed, memory and smoke-loss figures come from an earlier unscripted run. PR #13 removed them from the
-results files; Gemma 4's 15-step smoke test runs again on the next GPU.
-
-The 9B instruct model (`McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1`, cc-by-4.0) passed the no-GPU checks:
-Unsloth support, text-only load, ~6.5 GB in 4-bit. Run order once a GPU is free: Gemma 3 → 9B instruct → Gemma 4
-(FLORES+, plain-text Belebele) → AfriqueQwen-8B (same).
-
-Source: `results/baseline/*.json` and `results/model_selection.json` on `main` (from PR #13), for
-AfriqueQwen-8B and Gemma 4's Belebele and tokens-per-word. Starred rows and the 9B checks come from the trainer's
-reports.
+Caveat for the 9B: its answer to "Sali ahn" came back in Hausa and several greetings echo the prompt, so the
+owner's rating matters. Gemma 4's earlier unscripted smoke (≈126 s/step, loss rising at lr 2e-4) was removed.
 
 ## 5. Open now
 
-| Item | Owner | State |
+| Item | Who | State |
 |---|---|---|
-| PR #16 anonymiser leak fix | main | blocked after 2 fix rounds (glued rule eats words ending in "o" before a price; bracketed non-Malagasy area codes; doubled-letter split handles); owner decides on one more round |
-| Wire notebooks to Kaggle | trainer | next PR (#18 merged) |
-| Messenger export | owner | not on the laptop |
-| 20-greeting ratings per model | owner | after every candidate has answers |
-| Kaggle setup | owner | phone-verified account, API token in `~/.kaggle/kaggle.json`, then HF_TOKEN in Kaggle Secrets |
-| Release check `git log -p | grep \+261` matches synthetic test/doc examples | lead | reworded in the plan to skip `tests/` and `docs/` |
-| Old `data-pipeline` branch + `~/fyM1-data` | main | delete after #16 merges (owner OK) |
+| **Known issue: #24 breaks dates followed by more numbers** | next team | "15/03/2026 1 500 Ar" → "15/<TEL> Ar"; date ranges broken (~1,080 per 97k everyday lines; a plain date or "le 15/03/2026 à 14h" is fine; not a privacy leak). Owner decision (2026-10-18): keep #24, no revert (a revert would bring back the rare leak it closed, "038 27 2000/5"). Next: a PR that masks whole real dates in the sentence before phone matching, tested on date ranges and date + price/time; merge it before `build_chats` runs on the real export |
+| Kaggle baseline run | trainer | kernel version 2 running since ~01:48 UTC on Gemma 3 (Hub code 6d13c89); results land on the Hub one section at a time |
+| PR #22 baseline guards (draft) | trainer | parked until Gemma 3's result shows `env.loaded_from == "google/gemma-3-12b-it"`; then sync with main, review, merge |
+| Messenger export | owner | waiting on Meta |
+| 20-greeting ratings per model | owner | after all four candidates have answers |
+
+Run order: Gemma 3 (full) → Gemma 4 (plain-text Belebele, FLORES+, scripted 15-step smoke) → AfriqueQwen-8B
+(plain-text Belebele, FLORES+). New result JSONs go in a PR on a fresh branch.
 
 ## 6. Steps to finish
 
-1. **Merge PR #16**, then delete `data-pipeline` (remote, local, `~/fyM1-data`) and `leak-fix`. `data` re-runs
-   its dry run on the new `main`.
-2. **Set up Kaggle** (owner, ~10 min once), then **finish the baseline** on Kaggle: Gemma 3 and the 9B instruct in full;
-   plain-text Belebele, FLORES+ and (Gemma 4) the 15-step smoke for Gemma 4 and AfriqueQwen-8B. Owner rates the 20 greetings per model.
-3. **Lead picks the base model** and sends the owner the table and the reason.
-4. **Messenger export lands** in `~/malagasy-data/raw/`. `data` runs `build_chats.py` locally, then the post-run
-   checks; counts only go to lead.
-5. **Owner reviews** the 100-sample sheet and ticks real names on the leftover-names list (blocklist).
-6. **Upload** approved chats to private `fyM1-chats`; write `results/data_stats.json` (counts only). Decide on
-   synthetic chats (only if fewer than 2,000 approved conversations).
-7. **Sync code** to `fyM1-ckpt/code/` from clean `origin/main`; **train** with `01_train` (~3 h on a T4),
-   supervised by `trainer`; log to `results/train_log.json`.
-8. **Eval** (Task 5): answers for 150 prompts from base and fy-m-1, Belebele + FLORES+ rerun, perplexity,
-   blind judge, `scores.json`; merge LoRA, 4-bit + GGUF Q4_K_M.
-9. **Leak gate**: owner reviews each matched 8-word run; release only if every run is generic. Owner checks the
-   20 identity/safety answers.
+1. **Fix the #24 date issue** (owner kept #24): mask whole real dates before phone matching; own PR and review; before the real export run.
+2. **Finish the baseline** on Kaggle (run order above); merge result PRs; finish or drop PR #22.
+3. **Owner rates** the 20 greeting answers per model; **lead picks** the base model and sends the table + reason.
+4. **Export lands** in `~/malagasy-data/raw/`: `data` runs `build_chats.py` from `main`, then the post-run checks
+   (counts only to the lead).
+5. **Owner reviews** the 100-sample sheet and ticks real names on the leftover-names list; rerun with the blocklist.
+6. **Upload** approved chats to private `fyM1-chats`; `results/data_stats.json` (counts only). Synthetic chats only
+   if fewer than 2,000 approved conversations.
+7. **Sync code** from clean `main`; set `MODEL_ID`/`RUN_ID` in `01_train` (no defaults); **train** on Kaggle,
+   supervised; log to `results/train_log.json`.
+8. **Eval** (Task 5): 150 answers from base and fy-m-1, Belebele + FLORES+ rerun, perplexity, blind judge,
+   `scores.json`; merge LoRA, 4-bit + GGUF Q4_K_M.
+9. **Leak gate**: owner reviews every matched 8-word run; owner checks the 20 identity/safety answers.
 10. **Trim** (Task 7): run `03_trim`; ship trimmed GGUF only if all three gates pass.
-11. **Deploy Spaces** (Task 6) and smoke-test them with Playwright.
-12. **Write-up** (Task 8): fill paper, README, model card from `results/` via `make_numbers.py --strict`.
-13. **Release** (Task 9): gates green, recreate the GitHub repo clean, flip public (repo, model, Spaces; private
-    repos stay private), check every README link, send the owner the arena link and a 2-line Malagasy message.
+11. **Deploy Spaces** (Task 6); Playwright smoke test.
+12. **Write-up** (Task 8) from `results/` via `paper/make_numbers.py --strict`.
+13. **Release** (Task 9): recreate the GitHub repo clean, flip public (private repos stay private), check every
+    README link, send the owner the arena link and a 2-line Malagasy message.
 
 v0.2 after release: panel arena votes, layer pruning, longer training, raw answers once the arena closes.
