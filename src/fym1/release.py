@@ -2,7 +2,8 @@
 
 The public repo is a fresh single-commit repo built from this snapshot, so private git history never ships.
 Release blocker (lead decision 21): the export's sender names are read at run time, removed from the hand-written
-name lists, and searched for in every file except the lists a script rebuilds from public data. Everything
+name lists, and searched for in every file except the lists a script rebuilds from public data alone. The lists
+scripts/build_known_words.py builds from public data minus the hand lists do not ship (REBUILT_LISTS). Everything
 this module reports is a count or a repo path; it never returns a sender name, a message text, a private id
 or a matched secret value.
 """
@@ -38,6 +39,18 @@ class Exclude:
     reason: str
 
 
+# Lists scripts/build_known_words.py writes. It builds them from public data MINUS the hand lists' names, and the
+# repo's copies were built from the unstripped hand lists: a rebuild from the shipped (stripped) hand lists and a diff
+# would show exactly the names the snapshot removed. So they never ship; anyone rebuilds them from the shipped hand
+# lists with REBUILD_COMMAND (large downloads: Wikipedia, INSEE, HPLT).
+REBUILD_COMMAND = "uv sync --group data && uv run python scripts/build_known_words.py"
+_NOT_SHIPPED = f"built from the unstripped hand lists (a rebuild + diff would show the removed names); rebuild with " \
+               f"`{REBUILD_COMMAND}`"
+REBUILT_LISTS: tuple[str, ...] = tuple(f"src/fym1/data/{name}" for name in (
+    "en_words.txt", "fr_words.txt", "first_names.txt", "wordlike_first_names.txt", "mg_wiki_words.txt",
+    "mg_corpus_words.txt",
+))
+
 EXCLUDES: tuple[Exclude, ...] = (
     Exclude("AGENTS.md", "agent-team rules for the private build; points at the owner's private handoff"),
     Exclude("CLAUDE.md", "same agent-team rules as AGENTS.md, for one tool"),
@@ -53,6 +66,7 @@ EXCLUDES: tuple[Exclude, ...] = (
     Exclude("tests/test_serve_hf_token_once.py", "tests the excluded scripts/serve_hf_token_once.py"),
     Exclude("results/release_check.json", "this tool's own counts report: a private build record of what the "
                                           "snapshot checked"),
+    *(Exclude(path, _NOT_SHIPPED) for path in REBUILT_LISTS),
 )
 
 # Word/name lists, shipped under their own licences (see NOTICE).
@@ -64,35 +78,16 @@ HAND_LISTS: dict[str, str] = {
     "src/fym1/data/mg_known_names.txt": "hand-edited places, brands and other non-person words",
     "src/fym1/data/name_deny_list.txt": "hand-edited Malagasy given names that are also everyday words",
 }
-# Lists a script writes from public data. They are shipped exactly as built and the name scan skips them:
-# anyone can rebuild one and diff it, so a removed entry would point at a sender, and a common word in one
-# reveals nothing about the export. Secrets and private ids are still checked in them.
-_KNOWN_WORDS = "reproducible from public data by scripts/build_known_words.py"
+# Shipped lists a script writes from public data alone (no hand list goes in). They are shipped exactly as built
+# and the name scan skips them: anyone can rebuild one and diff it, so a removed entry would point at a sender, and
+# a common word in one reveals nothing about the export. Secrets and private ids are still checked in them.
 GENERATED_LISTS: dict[str, str] = {
-    "src/fym1/data/en_words.txt": f"{_KNOWN_WORDS} (wordfreq)",
-    "src/fym1/data/fr_words.txt": f"{_KNOWN_WORDS} (wordfreq)",
-    "src/fym1/data/first_names.txt": f"{_KNOWN_WORDS} (INSEE)",
-    "src/fym1/data/wordlike_first_names.txt": f"{_KNOWN_WORDS} (INSEE, wordfreq, Wikipedia)",
-    "src/fym1/data/mg_wiki_words.txt": f"{_KNOWN_WORDS} (Malagasy Wikipedia)",
-    "src/fym1/data/mg_corpus_words.txt": f"{_KNOWN_WORDS} (HPLT 2.0)",
     "src/fym1/data/mg_common_words.txt": "reproducible from public data by scripts/build_common_words.py "
                                          "(Malagasy Wikipedia)",
 }
 DATA_LICENCES: dict[str, str] = {
-    "src/fym1/data/en_words.txt": "derived from wordfreq 3.1 by Robyn Speer (https://github.com/rspeer/wordfreq); "
-                                  "word data CC BY-SA 4.0",
-    "src/fym1/data/fr_words.txt": "derived from wordfreq 3.1 by Robyn Speer (https://github.com/rspeer/wordfreq); "
-                                  "word data CC BY-SA 4.0",
-    "src/fym1/data/wordlike_first_names.txt": "INSEE fichier des prenoms (Licence Ouverte / Etalab 2.0) filtered "
-                                              "with wordfreq (CC BY-SA 4.0) and Wikipedia (CC BY-SA 4.0); "
-                                              "CC BY-SA 4.0",
-    "src/fym1/data/first_names.txt": "INSEE fichier des prenoms 2022, Licence Ouverte / Etalab 2.0",
     "src/fym1/data/mg_common_words.txt": "derived from Malagasy Wikipedia (wikimedia/wikipedia 20231101.mg); "
                                          "CC BY-SA 4.0",
-    "src/fym1/data/mg_wiki_words.txt": "derived from Malagasy Wikipedia (wikimedia/wikipedia 20231101.mg); "
-                                       "CC BY-SA 4.0",
-    "src/fym1/data/mg_corpus_words.txt": "word list from HPLT 2.0 cleaned, Malagasy plt_Latn (packaging CC0 1.0); "
-                                         "no text kept",
     "src/fym1/data/mg_first_names.txt": "hand list, this repo (Apache-2.0)",
     "src/fym1/data/mg_known_names.txt": "hand list, this repo (Apache-2.0)",
     "src/fym1/data/name_deny_list.txt": "hand list, this repo (Apache-2.0)",
@@ -503,10 +498,16 @@ def notice_text() -> str:
         "",
         *(f"- {path}: {licence}" for path, licence in sorted(DATA_LICENCES.items())),
         "",
-        "wordfreq (https://github.com/rspeer/wordfreq) is by Robyn Speer. Its word frequency data is licensed",
-        "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); the lists derived from it above are shared",
-        "under the same licence. Changes: lists were reduced to the most frequent words and folded to lower case",
-        "without accents. Regenerate the lists with `uv run python scripts/build_known_words.py`.",
+        "The strict gate's other word lists are not included. Build them before using fym1.data.gate or",
+        f"fym1.data.known_words: `{REBUILD_COMMAND}`.",
+        "It writes:",
+        "",
+        *(f"- {path}" for path in REBUILT_LISTS),
+        "",
+        "from Malagasy, French and English Wikipedia (CC BY-SA 4.0), wordfreq by Robyn Speer",
+        "(https://github.com/rspeer/wordfreq; word data CC BY-SA 4.0), the INSEE fichier des prenoms 2022",
+        "(Licence Ouverte / Etalab 2.0) and HPLT 2.0 cleaned (CC0 1.0). Lists derived from CC BY-SA data are",
+        "shared under the same licence (https://creativecommons.org/licenses/by-sa/4.0/).",
         "",
     ]
     return "\n".join(lines)

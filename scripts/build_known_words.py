@@ -59,7 +59,6 @@ from huggingface_hub import HfFileSystem
 from wordfreq import top_n_list
 
 from fym1.data.anonymize import FALLBACK_NAME, FIRST_NAMES, SURNAMES, fold
-from fym1.data.known_words import MG_FIRST_NAMES, NAME_DENY_LIST
 
 DATA = Path(__file__).resolve().parents[1] / "src/fym1/data"
 LETTERS = re.compile(r"[^\W\d_]+")
@@ -134,7 +133,7 @@ def first_names(rows: Iterable[dict], cases: CaseCounts, min_births: int) -> lis
 def name_list(first: Iterable[str]) -> set[str]:
     """Every person name kept out of the word lists: `first` names, the fake-name pool, both Malagasy lists."""
     pool = {fold(name) for name in (*FIRST_NAMES, *SURNAMES, FALLBACK_NAME)}
-    return set(first) | pool | NAME_DENY_LIST | MG_FIRST_NAMES
+    return set(first) | pool | read_words("name_deny_list.txt") | read_words("mg_first_names.txt")
 
 
 def is_word_in(word: str, cases: CaseCounts, min_lower: int) -> bool:

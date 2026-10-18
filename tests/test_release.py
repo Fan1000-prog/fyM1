@@ -1,5 +1,6 @@
 """fym1.release and scripts/release_snapshot.py, on synthetic repos and exports only."""
 
+import ast
 import gzip
 import importlib.util
 import io
@@ -75,7 +76,7 @@ def cli_args(tmp_path: Path, repo: Path, out: Path) -> list[str]:
 CLEAN_FILES = {
     "README.md": "# demo\nNothing private here.\n",
     "src/fym1/data/mg_first_names.txt": "# hand list\nmialy\nZÀFY\nfanja\n",
-    "src/fym1/data/fr_words.txt": "# wordfreq\nbonjour\nbodo\n",
+    "src/fym1/data/mg_common_words.txt": "# wikipedia\nbonjour\nbodo\n",
     "AGENTS.md": "agent rules\n",
     "docs/superpowers/plan.md": "plan\n",
 }
@@ -250,7 +251,7 @@ def test_snapshot_drops_excluded_paths_strips_hand_lists_only_and_passes(tmp_pat
     assert not (out / ".git").exists()
     assert (out / "src/fym1/data/mg_first_names.txt").read_text() == "# hand list\nmialy\nfanja\n"
     # A generated list ships exactly as built (a rebuild + diff would expose a removal) and is not name-scanned.
-    assert (out / "src/fym1/data/fr_words.txt").read_text() == CLEAN_FILES["src/fym1/data/fr_words.txt"]
+    assert (out / "src/fym1/data/mg_common_words.txt").read_text() == CLEAN_FILES["src/fym1/data/mg_common_words.txt"]
     assert report.list_entries_removed == {"src/fym1/data/mg_first_names.txt": 1}
     assert report.name_hits == {}
     notice = (out / "NOTICE").read_text()
@@ -356,18 +357,53 @@ def test_every_shipped_list_file_has_a_licence_line():
     assert lists == set(release.DATA_LICENCES)
 
 
-def test_every_list_is_either_hand_written_or_generated_with_a_reason():
+def test_every_list_is_hand_written_generated_or_rebuilt_with_a_reason():
     lists = {p for p in tracked() if release.is_list_file(p)}
-    assert not set(release.HAND_LISTS) & set(release.GENERATED_LISTS)
-    assert lists == set(release.HAND_LISTS) | set(release.GENERATED_LISTS)
+    groups = [set(release.HAND_LISTS), set(release.GENERATED_LISTS), set(release.REBUILT_LISTS)]
+    assert sum(map(len, groups)) == len(set().union(*groups))  # no list in two groups
+    assert lists == set().union(*groups)
     assert all(reason.strip() for reason in [*release.HAND_LISTS.values(), *release.GENERATED_LISTS.values()])
 
 
+def _known_words_outputs() -> set[str]:
+    """The lists build_known_words.py writes: the keys of its SOURCES dict (each written file's header)."""
+    tree = ast.parse((REPO_ROOT / "scripts" / "build_known_words.py").read_text("utf-8"))
+    sources = next(node.value for node in tree.body
+                   if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "SOURCES" for t in node.targets))
+    return {f"src/fym1/data/{key.value}" for key in sources.keys}
+
+
+def test_lists_built_from_the_hand_lists_never_ship():
+    # build_known_words.py drops the hand lists' names from everything it writes, so a rebuild from the shipped
+    # (stripped) hand lists, diffed against the repo's lists, would show the removed names.
+    assert _known_words_outputs() == set(release.REBUILT_LISTS)
+    assert all(release.exclusion_reason(path) for path in release.REBUILT_LISTS)
+
+
 @pytest.mark.parametrize("path", sorted(release.GENERATED_LISTS))
-def test_generated_list_is_written_by_its_build_script(path):
-    script = "build_common_words.py" if path.endswith("mg_common_words.txt") else "build_known_words.py"
-    assert script in release.GENERATED_LISTS[path]
-    assert Path(path).name in (REPO_ROOT / "scripts" / script).read_text("utf-8")
+def test_shipped_generated_list_is_built_from_public_data_alone(path):
+    script = "build_common_words.py"
+    source = (REPO_ROOT / "scripts" / script).read_text("utf-8")
+    assert script in release.GENERATED_LISTS[path] and Path(path).name in source
+    assert "known_words" not in source
+    assert not any(Path(hand).name in source for hand in release.HAND_LISTS)
+
+
+def test_snapshot_ships_without_the_rebuilt_lists_and_says_how_to_build_them(tmp_path):
+    files = {**CLEAN_FILES, **{path: "# built\nbonjour\n" for path in release.REBUILT_LISTS}}
+    repo = make_repo(tmp_path, files)
+    out = tmp_path / "public"
+    report = snap(repo, out, make_export(tmp_path))
+    assert report.ok
+    assert not any((out / path).exists() for path in release.REBUILT_LISTS)
+    notice = (out / "NOTICE").read_text()
+    assert release.REBUILD_COMMAND in notice and all(path in notice for path in release.REBUILT_LISTS)
+
+
+def test_build_known_words_reads_hand_lists_from_disk_not_through_known_words():
+    # known_words needs the lists build_known_words writes, so the public snapshot could not rebuild them.
+    source = (REPO_ROOT / "scripts" / "build_known_words.py").read_text("utf-8")
+    assert "fym1.data.known_words" not in source
 
 
 @pytest.mark.parametrize("path", sorted(release.HAND_LISTS))
