@@ -366,6 +366,43 @@ _PLACEHOLDER_SLOT = "{}"  # private-use marks: never part of a \w word
 _SLOT = re.compile("(\\d+)")
 
 
+# Left after NFKC: combining marks no letter absorbed ("fancy text" strike-through U+0336, underline U+0332)
+# and zero-width spaces. Both split a name into one-letter pieces. Variation selectors (emoji) are kept here.
+_ZERO_WIDTH = frozenset("\u200b\u2060\ufeff")
+# Dropped only right after a letter, where they only hide a name ("R\u200da\u200dk..."): format characters
+# (ZWJ, ZWNJ, soft hyphen, U+2062, tags), enclosing marks (U+20DD, keycap U+20E3) and variation selectors.
+# After an emoji, digit, "#" or "*" they build emoji sequences (families, "\u2764\ufe0f", keycaps) and stay.
+_HIDING_CATEGORIES = frozenset({"Cf", "Me"})
+
+
+def _is_stray(c: str) -> bool:
+    if c in _ZERO_WIDTH:
+        return True
+    return unicodedata.category(c) == "Mn" and not _is_variation_selector(c)
+
+
+def _is_variation_selector(c: str) -> bool:
+    return "\ufe00" <= c <= "\ufe0f" or "\U000e0100" <= c <= "\U000e01ef"
+
+
+def _hides_a_letter(c: str) -> bool:
+    return unicodedata.category(c) in _HIDING_CATEGORIES or _is_variation_selector(c)
+
+
+def normalise(text: str) -> str:
+    """`text` NFKC-normalised (full-width, circled forms read as plain), stray marks and zero-width spaces dropped.
+
+    NFKC composes accents first ("e" + U+0301 -> "é"), so only marks no letter absorbed are dropped. Format
+    characters, enclosing marks and variation selectors are dropped right after a letter; emoji keep theirs.
+    """
+    kept: list[str] = []
+    for c in unicodedata.normalize("NFKC", text):
+        if _is_stray(c) or (kept and kept[-1].isalpha() and _hides_a_letter(c)):
+            continue
+        kept.append(c)
+    return "".join(kept)
+
+
 def fold(s: str) -> str:
     """Lower-case and strip accents, so "Hélène" and "helene" compare equal."""
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)).casefold()
@@ -382,7 +419,8 @@ COMMON_WORDS = tuple(files("fym1.data").joinpath("mg_common_words.txt").read_tex
 _COMMON_KEYS = {compare_key(w) for w in COMMON_WORDS}
 # Short words a short name part ("Ny", "Fa") must never replace: the most widespread
 # Wikipedia words plus texting words Wikipedia lacks.
-PROTECTED_SHORT_WORDS = {compare_key(w) for w in COMMON_WORDS[:300]} | {"ve", "eh", "e", "ah", "ahn", "aho", "ry", "o", "ok"}
+TEXTING_WORDS = frozenset({"ve", "eh", "e", "ah", "ahn", "aho", "ry", "o", "ok"})
+PROTECTED_SHORT_WORDS = {compare_key(w) for w in COMMON_WORDS[:300]} | TEXTING_WORDS
 
 
 def is_everyday_word(word: str) -> bool:
@@ -461,9 +499,10 @@ class Anonymizer:
         self._free_firsts = [f for f in FIRST_NAMES if _is_free(f, real_keys)] or list(FIRST_NAMES)
         self._free_lasts = [s for s in SURNAMES if _is_free(s, real_keys)] or list(SURNAMES)
         self.common_word_replacements = 0
+        self.mention_fakes: set[str] = set()  # every fake written for an @mention, for the strict gate
 
     def __call__(self, text: str) -> str:
-        text = unicodedata.normalize("NFC", text)
+        text = normalise(text)  # full-width "＠", circled "Ⓡ" read as plain; stray marks dropped
         text = EMAIL.sub("<EMAIL>", text)
         text = URL.sub("<URL>", text)
         text = _mask_phones(text)
@@ -485,6 +524,7 @@ class Anonymizer:
         body = match.group()[1:]
         spans = list(re.finditer(r"\S+", body))
         taken, fake = self._fake_for_mention([s.group() for s in spans])
+        self.mention_fakes.add(fake)
         return self._park(parked, fake) + body[spans[taken - 1].end() :]
 
     def _fake_for_mention(self, words: list[str]) -> tuple[int, str]:

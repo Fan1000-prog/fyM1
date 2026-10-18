@@ -73,23 +73,140 @@ A letter O for the 0 right after a word (`contactO345 40 77 66`, `numO3 74 78 29
 corpus of 20,000 everyday lines with a word ending in o/O right before a number ("Hono 3 kilao", "photo 2",
 "Toamasina 25", glued amounts): none gets a `<TEL>`.
 
-## Leftover names: the owner's second pass
+## Strict gate: nobody reads the text
 
-After anonymising, `build_chats.py` writes `leftover_names.html` next to the review sheet: every
-capitalised word that survived and is not a common Malagasy word, with how often it appears —
-words and counts only, no sentences. The owner ticks the real names, saves `blocklist.txt`, and
-runs `build_chats.py` again with `--blocklist blocklist.txt`; those words are then treated as names
-everywhere (same rules: case, accents, endings, stretched letters).
+After anonymising, `build_chats.py` runs a strict automatic gate (`src/fym1/data/gate.py`,
+tests `tests/data/test_gate.py`). It drops a whole conversation if any turn still holds:
+
+| Reason | Caught | Kept |
+|---|---|---|
+| `long_number` | 7+ digits in one run across any non-letter characters (every kind of space, `. , / \ - _ ( ) + ; * \| :`, unicode dashes) (`12 34 567`, `(034) 12 345 67`, `15/03/2026`) | a price: clean 3-digit groups or no separator, then `Ar`, `Ariary`, `fmg`, `€`, `euro(s)`, `eur` (`1 500 000 Ar`), and not phone-shaped: no `+` before it, digits not starting `0` or `261`, not `3[2-9]` + 7 digits (`0341234567 Ar`, `341234567 Ar` are long numbers) |
+| `contact` | an email, a link with a path or query, an `@` before a word or a placeholder (`@njaka`, `@ njaka`, `njaka@ <URL>`), `at`/`arobase`/`(at)`/`[at]` before a placeholder or a mail host (`njaka at gmail`), a private-use mark from a failed replacement | `<EMAIL>`, `<URL>`, a bare `host.com`, `@ 3 ora` |
+| `too_many_unknown` | more than 30% of the conversation's words would be replaced as names (below) | 30% or less |
+
+The gate fails closed: replacing or dropping too much is fine, a leak is not. The anonymiser and the
+gate both NFKC-normalise text first, so full-width (`＠`, `Ｒ`) and circled (`Ⓡ`) characters are read as
+plain ones (kept text comes out normalised: no-break spaces become plain spaces). Combining marks left
+loose after that (strike-through, underline "fancy text") and zero-width spaces are dropped, and so are
+format characters (ZWJ, ZWNJ, soft hyphen, U+2062), enclosing marks (U+20DD, U+20E3) and variation
+selectors right after a letter; after an emoji, digit, `#` or `*` they stay, so emoji families, `❤️`
+and keycaps `1️⃣` are kept. Accents NFKC composes ("é", "ô", "à", "ñ") stay; a mark with no precomposed
+letter is dropped, so `n̈` (Northern Malagasy spelling) becomes `n` and `m̀` becomes `m`. Words are letter runs
+split at digits, underscores, punctuation and a lower-to-upper case change, so "Rakoto2", "2Rakoto",
+"jean_r" and "salutRakoto" are checked; only the exact placeholders (`<TEL>`, `<EMAIL>`, `<URL>`,
+`<HANDLE>`, `<ADDRESS>`) are skipped. A hyphenated `Ra-be` is one word, and so is a run of 3+ single
+letters joined by 1-3 non-letter, non-digit characters ("r a k o t o", "R.a.k.o.t.o", "R_a_k_o_t_o",
+"J,E,A,N", "R . a . k . o . t . o", "R🔥a🔥k🔥o🔥t🔥o"): it is checked whole.
+
+Every capitalised word (2+ letters) that is not a fake the anonymiser actually wrote (participants'
+fakes and @mention fakes, reported by `Anonymizer.mention_fakes`) or a currency word is cleared or
+replaced. Any other pool name ("Mialy" where nobody got that fake) is replaced like an unknown word.
+
+- **Cleared at a sentence start** if a known-word list has it (`src/fym1/data/known_words.py`),
+  checked in this order; the first list that has it gets the count (`cleared_<list>`):
+  1. `mg_common`: the anonymiser's common Malagasy words that `mg_wiki` also has, plus short texting words.
+  2. `mg_wiki` (`mg_wiki_words.txt`): words Malagasy Wikipedia types in lower case 3+ times.
+  3. `known_names` (`mg_known_names.txt`): a short hand list of places, brands, religious, family,
+     calendar and title words and texting words that are not person names (Tana, Mvola, Jesoa, Neny,
+     Dada, Zoky, Zoma, Alatsinainy, Desambra, Krismasy, Rtoa, Dr, Andao, ...).
+  4. `fr`, `en` (`fr_words.txt`, `en_words.txt`): the 30,000 most frequent French and English words from `wordfreq`.
+- **Cleared mid-sentence or after a person marker** (`i`, `ry`, `ra`, `n'i`, `an'i`, `amin'i`,
+  `tamin'i`) only by the hand list `known_names` ("any Tana", "i Neny"). "tonga ny Fiara",
+  "hoy Bonjour" are replaced.
+- **Never cleared**: a person name (`PERSON_NAMES`): `first_names.txt`, the fake-name pool, and
+  `name_deny_list.txt`, common Malagasy given names that are also words (Hery, Soa, Vola, Mamy,
+  Lalao, Fetra, Rivo, Tiana, Fara, Noro, Voahangy, ...). No corpus-wide evidence clears a word: a
+  word typed in lower case elsewhere does not clear it.
+- **Replaced** otherwise, by a fake first name from the anonymiser's pool: the same fake for the
+  same word within one conversation, never a word already in that conversation. Counted as
+  `tokens_replaced` (kept conversations only).
+
+Also replaced, the same way:
+
+- **A pool name that was already in the raw conversation** ("Rabe no nandeha", "RABE2" before
+  anonymising): there it is a real person, not our fake, so it is replaced by a different fake, word
+  or not. `build_records` finds these per conversation and passes them to the gate.
+- **Lower-case words no list knows** (fail closed; name lists can never hold every name). Anywhere,
+  a lower-case word that no known-word list knows is replaced like an unknown capitalised word:
+  "salut tsanta", "rakoto", "salut sandrine", usernames such as "sandrinerakoto", and letters with
+  digits inside ("n1r1na"). Person names are never known, so `mg_first_names.txt` ("mialy") and
+  `first_names.txt` ("sandrine") names are always replaced. Kept: words a list knows ("trano", "lol",
+  "mdr"), and names that are also everyday words (`name_deny_list.txt`, `wordlike_first_names.txt`,
+  the fallback "olona": "mila vola", "soa ve", "une rose", "tia"). Lists miss some everyday words too
+  (colloquial Malagasy, some French and English words Wikipedia mostly capitalises): those are
+  replaced as well, which is over-masking, and can push a conversation over the 30% drop line.
+  After a person marker, a person name or a word no list knows ("ry hasina", "ry hery"; "ry namana",
+  "i dada" stay). Any `ra-` hyphenated word, and a first name hyphen-joined to another
+  ("jean-pierre", "marie-claire").
+
+Words match folded (lower case, no accents). Stretched letters are collapsed only for real
+stretching, a letter typed 3+ times ("Bonjouuur" -> "bonjour"), and never into a person name: double
+letters are spelling ("Anne" does not match "âne"), and "Mariiie" does not match "mariée".
+
+`scripts/build_known_words.py` (needs `uv sync --group data`) builds `first_names.txt`, `mg_wiki`, `fr`
+and `en`. It drops from the last three every person name (`first_names.txt`, the fake-name pool, the
+deny list) and any word Wikipedia writes capitalised mid-sentence 3+ times and more than 3x as often as
+in lower case in Malagasy Wikipedia (French and English Wikipedia capitalise everyday words in titles,
+so they would drop "Bonjour"). The floor of 3 matches the lower-case floor for a word; it was 10, which
+let rarer names through.
+`wordfreq` and the common-word list ignore case, so without this "marie", "sandrine" or "kevin" would
+clear a person's name.
+`first_names.txt` is every French first name given 1,000+ times since 1900 (English ones
+common in France included), minus first names Malagasy Wikipedia types in lower case 150+ times
+(everyday words: "tia", "mila", "amin") and the hand list. The Wikipedia revision and the INSEE file's
+hash are pinned in the script. Every list file starts with a `#` source line.
+It also builds `wordlike_first_names.txt`: INSEE first names that wordfreq's top 30k
+French/English or Malagasy Wikipedia has, and that the same language's Wikipedia types in lower case
+3+ times and does not mostly capitalise (the 3x name filter). French and English Wikipedia are read
+as the first 100,000 articles of the pinned revision. So "rose", "claire", "aime", "tia" are words,
+while "pierre", "max", "france", "dina" stay names (Wikipedia capitalises them far more often).
+
+Counts only (never text or words) go to `data_gate.json` next to `--out`; `--gate-results
+results/data_gate.json` copies them into the repo. `--dry-run` prints the same counts and writes nothing.
+The 100-sample review sheet (`--sheet`) and the leftover-words list (`--leftover-sheet`) are optional and
+off by default; `--blocklist` still replaces listed words everywhere.
+
+### Word list sources and licences
+
+- `mg_wiki_words.txt`, and the name filter: derived from Malagasy Wikipedia (`wikimedia/wikipedia`,
+  `20231101.mg`), text under CC BY-SA 4.0, by Wikipedia contributors. Only a word list is kept.
+- `first_names.txt`: derived from the INSEE "fichier des prénoms" (édition 2022, national file),
+  Licence Ouverte / Etalab 2.0. Only folded names over the threshold are kept.
+- `wordlike_first_names.txt`: INSEE names (Licence Ouverte) filtered with wordfreq and French, English
+  and Malagasy Wikipedia case counts (CC BY-SA 4.0). Only a word list is kept.
+- `fr_words.txt`, `en_words.txt`: derived from `wordfreq` 3.1 by Robyn Speer (code Apache-2.0, word
+  frequency data CC BY-SA 4.0). `wordfreq` is a build-time dependency only (`data` group).
 
 When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit reference number `<TEL>`.
 
-## Known limits — the owner's review sheet is the backstop
+## Known limits — the strict gate is the backstop
 
 - **Third-party names typed as plain text** (someone not in the chat, no `@`) are not detected
-  automatically; that needs named-entity recognition. Capitalised ones show up on the leftover
-  sheet for the owner to block; lower-case ones rely on the review sheet.
-- Names spelled out or disguised: "Ni-ri-na", "N i r i n a", "N1r1na".
-- Phone numbers written in words ("aotra telo efatra…", "034 douze …") or with letters for digits ("l2").
+  automatically; that needs named-entity recognition. The strict gate replaces them, capitalised or
+  lower-case, unless a known-word list has them: a name that is also an ordinary word can pass.
+- **A name that is also a word** passes only at a sentence start, and only if it is in no name list:
+  a Malagasy given name missing from `name_deny_list.txt`, a name that is also an everyday Malagasy
+  word ("Tia", "Mila"), or an English-only name rare in France. Mid-sentence it is always replaced
+  unless the hand list has it. In lower case and not after a marker, a name that is also a word
+  stays ("mila vola", "soa ve", "une rose").
+- Capitalised ordinary words in no list (rare words, typos, places), any capitalised word
+  mid-sentence that the hand list lacks, and sentence-start words that are also names ("Faly be aho")
+  are replaced by a fake name: over-masking, not a leak.
+- A pool name that is also an everyday word ("Soa", "Vola", "Mamy") typed in lower case and not after
+  a name particle ("hitako mamy") stays.
+- Names spelled out in pieces of two or more letters: "Ni-ri-na". (The gate reads 3+ single letters
+  joined by 1-3 non-letter, non-digit characters as one word, so "N i r i n a", "R.a.k.o.t.o" and
+  "R_a_k_o_t_o" are replaced; it
+  drops loose strike-through/underline marks, so "R̶a̶k̶o̶t̶o̶" is too. "N1r1na", "Rak0to" are replaced:
+  letters with digits inside are always a name.)
+- Names spelled in regional-indicator letters ("🇷🇦🇰🇴🇹🇴"): NFKC does not fold them to letters, so
+  the gate sees emoji, not a word.
+- A phone split over two turns ("nomerao 034 12", then "345 67 io"): the gate checks one turn at a time.
+- A phone split by a word inside one turn ("034 12 dia 345 67"): a word ends the digit run.
+- Digits joined by any non-letter characters count as one number, so a list of times or numbered
+  lines ("14:30-15:30") can drop a conversation: over-dropping, not a leak.
+- Phone numbers written in words, Malagasy or French ("aotra telo efatra…", "034 douze …"), or with
+  letters for digits ("l2").
 - A phone whose first digits make a full date and whose rest reads as a price ("18/03/80 559 874",
   "18/03/80 559000"): kept as a date and a price.
 - Phone numbers glued to a word without the leading 0 ("tel34 12 345 67"): a word's own last letters

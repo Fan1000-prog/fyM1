@@ -1,12 +1,13 @@
-"""After anonymising: capitalised words that survived, so the owner can spot missed names.
+"""After anonymising: capitalised words that survived, which may be missed names.
 
-The owner sees only tokens and counts (never sentences), ticks the real names, and the
-saved blocklist.txt is fed back to build_chats.py, which then replaces them everywhere.
+`fym1.data.gate` replaces the ones no known-word list has. The optional sheet shows
+tokens and counts only (never sentences); a saved blocklist.txt fed back to build_chats.py
+replaces those words everywhere, so fewer conversations are dropped.
 """
 
 import re
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from html import escape
 from pathlib import Path
 
@@ -16,18 +17,28 @@ LETTERS = re.compile(r"(?<![<\w])[^\W\d_]+(?![\w>])")  # whole letter-only words
 MIN_LETTERS = 2
 
 
+def fake_name_keys(fake_names: Iterable[str]) -> set[str]:
+    """Compare keys of every word in `fake_names`."""
+    return {compare_key(w) for name in fake_names for w in name.split()}
+
+
+def leftover_matches(text: str, fake_keys: set[str]) -> Iterator[re.Match]:
+    """Capitalised words in `text` that are not common Malagasy words, placeholders or fake names."""
+    for match in LETTERS.finditer(text):
+        word = match.group()
+        if (
+            word[0].isupper()
+            and len(word) >= MIN_LETTERS
+            and not is_everyday_word(word)
+            and compare_key(word) not in fake_keys
+        ):
+            yield match
+
+
 def leftover_names(texts: Iterable[str], fake_names: Iterable[str]) -> Counter:
     """Capitalised words in `texts` that are not common Malagasy words or our fake names."""
-    fake_words = {compare_key(w) for name in fake_names for w in name.split()}
-    return Counter(
-        word
-        for text in texts
-        for word in LETTERS.findall(text)
-        if word[0].isupper()
-        and len(word) >= MIN_LETTERS
-        and not is_everyday_word(word)
-        and compare_key(word) not in fake_words
-    )
+    fake_keys = fake_name_keys(fake_names)
+    return Counter(match.group() for text in texts for match in leftover_matches(text, fake_keys))
 
 
 def read_blocklist(path: Path) -> list[str]:

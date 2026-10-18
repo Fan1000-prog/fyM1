@@ -1,0 +1,326 @@
+"""Strict automatic gate run after anonymising: drop any conversation that may still leak.
+
+No person reads the anonymised text, so the gate fails closed: replacing or dropping too much is
+fine, letting a name or number through is not. A whole conversation is dropped if any turn holds:
+
+- `long_number`: 7+ digits in one run, counting across any non-letter characters (every kind of
+  space, `. , / \\ - _ ( ) + ; * | :`, unicode dashes). A price is kept only when it
+  is plain digits or clean 3-digit groups, is followed by a currency word (`1 500 000 Ar`,
+  `2500000 ariary`, `1 250 000,50 €`), and does not look like a phone: no `+` before it and its
+  digits do not start with `0`, `261` or read `3[2-9]` + 7 digits. A full date (8 digits) counts too.
+- `contact`: an email, a link with a path or query, an `@` before a word or a placeholder (spaces
+  allowed: "@ njaka", "njaka@ <URL>"), an `at`/`arobase`/`(at)`/`[at]` before a placeholder or a
+  mail host ("njaka at gmail"), or a private-use mark the anonymiser leaves only when a
+  replacement failed.
+- `too_many_unknown`: more than 30% of its words would be replaced as names (below).
+
+Every turn is NFKC-normalised first, so full-width (`＠`, `Ｒ`) and circled (`Ⓡ`) letters are
+checked as plain ones; combining marks NFKC leaves loose (strike-through, underline) and zero-width
+spaces are dropped, and so are format characters, enclosing marks and variation selectors right after a
+letter (emoji keep theirs). Kept turns are returned normalised.
+
+Words are letter runs, split at digits, underscores, punctuation, `<`/`>` and a lower-to-upper case change
+("Rakoto2", "jean_r", "salutRakoto", "<<Njaka"); only the exact placeholders (`<TEL>`, `<EMAIL>`, ...)
+are skipped. Letters with digits inside ("Rak0to", "n1r1na") are one word and always a name. A run of
+3+ single letters joined by 1-3 non-letter, non-digit characters ("r a k o t o", "R.a.k.o.t.o", "R_a_k",
+"J,E,A,N", "R . a . k", "R🔥a🔥k") is one word ("rakoto"), checked by the rules below and replaced whole.
+
+Capitalised words that are not fakes the anonymiser wrote (`fake_names`) or currency words are:
+
+- cleared at a sentence start if a known-word list has them (`fym1.data.known_words`), and anywhere
+  else (mid-sentence, after a person marker) only if the curated hand list `known_names` has them.
+  Person names (first names, the Malagasy name deny list "Hery", "Soa", the fake-name pool) never clear.
+- replaced otherwise by a fake first name from the anonymiser's pool, the same fake for the same
+  word within one conversation, never a word already in that conversation.
+
+A pool name the raw conversation already held ("Rabe no nandeha") is a real person there, not
+our fake: the caller passes it in `disallowed` and it is always replaced, word or not.
+
+Lower-case words fail closed too. Name lists cannot hold every name, so any lower-case word that no
+known-word list knows is replaced like an unknown capitalised word ("salut tsanta", "rakoto",
+"sandrinerakoto"). Kept without a marker: words a list knows ("trano", "lol", "mdr"), and names that
+are also everyday words (`name_deny_list.txt`: "soa", "vola"; `wordlike_first_names.txt`: "une
+rose"). Also replaced:
+
+- after a person marker (`i`, `ry`, `ra`, `n'i`, `an'i`, `amin'i`, `tamin'i`): any word that is a
+  person name or that no list knows ("ry hery"); "ry namana", "i dada" stay.
+- any `Ra-`/`ra-` hyphenated word ("Ra-be"), and any first name hyphen-joined to another
+  ("jean-pierre", "marie-claire").
+
+Only counts leave this module; never text or words.
+"""
+
+import hashlib
+import re
+from collections import Counter
+from collections.abc import Collection, Iterable, Iterator, Mapping
+from typing import NamedTuple
+
+from fym1.data.anonymize import EMAIL, FALLBACK_NAME, FIRST_NAMES, SURNAMES, compare_key, fold, normalise
+from fym1.data.known_words import (
+    FIRST_NAME_WORDS,
+    KNOWN_WORDS,
+    MG_FIRST_NAMES,
+    NAME_DENY_LIST,
+    WORDLIKE_FIRST_NAMES,
+    Lexicon,
+    known_by,
+)
+from fym1.data.leftovers import MIN_LETTERS, fake_name_keys
+
+GATE_REASONS = ("long_number", "contact", "too_many_unknown")
+HAND_LIST = "known_names"  # the only list that clears a word mid-sentence or after a marker
+MAX_REPLACED_SHARE = 0.3
+
+MIN_NUMBER_DIGITS = 7
+# Any run of non-letter, non-digit characters joins digits: spaces of every kind, ". , / - _ ( ) + ; * | :"...
+DIGIT_RUN = re.compile(r"\d(?:[\W_]*\d)*")
+CURRENCY_AFTER = re.compile(r"\s*(?:€|(?:Ar|AR|Ariary|ariary|fmg|FMG|euros?|eur)(?!\w))")
+CURRENCY_WORDS = ("Ar", "Ariary", "Fmg", "Euro", "Euros", "Eur")  # never a leftover name
+# Clean price shapes: "1 500 000", "1.500.000", "2500000", each with optional cents ",50".
+PRICE = re.compile(r"\d{1,3}(?:([ \u00a0\u202f.,])\d{3})?(?:\1\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?")
+# Digits of a Malagasy phone: trunk 0, country code 261 (or 00261), or a 9-digit mobile without the 0.
+PHONE_DIGITS = re.compile(r"0|261|3[2-9]\d{7}$")
+
+LINK_WITH_PATH = re.compile(r"\b(?:https?://|www\.)\S+|\b(?:[\w-]+\.)+[a-z]{2,}[/?]\S*", re.IGNORECASE)
+_PLACEHOLDER_AFTER = r"<(?:URL|EMAIL|HANDLE)>"
+# "@njaka", "@ njaka", "njaka@ <URL>"; not "@ 3 ora"
+HANDLE = re.compile(rf"@(?:\w|\s*(?:[^\W\d_]|{_PLACEHOLDER_AFTER}))")
+MAIL_HOSTS = r"(?:gmail|yahoo|hotmail|outlook|live|ymail|icloud)\b"
+SPELLED_AT = re.compile(
+    rf"\w\s*(?:\b(?:at|arobase)\b|\(at\)|\[at\])\s*(?:{_PLACEHOLDER_AFTER}|{MAIL_HOSTS})", re.IGNORECASE
+)
+PRIVATE_USE = re.compile("[\ue000-\uf8ff]")
+SENTENCE_END = ".!?…\n"
+
+PLACEHOLDERS = ("<TEL>", "<EMAIL>", "<URL>", "<HANDLE>", "<ADDRESS>")  # what the anonymiser writes
+# An exact placeholder, letters with digits inside ("Rak0to", "n1r1na": one word, always a name), or a
+# letter run ("Ra-be" taken whole); otherwise digits and "_" end a run.
+_LEET = r"[^\W\d_]+(?:\d+[^\W\d_]+)+"
+# 3+ single letters joined by 1-3 non-letter, non-digit characters ("r a k o t o", "R_a_k", "R . a . k",
+# "R🔥a🔥k", combining marks normalise() keeps): one word.
+_ONE = r"(?<![^\W\d_])[^\W\d_](?![^\W\d_])"
+_SPELLED = rf"(?P<spelled>{_ONE}(?:[\W_]{{1,3}}{_ONE}){{2,}})"
+_PIECE = re.compile("|".join(map(re.escape, PLACEHOLDERS)) + rf"|{_LEET}|{_SPELLED}|(?:[Rr]a-)?[^\W\d_]+")
+LETTER_RUN = re.compile(r"[^\W\d_]+")
+PERSON_MARKER = re.compile(r"(?:(?<![\w'’])(?:i|ry|ra)|\w['’]i)\s+$", re.IGNORECASE)
+MARKER_WINDOW = 12  # characters looked back for a marker
+# Pool names (and the fallback) written in raw text: real people there, never our fakes.
+RAW_POOL_KEYS = frozenset(compare_key(name) for name in (*FIRST_NAMES, *SURNAMES, FALLBACK_NAME))
+ANY_FIRST_NAME = FIRST_NAME_WORDS | WORDLIKE_FIRST_NAMES
+# Names that are also everyday words: kept in lower case unless after a person marker ("soa ve", "une rose").
+# The fallback fake "Olona" is the everyday word for "person".
+EVERYDAY_NAMES = (NAME_DENY_LIST | WORDLIKE_FIRST_NAMES | {fold(FALLBACK_NAME)}) - MG_FIRST_NAMES
+NAME_BEFORE_HYPHEN = re.compile(r"([^\W\d_]+)-$")
+NAME_AFTER_HYPHEN = re.compile(r"-([^\W\d_]+)")
+HYPHEN_WINDOW = 30  # characters looked back for "jean-" before "pierre"
+
+
+class GateResult(NamedTuple):
+    kept: list[dict]
+    counts: dict[str, int]  # counts only, safe to print and copy into results/
+
+
+class Token(NamedTuple):
+    start: int
+    end: int
+    word: str
+
+
+def tokens(text: str) -> Iterator[Token]:
+    """Words of `text`: letter runs split at a lower-to-upper case change; placeholders skipped."""
+    for match in _PIECE.finditer(text):
+        piece, start = match.group(), match.start()
+        if piece in PLACEHOLDERS:
+            continue
+        if match.group("spelled"):  # "N j a k a R a b e": checked whole as "NjakaRabe"
+            yield Token(start, match.end(), "".join(LETTER_RUN.findall(piece)))
+            continue
+        if any(c.isdigit() for c in piece):  # "Rak0to": kept whole
+            yield Token(start, match.end(), piece)
+            continue
+        for i in range(1, len(piece)):
+            if piece[i - 1].islower() and piece[i].isupper():  # "salutRakoto"
+                yield Token(start, match.start() + i, text[start : match.start() + i])
+                start = match.start() + i
+        yield Token(start, match.end(), text[start : match.end()])
+
+
+def _looks_like_a_phone(text: str, run: re.Match) -> bool:
+    digits = re.sub(r"\D", "", run.group())
+    after_plus = text[: run.start()].rstrip().rstrip("(").rstrip().endswith("+")
+    return after_plus or bool(PHONE_DIGITS.match(digits))
+
+
+def has_long_number(text: str) -> bool:
+    """`text` holds 7+ digits in one run that is not a clean price followed by a currency word."""
+    for run in DIGIT_RUN.finditer(text):
+        if sum(c.isdigit() for c in run.group()) < MIN_NUMBER_DIGITS:
+            continue
+        is_price = (
+            PRICE.fullmatch(run.group())
+            and CURRENCY_AFTER.match(text, run.end())
+            and not _looks_like_a_phone(text, run)
+        )
+        if not is_price:
+            return True
+    return False
+
+
+def contact_left(text: str) -> bool:
+    """An email, link with a path or query, @handle, or failed-replacement mark is left in `text`."""
+    return any(p.search(text) for p in (EMAIL, LINK_WITH_PATH, HANDLE, SPELLED_AT, PRIVATE_USE))
+
+
+def _sentence_initial(text: str, start: int) -> bool:
+    before = text[:start].rstrip(" \t\u00a0\u202f\"'«(")
+    return not before or before[-1] in SENTENCE_END
+
+
+def _after_marker(text: str, start: int) -> bool:
+    return bool(PERSON_MARKER.search(text, max(0, start - MARKER_WINDOW), start))
+
+
+def pool_names_in(texts: Iterable[str]) -> set[str]:
+    """Keys of the fake-name pool's names written in `texts` in any case (raw, before anonymising)."""
+    parts = (part for text in map(normalise, texts) for token in tokens(text) for part in LETTER_RUN.findall(token.word))
+    return {key for part in parts if (key := compare_key(part)) in RAW_POOL_KEYS}
+
+
+def _is_capitalised(word: str, fake_keys: set[str]) -> bool:
+    return word[0].isupper() and len(word) >= MIN_LETTERS and compare_key(word) not in fake_keys
+
+
+def _in_compound_first_name(text: str, token: Token) -> bool:
+    """`token` is a first name hyphen-joined to another first name ("jean-pierre")."""
+    if fold(token.word) not in ANY_FIRST_NAME:
+        return False
+    before = NAME_BEFORE_HYPHEN.search(text, max(0, token.start - HYPHEN_WINDOW), token.start)
+    after = NAME_AFTER_HYPHEN.match(text, token.end)
+    return any(m and fold(m.group(1)) in ANY_FIRST_NAME for m in (before, after))
+
+
+def _is_lowercase_name(text: str, token: Token, lexicon: Lexicon) -> bool:
+    """A lower-case word that is a name by its place or shape (see the module docstring)."""
+    word = token.word
+    if not word[0].islower() or len(word) < MIN_LETTERS:
+        return False
+    if "-" in word or any(c.isdigit() for c in word):  # "ra-koto", "n1r1na"
+        return True
+    if _in_compound_first_name(text, token):
+        return True
+    unknown = known_by(word, lexicon) is None  # person names are never known
+    if _after_marker(text, token.start):
+        return unknown
+    return unknown and fold(word) not in EVERYDAY_NAMES
+
+
+def _clearing_list(text: str, token: Token, lexicon: Lexicon) -> str | None:
+    """The list that clears a capitalised word here: any list at a sentence start, else the hand list."""
+    if _sentence_initial(text, token.start):
+        return known_by(token.word, lexicon)
+    return known_by(token.word, {HAND_LIST: lexicon[HAND_LIST]}) if HAND_LIST in lexicon else None
+
+
+def _fake_for(key: str, taken: set[str]) -> str:
+    """A pool first name picked from `key`, so the same word gets the same fake; none of `taken`."""
+    free = [name for name in FIRST_NAMES if compare_key(name) not in taken] or [FALLBACK_NAME]
+    number = int.from_bytes(hashlib.sha256(key.encode("utf-8")).digest()[:4], "big")
+    return free[number % len(free)]
+
+
+class _Names(NamedTuple):
+    texts: list[str]  # with unknown capitalised words replaced
+    words: int
+    replaced: int
+    cleared: Counter  # list name -> capitalised words it cleared
+
+
+def _clear_or_replace(texts: list[str], fake_keys: set[str], lexicon: Lexicon, disallowed: set[str]) -> _Names:
+    """One conversation's turns with every unknown or disallowed name swapped for a fake first name."""
+    taken = {compare_key(t.word) for text in texts for t in tokens(text)} | disallowed
+    fakes: dict[str, str] = {}
+    cleared, replaced = Counter(), 0
+
+    def swap(text: str, token: Token) -> str:
+        nonlocal replaced
+        word, key = token.word, compare_key(token.word)
+        if not _is_lowercase_name(text, token, lexicon):
+            if not _is_capitalised(word, fake_keys):
+                return text[token.start : token.end]
+            source = None if key in disallowed else _clearing_list(text, token, lexicon)
+            if source:
+                cleared[source] += 1
+                return text[token.start : token.end]
+        if key not in fakes:
+            fakes[key] = _fake_for(key, taken)
+            taken.add(compare_key(fakes[key]))
+        replaced += 1
+        return fakes[key]
+
+    new_texts, words = [], 0
+    for text in texts:
+        pieces, done = [], 0
+        for token in tokens(text):
+            pieces += [text[done : token.start], swap(text, token)]
+            done = token.end
+            words += 1
+        new_texts.append("".join(pieces) + text[done:])
+    return _Names(new_texts, words, replaced, cleared)
+
+
+def _with_texts(record: dict, texts: list[str]) -> dict:
+    messages = [{**turn, "content": text} for turn, text in zip(record["messages"], texts, strict=True)]
+    return {**record, "messages": messages}
+
+
+def strict_gate(
+    records: list[dict],
+    fake_names: Iterable[str],
+    lexicon: Lexicon = KNOWN_WORDS,
+    disallowed: Mapping[str, Collection[str]] | None = None,
+) -> GateResult:
+    """Records with nothing unresolved and unknown names replaced, plus counts.
+
+    `fake_names` must be every fake the anonymiser wrote (participants' fakes and @mention fakes):
+    only those and currency words ("Ar") pass as they are; any other pool name is replaced.
+    `disallowed` maps a record id to pool names its raw text already held: those are real there, so
+    they are replaced (a participant's fake that equals one is replaced too, the same way). A
+    conversation dropped for two reasons counts under both. `cleared_*` counts capitalised words in
+    every conversation before the gate; `tokens_replaced` counts words replaced in kept conversations.
+    """
+    fake_keys = fake_name_keys([*fake_names, *CURRENCY_WORDS])
+    disallowed = disallowed or {}
+    kept, dropped, cleared, replaced = [], dict.fromkeys(GATE_REASONS, 0), Counter(), 0
+    for record in records:
+        texts = [normalise(turn["content"]) for turn in record["messages"]]
+        real_pool = {compare_key(name) for name in disallowed.get(record["id"], ())}
+        names = _clear_or_replace(texts, fake_keys - real_pool, lexicon, real_pool)
+        cleared += names.cleared
+        reasons = _reasons(texts)
+        if names.replaced > MAX_REPLACED_SHARE * names.words:
+            reasons.add("too_many_unknown")
+        for reason in reasons:
+            dropped[reason] += 1
+        if not reasons:
+            kept.append(_with_texts(record, names.texts))
+            replaced += names.replaced
+    counts = {
+        "conversations_before_gate": len(records),
+        "dropped": len(records) - len(kept),
+        **{f"dropped_{reason}": n for reason, n in dropped.items()},
+        "kept": len(kept),
+        **{f"cleared_{source}": cleared[source] for source in lexicon},
+        "tokens_replaced": replaced,
+    }
+    return GateResult(kept, counts)
+
+
+def _reasons(texts: list[str]) -> set[str]:
+    reasons = set()
+    for text in texts:
+        if has_long_number(text):
+            reasons.add("long_number")
+        if contact_left(text):
+            reasons.add("contact")
+    return reasons

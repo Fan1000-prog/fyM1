@@ -218,3 +218,12 @@ def test_flat_nicknames_are_replaced_in_built_records(tmp_path):
     assert result.records
     assert "Zazakely" not in text and "Kotokely" not in text
     assert "nickname" not in text and "surnom" not in text
+
+
+@pytest.mark.parametrize("sender", [None, 7, ["Alpha"]])
+def test_sender_that_is_not_a_string_fails_loud(tmp_path, sender):
+    messages = [_msg(1, "Alpha", "eny", "2026-07-01T10:00:00"), _msg(2, sender, "tsia", "2026-07-01T10:01:00")]
+    _write(tmp_path / "group.json", messages)
+
+    with pytest.raises(ValueError, match=r"group\.json: message 1 has no sender name"):
+        load_threads(tmp_path)
