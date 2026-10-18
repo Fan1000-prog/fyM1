@@ -118,6 +118,12 @@ replaced. Any other pool name ("Mialy" where nobody got that fake) is replaced l
 - **Cleared mid-sentence or after a person marker** (`i`, `ry`, `ra`, `n'i`, `an'i`, `amin'i`,
   `tamin'i`) only by the hand list `known_names` ("any Tana", "i Neny"). "tonga ny Fiara",
   "hoy Bonjour" are replaced.
+- **`mg_corpus` alone never clears a name position** (lead decision, corpus-only name slots): after a
+  person marker, after `@`, or capitalised mid-sentence, a word only `mg_corpus` knows is replaced
+  unless another list (`mg_common`, `mg_wiki`, `fr`, `en`, `known_names`) has it too. Web text types
+  given names in lower case, so its lower-case count is weak evidence exactly where names stand.
+  Elsewhere (lower case in running text, a sentence start) `mg_corpus` alone still clears: asking a
+  second list everywhere would bring back the over-masking `mg_corpus` was added to fix.
 - **Never cleared**: a person name (`PERSON_NAMES`): `first_names.txt`, the fake-name pool, and
   `name_deny_list.txt`, common Malagasy given names that are also words (Hery, Soa, Vola, Mamy,
   Lalao, Fetra, Rivo, Tiana, Fara, Noro, Voahangy, ...). No corpus-wide evidence clears a word: a
@@ -144,8 +150,8 @@ Also replaced, the same way:
   the fallback "olona": "mila vola", "soa ve", "une rose", "tia"). Lists miss some everyday words too
   (colloquial Malagasy, some French and English words Wikipedia mostly capitalises): those are
   replaced as well, which is over-masking, and can push a conversation over a drop line.
-  After a person marker, a person name or a word no list knows ("ry hasina", "ry hery"; "ry namana",
-  "i dada" stay). Any `ra-` hyphenated word, and a first name hyphen-joined to another
+  After a person marker or an `@`, a person name or a word no list but `mg_corpus` knows ("ry hasina",
+  "ry hery"; "ry namana", "i dada" stay). Any `ra-` hyphenated word, and a first name hyphen-joined to another
   ("jean-pierre", "marie-claire").
 
 Words match folded (lower case, no accents). Stretched letters are collapsed only for real

@@ -49,8 +49,10 @@ known-word list knows is replaced like an unknown capitalised word ("salut tsant
 are also everyday words (`name_deny_list.txt`: "soa", "vola"; `wordlike_first_names.txt`: "une
 rose"). Also replaced:
 
-- after a person marker (`i`, `ry`, `ra`, `n'i`, `an'i`, `amin'i`, `tamin'i`): any word that is a
-  person name or that no list knows ("ry hery"); "ry namana", "i dada" stay.
+- after a person marker (`i`, `ry`, `ra`, `n'i`, `an'i`, `amin'i`, `tamin'i`) or an `@`: any word that
+  is a person name or that no list but `mg_corpus` knows ("ry hery"); "ry namana", "i dada" stay. Web
+  text types names in lower case too, so `mg_corpus` alone never clears a name position; in running
+  text and at a sentence start it does.
 - any `Ra-`/`ra-` hyphenated word ("Ra-be"), and any first name hyphen-joined to another
   ("jean-pierre", "marie-claire").
 
@@ -88,6 +90,9 @@ from fym1.data.leftovers import MIN_LETTERS, fake_name_keys
 
 GATE_REASONS = ("long_number", "contact", "too_many_unknown", "too_many_fakes", "hidden_char")
 HAND_LIST = "known_names"  # the only list that clears a word mid-sentence or after a marker
+# Web text holds names typed in lower case, so this list alone never clears a name position (after a
+# person marker or "@"); elsewhere it does. Lead decision: corpus-only name slots.
+CORPUS_LIST = "mg_corpus"
 MAX_REPLACED_SHARE = 0.3
 MAX_FAKES_PER_CONVERSATION = 5  # lead decision: AUTO-DECISIONS 22
 # Gate counts copied into results/data_stats.json, so the training data records how many fakes it holds.
@@ -131,6 +136,7 @@ _PIECE = re.compile("|".join(map(re.escape, PLACEHOLDERS)) + rf"|{_LEET}|{_SPELL
 LETTER_RUN = re.compile(r"[^\W\d_]+")
 PERSON_MARKER = re.compile(r"(?:(?<![\w'’])(?:i|ry|ra)|\w['’]i)\s+$", re.IGNORECASE)
 MARKER_WINDOW = 12  # characters looked back for a marker
+AT_BEFORE = re.compile(r"@\s*$")  # "@njaka", "@ njaka": a handle, a name position
 # Pool names (and the fallback) written in raw text: real people there, never our fakes.
 RAW_POOL_KEYS = frozenset(compare_key(name) for name in (*FIRST_NAMES, *SURNAMES, FALLBACK_NAME))
 ANY_FIRST_NAME = FIRST_NAME_WORDS | WORDLIKE_FIRST_NAMES
@@ -254,8 +260,10 @@ def _sentence_initial(text: str, start: int) -> bool:
     return not before or before[-1] in SENTENCE_END
 
 
-def _after_marker(text: str, start: int) -> bool:
-    return bool(PERSON_MARKER.search(text, max(0, start - MARKER_WINDOW), start))
+def _in_name_slot(text: str, start: int) -> bool:
+    """The word at `start` follows a person marker ("i", "ry", "amin'i") or an "@"."""
+    window = max(0, start - MARKER_WINDOW)
+    return bool(PERSON_MARKER.search(text, window, start) or AT_BEFORE.search(text, window, start))
 
 
 def pool_names_in(texts: Iterable[str]) -> set[str]:
@@ -286,9 +294,10 @@ def _is_lowercase_name(text: str, token: Token, lexicon: Lexicon) -> bool:
         return True
     if _in_compound_first_name(text, token):
         return True
+    if _in_name_slot(text, token.start):
+        without_corpus = {name: words for name, words in lexicon.items() if name != CORPUS_LIST}
+        return known_by(word, without_corpus) is None
     unknown = known_by(word, lexicon) is None  # person names are never known
-    if _after_marker(text, token.start):
-        return unknown
     return unknown and fold(word) not in EVERYDAY_NAMES
 
 
