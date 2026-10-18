@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from dataclasses import dataclass
@@ -324,14 +325,18 @@ def leak_gate_problems(results: dict[str, Any]) -> list[str]:
 
 
 def identity_gate_problems(results: dict[str, Any]) -> list[str]:
-    """Why the identity check blocks release: it failed, ran with a threshold below 0.9, or its verdict does not
-    match its own counts."""
+    """Why the identity check blocks release: it failed, ran with a threshold below 0.9, or its pass rate or verdict
+    does not match its own counts."""
     report = results.get(IDENTITY_FILE)
-    values = {key: lookup(report, key) for key in ("pass_rate", "threshold", "foreign_identity", "gate_passed")}
+    keys = ("n", "passed", "pass_rate", "threshold", "foreign_identity", "gate_passed")
+    values = {key: lookup(report, key) for key in keys}
     if any(v is None for v in values.values()):
         return []  # not measured yet; reported as missing values
     if _number(values["threshold"]) < MIN_IDENTITY_THRESHOLD:
         return [f"{IDENTITY_FILE}: threshold is below {MIN_IDENTITY_THRESHOLD}; rerun it with the default threshold"]
+    n = _number(values["n"])
+    if n <= 0 or not math.isclose(_number(values["pass_rate"]), _number(values["passed"]) / n):
+        return [f"{IDENTITY_FILE}: pass_rate does not match passed / n; rerun it"]
     recomputed = _number(values["foreign_identity"]) == 0 and _number(values["pass_rate"]) >= _number(values["threshold"])
     if values["gate_passed"] is not recomputed:
         return [f"{IDENTITY_FILE}: gate_passed does not match pass_rate, threshold and foreign_identity; rerun it"]
