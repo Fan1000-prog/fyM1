@@ -30,6 +30,32 @@
       }
     },
     {
+      "model": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
+      "license": "CC-BY-4.0",
+      "belebele_acc": 0.6667,
+      "belebele_protocol": "completion 0-shot",
+      "belebele_chat_acc": 0.7422,
+      "chrf_plt_eng": 56.17,
+      "chrf_eng_plt": 49.73,
+      "flores": "measured",
+      "tokens_per_word": 2.826,
+      "sniff_natural": null,
+      "peak_vram_gb": 9.8,
+      "sec_per_step": 83.3,
+      "qlora_fits": true,
+      "loss_trend": {
+        "first": 1.0018116235733032,
+        "min": 0.7255874872207642,
+        "min_step": 14,
+        "last": 0.7703328132629395,
+        "rising_at_end": true
+      },
+      "instruct_version": {
+        "exists": true,
+        "note": "is the instruct model"
+      }
+    },
+    {
       "model": "google/gemma-4-12B-it",
       "license": "Apache-2.0",
       "belebele_acc": null,
