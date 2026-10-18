@@ -1,6 +1,7 @@
 """The notebooks run on Colab and Kaggle: their bootstrap cell must match fym1.runtime exactly."""
 
 import ast
+import importlib.util
 import json
 from pathlib import Path
 
@@ -8,22 +9,14 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOKS = ["notebooks/00_baseline.ipynb", "notebooks/01_train.ipynb"]
-COPIED = ("MISSING_TOKEN", "on_kaggle", "_secret", "hf_token")
+_spec = importlib.util.spec_from_file_location("build_notebooks", ROOT / "scripts" / "build_notebooks.py")
+build_notebooks = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(build_notebooks)
+COPIED = build_notebooks.COPIED
 
 
 def runtime_segments() -> dict[str, str]:
-    source = (ROOT / "src" / "fym1" / "runtime.py").read_text()
-    segments = {}
-    for node in ast.parse(source).body:
-        if isinstance(node, ast.FunctionDef):
-            name = node.name
-        elif isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
-            name = node.targets[0].id
-        else:
-            continue
-        if name in COPIED:
-            segments[name] = ast.get_source_segment(source, node)
-    return segments
+    return dict(zip(COPIED, build_notebooks.runtime_segments()))
 
 
 def code_cells(notebook: str) -> list[str]:
@@ -39,6 +32,16 @@ def bootstrap_cell(notebook: str) -> str:
 
 def test_every_copied_name_still_exists_in_runtime():
     assert set(runtime_segments()) == set(COPIED)
+
+
+def test_copied_code_needs_no_other_runtime_names():
+    """Every module-level name of runtime.py that the copied code uses must itself be copied."""
+    tree = ast.parse((ROOT / "src" / "fym1" / "runtime.py").read_text())
+    module_names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)} | {
+        t.id for n in tree.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)}
+    copied_nodes = [n for n in tree.body if getattr(n, "name", None) in COPIED]
+    used = {node.id for fn in copied_nodes for node in ast.walk(fn) if isinstance(node, ast.Name)}
+    assert used & module_names <= set(COPIED)
 
 
 @pytest.mark.parametrize("notebook", NOTEBOOKS)
@@ -65,8 +68,11 @@ def test_one_gpu_is_pinned_before_torch_and_no_colab_paths(notebook):
 
 
 @pytest.mark.parametrize("notebook", NOTEBOOKS)
-def test_bootstrap_runs_and_overrides_a_preset_gpu_list(notebook, monkeypatch):
+def test_bootstrap_runs_and_overrides_a_preset_gpu_list(notebook, monkeypatch, tmp_path):
     import sys
+    import tempfile
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))  # the bootstrap's mkdtemp lands here, not in /tmp
 
     for name in ("google", "google.colab", "kaggle_secrets"):
         monkeypatch.setitem(sys.modules, name, None)  # neither Colab nor Kaggle: falls back to the env var
