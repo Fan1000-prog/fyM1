@@ -367,24 +367,40 @@ _SLOT = re.compile("(\\d+)")
 
 
 # Left after NFKC: combining marks no letter absorbed ("fancy text" strike-through U+0336, underline U+0332)
-# and zero-width spaces. Both split a name into one-letter pieces. Variation selectors (emoji) are kept.
+# and zero-width spaces. Both split a name into one-letter pieces. Variation selectors (emoji) are kept here.
 _ZERO_WIDTH = frozenset("\u200b\u2060\ufeff")
+# Dropped only right after a letter, where they only hide a name ("R\u200da\u200dk..."): format characters
+# (ZWJ, ZWNJ, soft hyphen, U+2062, tags), enclosing marks (U+20DD, keycap U+20E3) and variation selectors.
+# After an emoji, digit, "#" or "*" they build emoji sequences (families, "\u2764\ufe0f", keycaps) and stay.
+_HIDING_CATEGORIES = frozenset({"Cf", "Me"})
 
 
 def _is_stray(c: str) -> bool:
     if c in _ZERO_WIDTH:
         return True
-    is_variation_selector = "\ufe00" <= c <= "\ufe0f" or "\U000e0100" <= c <= "\U000e01ef"
-    return unicodedata.category(c) == "Mn" and not is_variation_selector
+    return unicodedata.category(c) == "Mn" and not _is_variation_selector(c)
+
+
+def _is_variation_selector(c: str) -> bool:
+    return "\ufe00" <= c <= "\ufe0f" or "\U000e0100" <= c <= "\U000e01ef"
+
+
+def _hides_a_letter(c: str) -> bool:
+    return unicodedata.category(c) in _HIDING_CATEGORIES or _is_variation_selector(c)
 
 
 def normalise(text: str) -> str:
     """`text` NFKC-normalised (full-width, circled forms read as plain), stray marks and zero-width spaces dropped.
 
-    NFKC composes accents first ("e" + U+0301 -> "é"), so only marks no letter absorbed are dropped.
+    NFKC composes accents first ("e" + U+0301 -> "é"), so only marks no letter absorbed are dropped. Format
+    characters, enclosing marks and variation selectors are dropped right after a letter; emoji keep theirs.
     """
-    text = unicodedata.normalize("NFKC", text)
-    return "".join(c for c in text if not _is_stray(c))
+    kept: list[str] = []
+    for c in unicodedata.normalize("NFKC", text):
+        if _is_stray(c) or (kept and kept[-1].isalpha() and _hides_a_letter(c)):
+            continue
+        kept.append(c)
+    return "".join(kept)
 
 
 def fold(s: str) -> str:

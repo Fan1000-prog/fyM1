@@ -16,13 +16,14 @@ fine, letting a name or number through is not. A whole conversation is dropped i
 
 Every turn is NFKC-normalised first, so full-width (`＠`, `Ｒ`) and circled (`Ⓡ`) letters are
 checked as plain ones; combining marks NFKC leaves loose (strike-through, underline) and zero-width
-spaces are dropped. Kept turns are returned normalised.
+spaces are dropped, and so are format characters, enclosing marks and variation selectors right after a
+letter (emoji keep theirs). Kept turns are returned normalised.
 
 Words are letter runs, split at digits, underscores, punctuation, `<`/`>` and a lower-to-upper case change
 ("Rakoto2", "jean_r", "salutRakoto", "<<Njaka"); only the exact placeholders (`<TEL>`, `<EMAIL>`, ...)
 are skipped. Letters with digits inside ("Rak0to", "n1r1na") are one word and always a name. A run of
-3+ single letters joined by one or two spaces, dots or hyphens ("r a k o t o", "R.a.k.o.t.o") is one
-word ("rakoto"), checked by the rules below and replaced whole.
+3+ single letters joined by 1-3 non-letter, non-digit characters ("r a k o t o", "R.a.k.o.t.o", "R_a_k",
+"J,E,A,N", "R . a . k", "R🔥a🔥k") is one word ("rakoto"), checked by the rules below and replaced whole.
 
 Capitalised words that are not fakes the anonymiser wrote (`fake_names`) or currency words are:
 
@@ -96,9 +97,10 @@ PLACEHOLDERS = ("<TEL>", "<EMAIL>", "<URL>", "<HANDLE>", "<ADDRESS>")  # what th
 # An exact placeholder, letters with digits inside ("Rak0to", "n1r1na": one word, always a name), or a
 # letter run ("Ra-be" taken whole); otherwise digits and "_" end a run.
 _LEET = r"[^\W\d_]+(?:\d+[^\W\d_]+)+"
-# 3+ single letters joined by one or two spaces, dots or hyphens ("r a k o t o", "R.a.k.o.t.o"): one word.
+# 3+ single letters joined by 1-3 non-letter, non-digit characters ("r a k o t o", "R_a_k", "R . a . k",
+# "R🔥a🔥k", combining marks normalise() keeps): one word.
 _ONE = r"(?<![^\W\d_])[^\W\d_](?![^\W\d_])"
-_SPELLED = rf"(?P<spelled>{_ONE}(?:[\s.-]{{1,2}}{_ONE}){{2,}})"
+_SPELLED = rf"(?P<spelled>{_ONE}(?:[\W_]{{1,3}}{_ONE}){{2,}})"
 _PIECE = re.compile("|".join(map(re.escape, PLACEHOLDERS)) + rf"|{_LEET}|{_SPELLED}|(?:[Rr]a-)?[^\W\d_]+")
 LETTER_RUN = re.compile(r"[^\W\d_]+")
 PERSON_MARKER = re.compile(r"(?:(?<![\w'’])(?:i|ry|ra)|\w['’]i)\s+$", re.IGNORECASE)

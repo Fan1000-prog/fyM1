@@ -87,12 +87,16 @@ tests `tests/data/test_gate.py`). It drops a whole conversation if any turn stil
 The gate fails closed: replacing or dropping too much is fine, a leak is not. The anonymiser and the
 gate both NFKC-normalise text first, so full-width (`＠`, `Ｒ`) and circled (`Ⓡ`) characters are read as
 plain ones (kept text comes out normalised: no-break spaces become plain spaces). Combining marks left
-loose after that (strike-through, underline "fancy text") and zero-width spaces are dropped; accents NFKC
-composes ("é", "ô", "à", "ñ") stay. Words are letter runs
+loose after that (strike-through, underline "fancy text") and zero-width spaces are dropped, and so are
+format characters (ZWJ, ZWNJ, soft hyphen, U+2062), enclosing marks (U+20DD, U+20E3) and variation
+selectors right after a letter; after an emoji, digit, `#` or `*` they stay, so emoji families, `❤️`
+and keycaps `1️⃣` are kept. Accents NFKC composes ("é", "ô", "à", "ñ") stay; a mark with no precomposed
+letter is dropped, so `n̈` (Northern Malagasy spelling) becomes `n` and `m̀` becomes `m`. Words are letter runs
 split at digits, underscores, punctuation and a lower-to-upper case change, so "Rakoto2", "2Rakoto",
 "jean_r" and "salutRakoto" are checked; only the exact placeholders (`<TEL>`, `<EMAIL>`, `<URL>`,
 `<HANDLE>`, `<ADDRESS>`) are skipped. A hyphenated `Ra-be` is one word, and so is a run of 3+ single
-letters joined by spaces, dots or hyphens ("r a k o t o", "R.a.k.o.t.o"): it is checked whole.
+letters joined by 1-3 non-letter, non-digit characters ("r a k o t o", "R.a.k.o.t.o", "R_a_k_o_t_o",
+"J,E,A,N", "R . a . k . o . t . o", "R🔥a🔥k🔥o🔥t🔥o"): it is checked whole.
 
 Every capitalised word (2+ letters) that is not a fake the anonymiser actually wrote (participants'
 fakes and @mention fakes, reported by `Anonymizer.mention_fakes`) or a currency word is cleared or
@@ -191,9 +195,12 @@ When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit ref
 - A pool name that is also an everyday word ("Soa", "Vola", "Mamy") typed in lower case and not after
   a name particle ("hitako mamy") stays.
 - Names spelled out in pieces of two or more letters: "Ni-ri-na". (The gate reads 3+ single letters
-  joined by spaces, dots or hyphens as one word, so "N i r i n a" and "R.a.k.o.t.o" are replaced; it
+  joined by 1-3 non-letter, non-digit characters as one word, so "N i r i n a", "R.a.k.o.t.o" and
+  "R_a_k_o_t_o" are replaced; it
   drops loose strike-through/underline marks, so "R̶a̶k̶o̶t̶o̶" is too. "N1r1na", "Rak0to" are replaced:
   letters with digits inside are always a name.)
+- Names spelled in regional-indicator letters ("🇷🇦🇰🇴🇹🇴"): NFKC does not fold them to letters, so
+  the gate sees emoji, not a word.
 - A phone split over two turns ("nomerao 034 12", then "345 67 io"): the gate checks one turn at a time.
 - A phone split by a word inside one turn ("034 12 dia 345 67"): a word ends the digit run.
 - Digits joined by any non-letter characters count as one number, so a list of times or numbered

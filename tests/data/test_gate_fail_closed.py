@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 
 from fym1.data import known_words
-from fym1.data.anonymize import Anonymizer
-from fym1.data.gate import contact_left, has_long_number, normalise, pool_names_in, strict_gate
+from fym1.data.anonymize import Anonymizer, normalise
+from fym1.data.gate import contact_left, has_long_number, pool_names_in, strict_gate
 from fym1.data.known_words import KNOWN_WORDS, known_by, word_list
 from fym1.data.messenger import Message, Thread
 from fym1.data.pipeline import build_records
@@ -515,3 +515,61 @@ def test_r5_anonymiser_drops_stray_marks_too():
 def test_r5_zero_width_space_inside_a_name_is_stripped():
     out = gated_text(f"salut R\u200bakoto, {FILLER}")
     assert "\u200b" not in out and "akoto" not in out.lower()
+
+
+R6_SPELLED = [
+    "R_a_k_o_t_o",
+    "R,a,k,o,t,o",
+    "J,E,A,N",
+    "j.e.a.n",
+    "R*a*k*o*t*o",
+    "R/a/k/o/t/o",
+    "r:a:k:o:t:o",
+    "R'a'k'o't'o",
+    "R|a|k|o|t|o",
+    "R+a+k+o+t+o",
+    "R~a~k~o~t~o",
+    "R\u00b7a\u00b7k\u00b7o\u00b7t\u00b7o",
+    "R\U0001f525a\U0001f525k\U0001f525o\U0001f525t\U0001f525o",
+    "R . a . k . o . t . o",
+    "R   a   k   o   t   o",
+    # format characters: ZWJ, ZWNJ, soft hyphen, invisible times, Mongolian vowel separator, tag
+    *(marked("Rakoto", c) for c in ("\u200d", "\u200c", "\u00ad", "\u2062", "\u180e", "\U000e0041")),
+    # enclosing marks ("fancy text") and variation selectors after each letter
+    *(marked("Rakoto", c) for c in ("\u20dd", "\u20de", "\u20e3", "\u0489", "\ufe0e", "\ufe0f")),
+    "R\u0903a\u0903k\u0903o\u0903t\u0903o\u0903",
+]
+
+
+def _name_left(out):
+    letters = "".join(re.findall(r"[^\W\d_]+", out.removesuffix(f", {FILLER}"))).lower()
+    return "rakoto" in letters or "jean" in letters
+
+
+@pytest.mark.parametrize("name", R6_SPELLED)
+def test_r6_single_letters_split_by_any_separator_are_replaced(name):
+    gated = gated_text(f"salut {name}, {FILLER}")
+    assert not _name_left(gated), repr(gated)
+    through = pipeline_text(f"salut {name}, {FILLER}")
+    assert through is None or not _name_left(through), repr(through)
+
+
+@pytest.mark.parametrize("c", ["\u200d", "\u200c", "\u00ad", "\u2062", "\u180e", "\u20dd", "\u20e3", "\u0489", "\ufe0e"])
+def test_r6_normalise_drops_format_and_enclosing_marks_after_a_letter(c):
+    assert normalise(marked("Rakoto", c)) == "Rakoto"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "tsara \u2764\ufe0f be",  # variation selector after an emoji
+        "1\ufe0f\u20e3 #\ufe0f\u20e3 *\u20e3",  # keycaps
+        "\U0001f468\u200d\U0001f469\u200d\U0001f467",  # ZWJ family
+        "\U0001f44d\U0001f3fd",  # skin tone
+        "\U0001f3f4\U000e0067\U000e0062\U000e0065\U000e006e\U000e0067\U000e007f",  # tag flag
+        "\U0001f1f2\U0001f1ec",
+        "côté à ñ",
+    ],
+)
+def test_r6_normalise_keeps_emoji_sequences(text):
+    assert normalise(text) == text
