@@ -1384,6 +1384,9 @@ BINARY_TAILS = {  # synthetic: archive magic then filler, hidden after a text fi
     ("docs/spaced.md", b"<img src='data:image/png ; base64 ,iVBORw0KGgo='>"),  # spaces before ; and ,
     ("docs/spaced2.md", b"<img src='data : text/plain ;charset=utf-8; base64,bm90ZXM='>"),
     ("docs/tagged.md", "notes\U000E0001\U000E0068\U000E0069\U000E007F".encode()),  # invisible tag letters
+    ("docs/entity.md", b"<a href='data&colon;text/html,notes'>x</a>"),  # encoded spellings (finding 20)
+    ("docs/tabbed.md", b"<img src='data:image/png;\tbase64,iVBORw0KGgo='>"),  # whitespace inside (finding 22)
+    ("docs/zero-width.md", "Za\u200bfy".encode()),  # a format character (finding 21)
     ("bin/tool", b"\x7fELF filler"),
     *((f"docs/{kind}-after-text.md", b"# notes\nplain text\n" + tail) for kind, tail in BINARY_TAILS.items()),
     *((f"paper/{kind}-after-eof.pdf", _pdf("<< /Title (notes) >>") + tail) for kind, tail in BINARY_TAILS.items()),
@@ -1399,6 +1402,72 @@ def test_a_non_text_file_is_refused_before_anything_is_written(tmp_path, capsys,
     assert cli.main([*cli_args(tmp_path / "cli", repo, out), "--results", str(tmp_path / "r.json")]) == 2
     assert not out.exists() and not (tmp_path / "r.json").exists()
     assert PurePath(name).stem not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("text", [
+    "<a href='data:text/html,<b>notes</b>'>x</a>",  # not base64: percent-encoded bytes (finding 20)
+    "<a href='data:,notes'>x</a>",
+    "<a href='data:text/plain;charset=utf-8,notes'>x</a>",
+    "<a href='data&colon;text/html,notes'>x</a>",
+    "<a href='data&#58;image/png;base64,iVBORw0KGgo='>x</a>",
+    "<a href='data&#x3A;text/plain,notes'>x</a>",
+    "<a href='DATA%3Atext/plain%2Cnotes'>x</a>",
+    "<a href='data%253Atext/plain,notes'>x</a>",  # percent-encoded twice
+    "<a href='data&amp;colon;text/plain,notes'>x</a>",
+    "x = '\\x64ata:text/plain,notes'",  # a backslash escape
+    "<img src='data:image/png;\tbase64,iVBORw0KGgo='>",  # tab, LF, CR inside (finding 22)
+    "<img src='data:image/png;base64\n,iVBORw0KGgo='>",
+    "<img src='da\nta:image/png;Base64,iVBORw0KGgo='>",
+    "<img src='data\t:\timage/png\r\n;\r\nBASE64\r\n,iVBORw0KGgo='>",
+    "<img src='data:image/png;x=\"a b\";base64,iVBORw0KGgo='>",  # anything before ;base64
+])
+def test_a_data_uri_in_any_spelling_is_refused(text):
+    assert release.has_data_uri(text)
+    assert release.text_of("docs/x.md", text.encode()) is None
+
+
+@pytest.mark.parametrize("text", [
+    "def text_of(name: str, data: bytes) -> str | None:",  # a type annotation
+    "def f(data: list[str], other: int):",
+    "metadata: text/plain, kept",  # another word ending in "data"
+    '{"data": "text/plain", "x": 1}',
+    "The data: see the table below, then the notes.",
+    "data:text/plain",  # no comma: not a data URI
+])
+def test_a_data_word_that_is_no_uri_is_kept(text):
+    assert not release.has_data_uri(text)
+    assert release.text_of("docs/x.md", text.encode()) == text
+
+
+@pytest.mark.parametrize("text", [
+    "Za\u200bfy",  # zero-width space
+    "Za\u00adfy",  # soft hyphen
+    "\u202eyfaZ",  # right-to-left override
+    "Za\u2060fy",  # word joiner
+    "Za\u200dfy",  # ZWJ between letters
+    "Zafy\ufe0f",  # VS16 after a letter
+    "\u2764\ufe0e",  # VS15, even after an emoji
+    "Za\ufe00fy",  # VS1
+    "Za\U000e0100fy",  # a supplementary variation selector
+    "notes\ufeff",  # a BOM past the start
+    "Za\U000e0068fy",  # a tag character
+])
+def test_an_invisible_format_character_is_refused(text):
+    assert release.hidden_format_chars(text) == 1
+    assert release.text_of("docs/x.md", text.encode()) is None
+
+
+@pytest.mark.parametrize("text", [
+    "\ufeffnotes",  # a BOM at the start
+    "love \u2764\ufe0f",  # VS16 after an emoji
+    "dev \U0001f468\U0001f3fd\u200d\U0001f4bb",  # ZWJ sequence with a skin tone
+    "fire \u2764\ufe0f\u200d\U0001f525",
+    "keycap 1\ufe0f\u20e3",
+    "flag \U0001f1f2\U0001f1ec",
+])
+def test_emoji_joiners_and_a_leading_bom_are_kept(text):
+    assert release.hidden_format_chars(text) == 0
+    assert release.text_of("docs/x.md", text.encode()) == text.removeprefix("\ufeff")  # the BOM read as one
 
 
 def test_the_paper_pdf_never_ships_and_its_source_does():

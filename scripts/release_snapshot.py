@@ -13,7 +13,7 @@ file or path sharing an 8-word run with the export's messages or the turns of th
 fake names, joined messages), runs across message boundaries included, or holding a whole shorter message with 4+
 distinctive words, fails (copied chat text, counted per file, never shown; words compared as the name scan
 compares them); then a secret scan runs. The release ships text files only (known text types, decoded in full,
-no control characters, base64 data: URIs or Unicode tag characters): any other file (image, PDF, binary data hidden
+no control characters, no data: URI in any spelling, no invisible format characters): any other file (image, PDF, binary data hidden
 after a text file) and any archive (zip, gz, tar, whl, ...) is refused before anything is written. The paper ships
 as paper/fym1.tex; its PDF is built from it. Every file under --export must be a thread page (message_*.json) or a
 one-file JSON export, at any depth; any other file (hidden ones such as .DS_Store too) is refused (counted, never

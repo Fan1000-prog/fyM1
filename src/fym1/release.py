@@ -29,7 +29,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from fym1.data.anonymize import MIN_NAME_PREFIX, NAME_SUFFIXES, compare_key, fold, is_everyday_word, normalise
+from fym1.data.anonymize import (MIN_NAME_PREFIX, NAME_SUFFIXES, compare_key, fold, is_everyday_word,
+                                 is_variation_selector, normalise)
 from fym1.data.gate import PERSON_MARKER_WORDS, is_hidden_char
 from fym1.data.gate import tokens as gate_tokens
 from fym1.data.known_words import KNOWN_WORDS, known_by
@@ -220,10 +221,24 @@ SECRET_FILE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
 
 _LETTERS = re.compile(r"[^\W\d_]+")
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]")
-# Text a reader decodes before it can be read (review finding 14 nits): a base64 `data:` URI hides bytes the scan
-# never sees, and Unicode tag characters (U+E0000-E007F) spell invisible ASCII. A text file holding either is refused.
-_DATA_URI = re.compile(r"(?i)\bdata\s*:[^,\n]{0,200}?;\s*base64\s*,")  # spaces allowed around : ; ,
-_TAG_CHARS = re.compile("[\U000E0000-\U000E007F]")
+# Text a reader decodes before it can be read (review findings 14, 20, 22): a `data:` URI carries bytes (base64 or
+# percent-encoded) the scan never sees. A text file holding one is refused, in any spelling a browser or renderer
+# still reads as one: HTML entities ("data&colon;", "data&#58;"), percent escapes ("data%3A") and backslash escapes
+# are decoded first (`_unescape`), and whitespace inside the scheme and media type is ignored, as a URL parser does
+# with tab, CR and LF ("da\ta:", "data:image/png;\nbase64,"). A data URI is `data:` + an optional `type/subtype`
+# + `;parameters` + ",", or `data:` + anything with ";base64" before the comma (RFC 2397).
+_DATA_SCHEME = re.compile(r"(?i)(?<![a-z0-9+.-])d\s*a\s*t\s*a\s*:")  # a candidate's start; "metadata:" is not one
+_DATA_URI_HEAD = re.compile(r"(?i)data:(?:(?:[\w!#$&^.+-]+/[\w!#$&^.+-]+)?(?:;[^,;]*)*|[^,]*;base64[^,]*),")
+_SPACE = re.compile(r"\s+")
+# Invisible characters (review finding 21): every Unicode format character (category Cf: zero-width spaces and
+# joiners, bidi controls, soft hyphen, tag characters...) and every variation selector (U+FE00-FE0F,
+# U+E0100-E01EF) can hide or reorder what a reader sees. Allowed only: a BOM at the very start, and ZWJ (U+200D) or
+# VS16 (U+FE0F) directly next to an emoji code point ("\u2764\ufe0f", "\U0001f468\u200d\U0001f4bb").
+_NON_ASCII = re.compile(r"[^\x00-\x7f]")
+_TAG_CHARS = re.compile("[\U000E0000-\U000E007F]")  # unassigned ones too
+BOM = "\ufeff"
+EMOJI_JOINERS = frozenset({"\u200d", "\ufe0f"})
+KEYCAP = "\u20e3"
 _LETTERS_AND_DIGITS = re.compile(r"[^\W_]+")
 # Digits typed for the letters they look like ("H4nt4", "Rak0to"): the name scan also reads them as letters.
 DIGIT_LETTERS = str.maketrans("140357", "iaoest")
@@ -1010,7 +1025,8 @@ def notice_text() -> str:
 
 def text_of(name: str, data: bytes) -> str | None:
     """Text of a file called `name`: a TEXT_SUFFIXES/TEXT_NAMES file in UTF-8 (UTF-8/16/32 with a BOM) with no
-    control character but tab, LF and CR, no base64 `data:` URI and no Unicode tag character. Anything else is None:
+    control character but tab, LF and CR, no `data:` URI (`has_data_uri`) and no invisible format character
+    (`hidden_format_chars`). Anything else is None:
     an unknown file type is never guessed at."""
     suffix = PurePosixPath(name).suffix.lower()
     if suffix not in TEXT_SUFFIXES and PurePosixPath(name).name not in TEXT_NAMES:
@@ -1027,7 +1043,44 @@ def text_of(name: str, data: bytes) -> str | None:
         return None
     if _CONTROL.search(text):  # NUL, bell, escape...: binary posing as text
         return None
-    return None if _DATA_URI.search(text) or _TAG_CHARS.search(text) else text
+    return None if has_data_uri(text) or hidden_format_chars(text) else text
+
+
+def has_data_uri(text: str) -> bool:
+    """`text`, as written or with its escapes decoded (`_unescape`), holds a `data:` URI (`_DATA_URI_HEAD`), read with
+    the whitespace between the scheme's start and the next comma taken out."""
+    for form in dict.fromkeys((text, _unescape(text))):
+        for start in _DATA_SCHEME.finditer(form):
+            comma = form.find(",", start.start())
+            if comma < 0:
+                break  # no comma left in this form: no data URI after here
+            if _DATA_URI_HEAD.match(_SPACE.sub("", form[start.start():comma + 1])):
+                return True
+    return False
+
+
+def hidden_format_chars(text: str) -> int:
+    """How many invisible characters `text` holds: Unicode format characters (Cf), variation selectors and tag
+    characters, except a BOM at the start and ZWJ or VS16 directly next to an emoji code point."""
+    hidden = 0
+    for match in _NON_ASCII.finditer(text):
+        i, c = match.start(), match.group()
+        if not (unicodedata.category(c) == "Cf" or is_variation_selector(c) or _TAG_CHARS.match(c)):
+            continue
+        if (c == BOM and i == 0) or (c in EMOJI_JOINERS and _next_to_emoji(text, i)):
+            continue
+        hidden += 1
+    return hidden
+
+
+def _is_emoji(c: str) -> bool:
+    """An emoji code point: a symbol (So: pictographs, flags' regional indicators), a skin-tone modifier or the
+    keycap mark that ends "1\ufe0f\u20e3"."""
+    return unicodedata.category(c) == "So" or "\U0001f3fb" <= c <= "\U0001f3ff" or c == KEYCAP
+
+
+def _next_to_emoji(text: str, i: int) -> bool:
+    return (i > 0 and _is_emoji(text[i - 1])) or (i + 1 < len(text) and _is_emoji(text[i + 1]))
 
 
 def is_list_file(path: str) -> bool:
