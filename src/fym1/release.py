@@ -32,8 +32,9 @@ from pathlib import Path, PurePosixPath
 from fym1.data.anonymize import MIN_NAME_PREFIX, NAME_SUFFIXES, compare_key, fold, is_everyday_word, normalise
 from fym1.data.gate import PERSON_MARKER_WORDS, is_hidden_char
 from fym1.data.gate import tokens as gate_tokens
-from fym1.data.known_words import FIRST_NAME_WORDS, KNOWN_WORDS, MG_FIRST_NAMES, known_by
-from fym1.data.messenger import Thread, fix_meta_text, load_dyi_threads, load_flat_threads
+from fym1.data.known_words import KNOWN_WORDS, known_by
+from fym1.data.messenger import (NICKNAME_WORD, PLACEHOLDER, Thread, fix_meta_text, load_dyi_threads,
+                                 load_flat_threads)
 
 
 @dataclass(frozen=True)
@@ -245,6 +246,8 @@ class Report:
     placeholder_senders_skipped: int = 0
     export_schema_keys: int = 0
     label_words_common: int = 0
+    nickname_events: int = 0
+    export_words_allowed: int = 0
     author_strings_allowed: int = 0
     inner_name_words_allowed: int = 0
     list_entries_removed: dict[str, int] = field(default_factory=dict)
@@ -278,6 +281,8 @@ class Report:
                 "placeholder_senders_skipped": self.placeholder_senders_skipped,
                 "export_schema_keys": self.export_schema_keys,
                 "label_words_left_out_as_common": self.label_words_common,
+                "nickname_events": self.nickname_events,
+                "export_words_allowed": self.export_words_allowed,
                 "author_strings_allowed": self.author_strings_allowed,
                 "inner_name_words_allowed": self.inner_name_words_allowed,
                 "list_entries_removed": self.list_entries_removed,
@@ -394,11 +399,11 @@ FLAT_SUFFIX = ".json"  # any other JSON file, at any depth: must be a one-file e
 NAME = "name"  # a person's name (text): joins the name list
 LABEL = "label"  # a conversation title, which may name someone ("Hanta's 30th"): the chat-text check reads it, and
 # its distinctive words (`label_words`) join the name list
-NOTE = "note"  # free text about the export (notes, platform): the chat-text check reads it, and its words that are
-# listed given names (`note_names`) join the name list. Not LABEL: it describes the data ("timestamps", "URLs"), so
-# its distinctive words name nobody and failed 22 shipped files on the real export (lead call, review round 2).
+NOTE = "note"  # free text about the export (notes, platform): the chat-text check reads it, and its distinctive words
+# that are not EXPORT_WORDS (`described_words`) join the name list (review finding 24).
 TEXT = "text"  # free text someone typed (a message): the chat-text check reads it
-DATA = "data"  # ids, timestamps, counts, flags, links, emoji: a number, true/false, null or text; no object or list
+DATA = "data"  # ids, timestamps, counts, flags, links, emoji: a number, true/false, null or text; no object or list.
+# A DATA text's distinctive letter words that are not EXPORT_WORDS (`described_words`) join the name list (finding 23).
 Schema = str | dict[str, "Schema"] | list["Schema"]
 
 _MEDIA: Schema = [{"uri": DATA, "creation_timestamp": DATA, "backup_uri": DATA, "thumbnail": {"uri": DATA}}]
@@ -437,6 +442,49 @@ class ExportFiles:
     flat: list[Path]  # one-file exports
 
 
+# Words of DATA and NOTE fields that describe the export, not a person (review findings 23/24). Every letter word of a
+# DATA text (links, paths, ids) and every word of a NOTE (notes, platform) goes through `label_words` like a title, so a
+# name inside a link ("facebook.com/zafy.test") or a note joins the name list. The words below are the export's own
+# vocabulary, read on the real export and reviewed one by one: exact folded words, each with its reason, never a name.
+EXPORT_WORDS: dict[str, str] = {
+    "america": "a time-zone region (`timezone` \"America/...\", notes saying which zone timestamps are in)",
+    "call": "the English word, notes saying what a call entry is; not in the common-word lists, no person is named",
+    "facebook": "the platform the export comes from (`platform`, notes); a link's host",
+    "timestamps": "notes saying how timestamps are written",
+    "urls": "notes saying how links are written",
+    "utc": "the time-zone name UTC (`timezone`)",
+}
+
+# Nickname events as the release check reads them (review round 3): set, cleared, removed or changed, EN and FR UI,
+# about anyone, participant or not. The loaders keep a nickname only when its person is a participant (they map it
+# to that person's fake name); here the actor, the target and the nickname all join the name list, whoever they are.
+NICKNAME_EVENT_NAMES = (
+    re.compile(
+        r"^(?P<actor>.+?) (?:set|cleared|removed|changed) (?:the nickname for (?P<target>.+?)"
+        r"|(?:his|her|their|your)(?: own)? nickname)(?: to (?P<nickname>.+?))?\.?$",
+        re.IGNORECASE | re.DOTALL,
+    ),
+    re.compile(
+        r"^(?P<actor>.+?) (?:a|avez) (?:défini|modifié|supprimé|effacé) (?:le (?:surnom|pseudo) (?:de |d['’])"
+        r"(?P<target>.+?)|(?:son|votre) (?:propre )?(?:surnom|pseudo))(?: sur (?P<nickname>.+?))?\.?$",
+        re.IGNORECASE | re.DOTALL,
+    ),
+)
+_READER_WORDS = frozenset({"you", "vous"})  # "You set…", "set the nickname for you": the reader, named elsewhere
+
+
+def nickname_event_names(text: str) -> list[str] | None:
+    """The names a nickname event holds (actor, target, nickname; "you" left out), [] if `text` is not a nickname
+    event, None if it is one (Messenger's event wording with a nickname word) that no pattern reads."""
+    text = unicodedata.normalize("NFC", text).strip()
+    if not (PLACEHOLDER.match(text) and NICKNAME_WORD.search(text)):
+        return []
+    match = next((m for pattern in NICKNAME_EVENT_NAMES if (m := pattern.match(text))), None)
+    if match is None:
+        return None
+    return [name for name in match.groupdict().values() if name and name.strip().lower() not in _READER_WORDS]
+
+
 def export_files(export: Path) -> ExportFiles:
     """Every file under `export` (or `export` itself), sorted by reader. Any file no reader consumes refuses the
     export, counted, never named."""
@@ -459,10 +507,11 @@ def export_files(export: Path) -> ExportFiles:
 _READ_ERRORS = (ValueError, OSError, KeyError, TypeError, IndexError, AttributeError, RecursionError)
 
 
-def read_export(export: Path) -> list[Thread]:
+def read_export(export: Path, found: ExportFiles | None = None) -> list[Thread]:
     """The export's conversations, from every folder of thread pages (message requests and filtered threads too)
-    and every one-file export at any depth. Errors never carry the export's paths or text."""
-    found = export_files(export)
+    and every one-file export at any depth (`found`: `export_files(export)`, read here when not given). Errors never
+    carry the export's paths or text."""
+    found = found or export_files(export)
     try:
         threads = [*(load_dyi_threads(export, folders=None) if found.pages else []),
                    *(t for path in found.flat for t in load_flat_threads(path))]
@@ -475,10 +524,19 @@ def read_export(export: Path) -> list[Thread]:
 
 @dataclass
 class _Fields:
-    """What the schema walk read, by leaf kind, plus the distinct schema keys seen and the unknown keys counted."""
-    values: dict[str, list[str]] = field(default_factory=lambda: {NAME: [], LABEL: [], NOTE: [], TEXT: []})
+    """What the schema walk read, by leaf kind (DATA: its texts only), plus the distinct schema keys seen and the
+    unknown and duplicate keys counted."""
+    values: dict[str, list[str]] = field(default_factory=lambda: {NAME: [], LABEL: [], NOTE: [], TEXT: [], DATA: []})
     keys: set[str] = field(default_factory=set)
     unknown_keys: int = 0
+    duplicate_keys: int = 0
+
+    def load(self, path: Path) -> object:
+        """`path` parsed as JSON; a key written twice in one object is counted (json.loads would keep the last)."""
+        def pairs_to_dict(pairs: list[tuple[str, object]]) -> dict:
+            self.duplicate_keys += len(pairs) - len({key for key, _ in pairs})
+            return dict(pairs)
+        return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=pairs_to_dict)
 
 
 def _walk(node: object, schema: Schema, found: _Fields, fix: Callable[[str], str]) -> None:
@@ -501,6 +559,8 @@ def _walk(node: object, schema: Schema, found: _Fields, fix: Callable[[str], str
     elif schema == DATA:
         if isinstance(node, (dict, list)):
             raise TypeError("an export data field holds an object or a list")
+        if isinstance(node, str):
+            found.values[DATA].append(fix(node))
     elif node is None and schema != NAME:
         return
     elif not isinstance(node, str):
@@ -512,50 +572,63 @@ def _walk(node: object, schema: Schema, found: _Fields, fix: Callable[[str], str
 @dataclass(frozen=True)
 class ExportScan:
     threads: list[Thread]  # `read_export`
-    names: list[str]  # every NAME field, nickname, distinctive LABEL word and given name in a NOTE
+    names: list[str]  # every NAME field, nickname-event name, and distinctive LABEL, NOTE and DATA word
     free_texts: list[str]  # every LABEL, NOTE and TEXT field, for the chat-text check
     label_words_common: int  # LABEL words left out of the names as common (`label_words`)
     keys: int  # distinct schema keys the export uses
+    nickname_events: int = 0  # nickname events read (`nickname_event_names`)
+    export_words_allowed: int = 0  # distinctive NOTE and DATA words left out as EXPORT_WORDS
 
 
 def scan_export(export: Path) -> ExportScan:
     """Every person name and free text the export holds, read from its raw files against the format's schema
     (DYI_SCHEMA for thread pages in any folder, FLAT_SCHEMA for one-file exports) rather than from the loaded
-    conversations (which drop unsent, call and event messages), plus every nickname the loaders read from nickname
-    events. A key outside the schema refuses the export, counted, never named; so does a page of any other shape.
-    Errors never carry the export's paths or text."""
-    threads = read_export(export)
+    conversations (which drop unsent, call and event messages), plus the names in every nickname event and the
+    distinctive words of every title, note and data text (`described_words`). Refused, counted, never named: a key
+    outside the schema, a key written twice in one object, a nickname event no pattern reads, a page of any other
+    shape. Errors never carry the export's paths or text."""
     found_files, found = export_files(export), _Fields()
+    threads = read_export(export, found_files)
     try:
         for path in found_files.pages:
-            page = json.loads(path.read_text(encoding="utf-8"))
+            page = found.load(path)
             if not isinstance(page.get("participants"), list) or not isinstance(page.get("messages"), list):
                 raise TypeError("a thread page needs participant and message lists")
             _walk(page, DYI_SCHEMA, found, fix_meta_text)
         for path in found_files.flat:
-            _walk(json.loads(path.read_text(encoding="utf-8")), FLAT_SCHEMA, found, str)
+            _walk(found.load(path), FLAT_SCHEMA, found, str)
     except _READ_ERRORS as error:
         raise RefusedError(f"export could not be read ({type(error).__name__})") from None
     if found.unknown_keys:
         raise RefusedError(f"export holds {found.unknown_keys} keys outside its format's schema "
                            f"(fym1.release.DYI_SCHEMA / FLAT_SCHEMA)")
+    if found.duplicate_keys:
+        raise RefusedError(f"export holds {found.duplicate_keys} keys written twice in one object")
+    events = [names for text in found.values[TEXT] if (names := nickname_event_names(text)) != []]
+    if None in events:
+        raise RefusedError(f"export holds {events.count(None)} nickname events the release check cannot read "
+                           f"(fym1.release.NICKNAME_EVENT_NAMES)")
     labels = [label_words(label) for label in found.values[LABEL]]
-    nicknames = [nickname for thread in threads for nickname in thread.nicknames]
+    described = [described_words(text) for text in found.values[NOTE]]
+    described += [described_words(" ".join(_LETTERS.findall(text))) for text in found.values[DATA]]
     return ExportScan(
         threads=threads,
-        names=[*found.values[NAME], *nicknames, *(word for kept, _ in labels for word in kept),
-               *(name for note in found.values[NOTE] for name in note_names(note))],
+        names=[*found.values[NAME], *(name for names in events for name in names),
+               *(word for kept, _ in labels for word in kept), *(word for kept, _ in described for word in kept)],
         free_texts=[*found.values[LABEL], *found.values[NOTE], *found.values[TEXT]],
         label_words_common=sum(common for _, common in labels),
         keys=len(found.keys),
+        nickname_events=len(events),
+        export_words_allowed=sum(allowed for _, allowed in described),
     )
 
 
-def note_names(note: str) -> list[str]:
-    """The words of a NOTE that are listed given names (`first_names.txt`, `mg_first_names.txt`), case and accents
-    folded. A name in no list is not found: notes describe the export, the conversation's own names come from its
-    NAME fields."""
-    return [word for word in _LETTERS.findall(fold(note)) if word in FIRST_NAME_WORDS or word in MG_FIRST_NAMES]
+def described_words(text: str) -> tuple[list[str], int]:
+    """The `label_words` of a NOTE or of a DATA text's letter words that are not EXPORT_WORDS, and how many
+    distinctive words were left out as EXPORT_WORDS."""
+    kept = label_words(text)[0]
+    named = [word for word in kept if word not in EXPORT_WORDS]
+    return named, len(kept) - len(named)
 
 
 def label_words(label: str) -> tuple[list[str], int]:
@@ -993,6 +1066,7 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
     report.chat_short_messages = sum(index.short_messages for index in chat)
     report.short_tokens_skipped, report.placeholder_senders_skipped = short, placeholders
     report.export_schema_keys, report.label_words_common = scan.keys, scan.label_words_common
+    report.nickname_events, report.export_words_allowed = scan.nickname_events, scan.export_words_allowed
     report.chat_free_texts = len(scan.free_texts)
     if not report.ok:
         shutil.rmtree(staging)

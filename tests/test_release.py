@@ -11,6 +11,8 @@ from pathlib import Path, PurePath
 import pytest
 
 from fym1 import release
+from fym1.data.anonymize import fold
+from fym1.data.known_words import PERSON_NAMES
 from fym1.data.messenger import load_threads
 from fym1.eval.metrics import NgramIndex
 from fym1.release import RefusedError, build_snapshot, count_name_hits, name_tokens, secret_hits, strip_list
@@ -744,11 +746,20 @@ def test_every_name_field_of_a_one_file_export_is_read(tmp_path, conversation, m
         assert not any(hidden in p for p in loaded)  # the conversation loader alone misses it
 
 
-def test_only_listed_given_names_in_notes_join_the_name_list(tmp_path):
-    """Notes describe the export: their unlisted words ("timestamps", a made-up "Notefake") name nobody."""
-    names = name_tokens(export_names(_flat_file(tmp_path, {"notes": "Notefake timestamps URLs kept for Mialy"})))[0]
-    assert release.compare_key("Mialy") in names
-    assert not {release.compare_key(w) for w in ("Notefake", "timestamps", "URLs")} & names
+@pytest.mark.parametrize("field", ["notes", "platform"])
+def test_an_unlisted_name_in_the_notes_joins_the_name_list(tmp_path, field):
+    """Notes go through `label_words` (finding 24): a name in neither given-name list ("Notefake") is caught; the
+    export's own words (EXPORT_WORDS: "timestamps", "URLs") are not names."""
+    names = name_tokens(export_names(_flat_file(tmp_path, {field: "Notefake timestamps URLs kept for Mialy"})))[0]
+    assert {release.compare_key(w) for w in ("Notefake", "Mialy")} <= names
+    assert not {release.compare_key(w) for w in ("timestamps", "URLs")} & names
+
+
+def test_an_unlisted_name_in_the_notes_is_caught_end_to_end(tmp_path):
+    export = _flat_file(tmp_path, {"notes": "chat with Notefake"})
+    report = snap(make_repo(tmp_path, {**CLEAN_FILES, "docs/thanks.md": "Thanks Notefake!\n"}), tmp_path / "public",
+                  export)
+    assert report.name_hits == {"docs/thanks.md": 1} and not report.ok
 
 
 def test_a_nickname_from_a_nickname_event_is_a_name(tmp_path):
@@ -759,6 +770,182 @@ def test_a_nickname_from_a_nickname_event_is_a_name(tmp_path):
     data["messages"].append(event)
     (export / "chat.json").write_text(json.dumps(data), encoding="utf-8")
     assert release.compare_key("Nickfake") in name_tokens(export_names(export))[0]
+
+
+# ---- nickname events about anyone, duplicate keys, profile paths (review round 3) ----------------------------------
+
+
+def _with_events(tmp_path: Path, flat: bool, events: list[tuple[str, str]], participants: list[str]) -> Path:
+    """An export whose conversation lists `participants` and holds `events` ((sender, text) pairs), in the one-file
+    format or as a thread page (a "Download your information" export)."""
+    if flat:
+        export = _flat_file(tmp_path, {"participants": participants})
+        data = json.loads((export / "chat.json").read_text())
+        data["messages"] += [{"id": i + 2, "sender": sender, "text": text, "timestamp": "2026-01-01T10:01:00"}
+                             for i, (sender, text) in enumerate(events)]
+        (export / "chat.json").write_text(json.dumps(data), encoding="utf-8")
+        return export
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(_dyi_page(participants, [{"sender_name": sender, "timestamp_ms": i, "content": text}
+                                             for i, (sender, text) in enumerate(events)]), encoding="utf-8")
+    return export
+
+
+NICKNAME_SLIPS = [  # (sender, event text, the names it must add); no named person is a participant
+    ("Zafy Test", "Zafy Test set the nickname for Gonefake Person to Nickfake.", ["Gonefake", "Nickfake"]),
+    ("Leftfake Person", "Leftfake Person set her own nickname to Ownnickfake.", ["Leftfake", "Ownnickfake"]),
+    ("Zafy Test", "Zafy Test cleared the nickname for Clearfake Person.", ["Clearfake"]),
+    ("Zafy Test", "Zafy Test a défini le surnom de Frgonefake sur Frnickfake.", ["Frgonefake", "Frnickfake"]),
+    ("Zafy Test", "Zafy Test a supprimé le surnom d’Frclearfake.", ["Frclearfake"]),
+]
+
+
+@pytest.mark.parametrize("flat", [True, False])
+@pytest.mark.parametrize(("sender", "text", "hidden"), NICKNAME_SLIPS)
+def test_every_name_in_a_nickname_event_is_a_name_participant_or_not(tmp_path, flat, sender, text, hidden):
+    """The loaders keep a nickname only for a participant; the release check takes every name an event holds."""
+    export = _with_events(tmp_path, flat, [(sender, text)], ["Zafy Test"])
+    names = name_tokens(export_names(export))[0]
+    assert {release.compare_key(h) for h in hidden} <= names
+    assert release.scan_export(export).nickname_events == 1
+
+
+@pytest.mark.parametrize("flat", [True, False])
+def test_a_nickname_of_someone_who_left_is_caught_end_to_end(tmp_path, flat):
+    export = _with_events(tmp_path, flat, [NICKNAME_SLIPS[0][:2]], ["Zafy Test"])
+    assert not any(t.nicknames for t in load_threads(export))  # the loaders drop it (training data unchanged)
+    files = {**CLEAN_FILES, "docs/thanks.md": "Thanks Nickfake!\n"}
+    report = snap(make_repo(tmp_path, files), tmp_path / "public", export)
+    assert report.name_hits == {"docs/thanks.md": 1} and not report.ok
+    assert report.as_dict()["names"]["nickname_events"] == 1
+
+
+@pytest.mark.parametrize("flat", [True, False])
+def test_a_nickname_event_the_check_cannot_read_refuses_the_export(tmp_path, capsys, flat):
+    export = _with_events(tmp_path, flat, [("Zafy Test", "Zafy Test changed the nickname to Oddfake somehow")],
+                          ["Zafy Test"])
+    with pytest.raises(RefusedError, match="1 nickname events the release check cannot read") as error:
+        release.scan_export(export)
+    assert "fake" not in str(error.value).lower()
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    (tmp_path / "cli").mkdir()
+    args = [*cli_args(tmp_path / "cli", repo, tmp_path / "public"), "--results", str(tmp_path / "r.json")]
+    args[args.index("--export") + 1] = str(export)
+    assert cli.main(args) == 2
+    assert not (tmp_path / "public").exists() and not (tmp_path / "r.json").exists()
+    printed = capsys.readouterr()
+    assert "fake" not in (printed.out + printed.err).lower()
+
+
+def test_a_reader_nickname_event_adds_no_you(tmp_path):
+    export = _with_events(tmp_path, True, [("Zafy Test", "You set your nickname to Younickfake."),
+                                           ("Zafy Test", "Zafy Test set the nickname for you to Fornickfake.")],
+                          ["Zafy Test"])
+    names = name_tokens(export_names(export))[0]
+    assert {release.compare_key(n) for n in ("Younickfake", "Fornickfake")} <= names
+    assert release.compare_key("you") not in names
+
+
+@pytest.mark.parametrize("flat", [True, False])
+def test_a_key_written_twice_refuses_the_export(tmp_path, capsys, flat):
+    """json.loads keeps the last of two equal keys: a name in the first would never be read."""
+    if flat:
+        export = _flat_file(tmp_path)
+        text = (export / "chat.json").read_text()
+        (export / "chat.json").write_text(text.replace('"sender": "Zafy Test"',
+                                                       '"sender": "Dupfake Person", "sender": "Zafy Test"'))
+    else:
+        export = make_dyi_export(tmp_path)
+        page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+        page.write_text('{"title": "t", "participants": [{"name": "Dupfake Person", "name": "Bodo Fakenaina"}], '
+                        '"messages": []}', encoding="utf-8")
+    with pytest.raises(RefusedError, match="1 keys written twice") as error:
+        release.scan_export(export)
+    assert "fake" not in str(error.value).lower()
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    (tmp_path / "cli").mkdir()
+    args = [*cli_args(tmp_path / "cli", repo, tmp_path / "public"), "--results", str(tmp_path / "r.json")]
+    args[args.index("--export") + 1] = str(export)
+    assert cli.main(args) == 2
+    assert "fake" not in "".join(capsys.readouterr()).lower()
+
+
+@pytest.mark.parametrize(("message", "hidden"), [
+    ({"share": {"link": "https://www.facebook.com/linkfake.person"}}, "Linkfake"),
+    ({"share": {"link": "https://m.me/mefakeperson"}}, "Mefakeperson"),
+    ({"share": {"link": "https://example.org/u/plainfake?ref=x"}}, "Plainfake"),  # any link, not only Facebook's
+    ({"photos": [{"uri": "messages/inbox/urifake_10001/photos/1.jpg", "creation_timestamp": 1}]}, "Urifake"),
+    ({"reactions": [{"reaction": "https://facebook.com/reactfake.x", "actor": "Bodo Fakenaina"}]}, "Reactfake"),
+])
+def test_a_name_only_inside_a_link_or_path_joins_the_name_list(tmp_path, message, hidden):
+    """Every DATA text's letter words go through `label_words` (finding 23): the name is in no NAME field."""
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(_dyi_page(["Bodo Fakenaina"], [{"sender_name": "Bodo Fakenaina", "timestamp_ms": 1, **message}]),
+                    encoding="utf-8")
+    assert release.compare_key(hidden) in name_tokens(release.scan_export(export).names)[0]
+
+
+def test_a_name_only_inside_a_link_is_caught_end_to_end(tmp_path):
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(_dyi_page(["Bodo Fakenaina"], [{"sender_name": "Bodo Fakenaina", "timestamp_ms": 1,
+                                                    "share": {"link": "https://facebook.com/linkfake.person"}}]),
+                    encoding="utf-8")
+    report = snap(make_repo(tmp_path, {**CLEAN_FILES, "docs/thanks.md": "Thanks Linkfake!\n"}), tmp_path / "public",
+                  export)
+    assert report.name_hits == {"docs/thanks.md": 1} and not report.ok
+
+
+def test_a_one_file_data_field_gives_its_letter_words_to_the_name_list(tmp_path):
+    export = _flat_file(tmp_path, {"timezone": "UTC", "date_range": {"start": "2026-01-01", "end": "x/rangefake"}},
+                        {"id": "msg-idfake-0042"})
+    names = name_tokens(release.scan_export(export).names)[0]
+    assert {release.compare_key(w) for w in ("Rangefake", "Idfake")} <= names
+    assert release.compare_key("utc") not in names  # an EXPORT_WORDS word
+
+
+def test_data_words_are_letters_only(tmp_path):
+    """Digits in an id or a timestamp are not read as letters: "1034" would read "ioea" under DIGIT_LETTERS."""
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json"
+    page.write_text(json.dumps({"title": "t", "participants": [{"name": "Bodo Fakenaina"}],
+                                "thread_path": "filtered_threads/pathfake_1034", "messages": [
+                                    {"sender_name": "Bodo Fakenaina", "timestamp_ms": 1703451034,
+                                     "reactions": [{"reaction": "\U0001f44d", "actor": "Bodo Fakenaina"}]}]}),
+                    encoding="utf-8")
+    names = name_tokens(release.scan_export(export).names)[0]
+    assert release.compare_key("pathfake") in names
+    assert not {release.compare_key(w) for w in ("ioea", "itoeasioea")} & names
+
+
+def test_export_words_are_left_out_of_notes_and_data_and_counted(tmp_path):
+    export = _flat_file(tmp_path, {"notes": "Facebook timestamps and URLs",
+                                   "date_range": {"start": "2026-01-01", "end": "America/Fakecity"}})
+    scan = release.scan_export(export)
+    names = name_tokens(scan.names)[0]
+    assert not {release.compare_key(w) for w in ("facebook", "timestamps", "urls", "america")} & names
+    assert release.compare_key("Fakecity") in names
+    assert scan.export_words_allowed == 4
+    report = snap(make_repo(tmp_path, CLEAN_FILES), tmp_path / "public", export)
+    assert report.as_dict()["names"]["export_words_allowed"] == 4
+
+
+def test_every_export_word_is_reviewed():
+    """Exact folded words, each with its reason; distinctive (else the entry does nothing) and no listed name."""
+    for word, reason in release.EXPORT_WORDS.items():
+        assert word == fold(word) and word.isalpha() and reason.strip()
+        assert release.is_distinctive(word)
+        assert word not in PERSON_NAMES
+
+
+def test_the_scan_lists_the_export_files_once(tmp_path, monkeypatch):
+    calls = []
+    real = release.export_files
+    monkeypatch.setattr(release, "export_files", lambda export: calls.append(export) or real(export))
+    release.scan_export(make_export(tmp_path))
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize(("conversation", "message"), [
