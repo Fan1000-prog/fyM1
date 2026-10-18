@@ -22,7 +22,6 @@ such file. --dry-run runs everything, prints segmenting and gate counts, and wri
 
 import argparse
 import json
-import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -32,6 +31,7 @@ from fym1.data.kept_checks import kept_counts
 from fym1.data.leftovers import read_blocklist, render_leftover_sheet
 from fym1.data.messenger import Thread, load_threads
 from fym1.data.pipeline import build_records, merge_data_stats
+from fym1.data.private import private_path
 from fym1.data.review_sheet import render_review_sheet, sample_for_review
 from fym1.data.segment import count_sessions, to_conversations
 
@@ -84,23 +84,6 @@ def load_is_malagasy() -> Callable[[str], bool]:
             raise
         sys.exit("fym1.eval.lang is missing: merge Task 3 (eval metrics) before running this.")
     return is_malagasy
-
-
-def private_path(path: Path) -> Path:
-    """`path` resolved, refusing anywhere inside a git work tree (chat text must never be committable)."""
-    resolved = path.expanduser().resolve()
-    existing = next(p for p in (resolved, *resolved.parents) if p.exists())
-    if not existing.is_dir():
-        existing = existing.parent
-    toplevel = subprocess.run(
-        ["git", "-C", str(existing), "rev-parse", "--show-toplevel"], capture_output=True, text=True
-    )
-    if toplevel.returncode == 0:
-        sys.exit(
-            f"{path} is inside the git work tree {toplevel.stdout.strip()}. "
-            "Write chat data outside any repo, e.g. ~/malagasy-data/private/."
-        )
-    return resolved
 
 
 def main() -> None:
