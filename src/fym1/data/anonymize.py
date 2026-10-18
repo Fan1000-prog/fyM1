@@ -72,15 +72,15 @@ PHONE = re.compile(
     rf"{_MG_PHONE_SPACED}"
     rf"|{_INTL}\d{{1,3}}(?:\s*\(\d{{1,4}}\))?(?:{_SEP}\d){{6,13}}"  # other intl: +33 6 …, +1 (555) …
     rf"|[0Oo](?:{_SEP}\d){{9}}"  # national, 10 digits however grouped; "O34" typed with a letter O
-    rf"|3[2-9]{_SEP}\d\d{_SEP}\d{{3}}{_SEP}\d\d"  # mobile without the 0: 34 12 345 67
+    # mobile without the 0: 34 12 345 67, any grouping once "34" stands apart ("345 000 000 Ar" stays)
+    rf"|3[2-9](?=[\s./,_-]){_SEP}\d(?:{_SEP}\d){{6}}"
     r"|\d{9,15}"  # any other long run of digits
     r")(?!\w)"
     rf"|(?<![\d+]){_MG_PHONE_GLUED}(?!\d)"  # glued to a word: "laharana034 …", "wa+26134…", "tel(034) …"
 )
-# "01/02/2026 03/04" is dates, not a phone: a year next to / or -.
-_DATE_LIKE = re.compile(r"[/-](?:19|20)\d\d\b|\b(?:19|20)\d\d[/-]")
-# A match that starts with a country code is a phone even if a year shows up in it ("+261 038 27 2000/5").
-_COUNTRY_CODE_START = re.compile(r"\(?\s*(?:\+|00|261)")
+# "01/02/2026 03/04" is dates, not a phone: only a full day/month/year counts, so a phone
+# with a year-like group ("038 27 2000/5") is still a phone.
+_FULL_DATE = re.compile(r"\b\d{1,2}[/-]\d{1,2}[/-](?:19|20)\d\d\b|\b(?:19|20)\d\d[/-]\d{1,2}[/-]\d{1,2}\b")
 # Malagasy plot addresses: "Lot II M 85 Ter", "Lot IVG 12 Bis". Kept only if it holds a number.
 _LOT_PART = r"(?:[IVX]+[A-Z]*|\d+[A-Za-z]*|[A-Z]{1,3}|[Bb]is|[Tt]er|[Qq]uater)\b"
 LOT_ADDRESS = re.compile(rf"\b[Ll][Oo][Tt]\.?\s+{_LOT_PART}(?:[\s-]+{_LOT_PART})*")
@@ -168,9 +168,7 @@ def _hashed_fake(text: str, words: int, firsts: list[str], lasts: list[str]) -> 
 
 
 def _phone(match: re.Match) -> str:
-    text = match.group()
-    is_date = _DATE_LIKE.search(text) and not _COUNTRY_CODE_START.match(text)
-    return text if is_date else "<TEL>"
+    return match.group() if _FULL_DATE.search(match.group()) else "<TEL>"
 
 
 def _lot_address(match: re.Match) -> str:

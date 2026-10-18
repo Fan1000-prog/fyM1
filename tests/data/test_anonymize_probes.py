@@ -535,3 +535,24 @@ def test_country_code_phone_wins_over_date_filter(text, expected):
 )
 def test_dates_still_kept_after_country_code_rule(text):
     assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Antsoy 038 27 2000/5 aho", "Antsoy <TEL> aho"),
+        ("034 12 2019-5", "<TEL>"),
+        ("0 34 12 2019/5", "<TEL>"),
+        ("034/12/2019/5", "<TEL>"),
+        ("(034) 12 2000/5", "<TEL>"),
+        ("laharana038 27 2000/5", "laharana<TEL>"),
+        ("34 12 2019/5", "<TEL>"),
+    ],
+)
+def test_local_phone_with_a_year_like_group_is_a_phone(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+@pytest.mark.parametrize("text", ["01/02/2026 03/04", "03/04/2026 12 30", "2020-03-12 034", "17/10/2026 1430"])
+def test_full_dates_next_to_numbers_are_kept(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
