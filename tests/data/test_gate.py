@@ -5,7 +5,14 @@ import re
 import pytest
 
 from fym1.data.anonymize import FIRST_NAMES
-from fym1.data.gate import GATE_REASONS, contact_left, has_long_number, pool_names_in, strict_gate
+from fym1.data.gate import (
+    GATE_REASONS,
+    MAX_FAKES_PER_CONVERSATION,
+    contact_left,
+    has_long_number,
+    pool_names_in,
+    strict_gate,
+)
 from fym1.data.known_words import word_list
 
 
@@ -110,11 +117,15 @@ def test_gate_drops_whole_conversations_for_numbers_and_contacts_only():
         "dropped_long_number": 2,
         "dropped_contact": 1,
         "dropped_too_many_unknown": 1,  # "both": 1 name in 2 words, counted under every reason
+        "dropped_too_many_fakes": 0,
         "dropped_hidden_char": 0,
         "kept": 2,
         "tokens_replaced": 1,
+        "words_kept": 19,
+        "fakes_per_kept_median": 0,
+        "fakes_per_kept_max": 1,
     }
-    assert set(GATE_REASONS) == {"long_number", "contact", "too_many_unknown", "hidden_char"}
+    assert set(GATE_REASONS) == {"long_number", "contact", "too_many_unknown", "too_many_fakes", "hidden_char"}
 
 
 def test_unknown_capitalised_word_becomes_a_pool_fake_the_same_one_in_a_conversation():
@@ -190,6 +201,32 @@ def test_conversation_with_more_than_30_percent_replaced_words_is_dropped():
     assert [r["id"] for r in result.kept] == ["at"]
     assert result.counts["dropped_too_many_unknown"] == 1
     assert result.counts["tokens_replaced"] == 3  # counted in kept conversations only
+
+
+def test_conversation_with_more_than_5_fakes_is_dropped_whatever_its_length():
+    filler = " ".join(["eny"] * 100)  # far below 30% replaced
+    records = [
+        record("six", "Bema Zandry Koto Vazo Lita Fefy", filler),
+        record("five", "Bema Zandry Koto Vazo Lita", filler),
+        record("two", "Bema Zandry", filler),
+    ]
+
+    result = strict_gate(records, fake_names=[], lexicon=TINY_LEXICON)
+
+    assert MAX_FAKES_PER_CONVERSATION == 5
+    assert [r["id"] for r in result.kept] == ["five", "two"]
+    assert result.counts["dropped_too_many_fakes"] == 1
+    assert result.counts["dropped_too_many_unknown"] == 0
+    assert result.counts["tokens_replaced"] == 7
+    assert result.counts["fakes_per_kept_median"] == 2  # median_low of [5, 2]
+    assert result.counts["fakes_per_kept_max"] == 5
+
+
+def test_fake_counts_are_zero_when_nothing_is_kept():
+    result = strict_gate([record("phone", "antsoy aho 034 12 345 67")], fake_names=[])
+
+    assert result.counts["kept"] == 0
+    assert result.counts["fakes_per_kept_median"] == result.counts["fakes_per_kept_max"] == 0
 
 
 def test_gate_keeps_fake_names_placeholders_currency_and_common_words():

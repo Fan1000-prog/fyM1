@@ -15,6 +15,8 @@ fine, letting a name or number through is not. A whole conversation is dropped i
   mail host ("njaka at gmail"), or a private-use mark the anonymiser leaves only when a
   replacement failed.
 - `too_many_unknown`: more than 30% of its words would be replaced as names (below).
+- `too_many_fakes`: more than MAX_FAKES_PER_CONVERSATION (5) words would be replaced as names. A
+  model trained on chats full of fakes learns to sprinkle random names into its replies.
 - `hidden_char`: an invisible or combining character normalise() left (a spacing mark inside a name,
   a Hangul filler, a format character not after a letter), unless it builds an emoji (variation
   selector, ZWJ between emoji, keycap after a digit/#/*, subdivision-flag tags).
@@ -60,6 +62,7 @@ import re
 import unicodedata
 from collections import Counter
 from collections.abc import Collection, Iterable, Iterator, Mapping
+from statistics import median_low
 from typing import NamedTuple
 
 from fym1.data.anonymize import (
@@ -83,9 +86,12 @@ from fym1.data.known_words import (
 )
 from fym1.data.leftovers import MIN_LETTERS, fake_name_keys
 
-GATE_REASONS = ("long_number", "contact", "too_many_unknown", "hidden_char")
+GATE_REASONS = ("long_number", "contact", "too_many_unknown", "too_many_fakes", "hidden_char")
 HAND_LIST = "known_names"  # the only list that clears a word mid-sentence or after a marker
 MAX_REPLACED_SHARE = 0.3
+MAX_FAKES_PER_CONVERSATION = 5  # lead decision: AUTO-DECISIONS 22
+# Gate counts copied into results/data_stats.json, so the training data records how many fakes it holds.
+FAKE_STATS_KEYS = ("dropped_too_many_fakes", "fakes_per_kept_median", "fakes_per_kept_max")
 
 MIN_NUMBER_DIGITS = 7
 # Any run of non-letter, non-digit characters joins digits: spaces of every kind, ". , / - _ ( ) + ; * | :"...
@@ -358,11 +364,12 @@ def strict_gate(
     `disallowed` maps a record id to pool names its raw text already held: those are real there, so
     they are replaced (a participant's fake that equals one is replaced too, the same way). A
     conversation dropped for two reasons counts under both. `cleared_*` counts capitalised words in
-    every conversation before the gate; `tokens_replaced` counts words replaced in kept conversations.
+    every conversation before the gate; `tokens_replaced` counts words replaced in kept conversations,
+    `words_kept` all their words, `fakes_per_kept_median`/`_max` replaced words per kept conversation.
     """
     fake_keys = fake_name_keys([*fake_names, *CURRENCY_WORDS])
     disallowed = disallowed or {}
-    kept, dropped, cleared, replaced = [], dict.fromkeys(GATE_REASONS, 0), Counter(), 0
+    kept, dropped, cleared, replaced, words = [], dict.fromkeys(GATE_REASONS, 0), Counter(), [], 0
     for record in records:
         texts = [normalise(turn["content"]) for turn in record["messages"]]
         real_pool = {compare_key(name) for name in disallowed.get(record["id"], ())}
@@ -371,18 +378,24 @@ def strict_gate(
         reasons = _reasons(texts)
         if names.replaced > MAX_REPLACED_SHARE * names.words:
             reasons.add("too_many_unknown")
+        if names.replaced > MAX_FAKES_PER_CONVERSATION:
+            reasons.add("too_many_fakes")
         for reason in reasons:
             dropped[reason] += 1
         if not reasons:
             kept.append(_with_texts(record, names.texts))
-            replaced += names.replaced
+            replaced.append(names.replaced)
+            words += names.words
     counts = {
         "conversations_before_gate": len(records),
         "dropped": len(records) - len(kept),
         **{f"dropped_{reason}": n for reason, n in dropped.items()},
         "kept": len(kept),
         **{f"cleared_{source}": cleared[source] for source in lexicon},
-        "tokens_replaced": replaced,
+        "tokens_replaced": sum(replaced),
+        "words_kept": words,
+        "fakes_per_kept_median": median_low(replaced) if replaced else 0,
+        "fakes_per_kept_max": max(replaced, default=0),
     }
     return GateResult(kept, counts)
 
