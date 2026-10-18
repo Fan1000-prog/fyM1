@@ -7,6 +7,7 @@ import pytest
 from fym1.data.anonymize import (
     _MOBILE_START,
     _RUN_ON,
+    _SEP,
     _SPELLED_AT,
     _ZERO_GAP,
     COMMON_WORDS,
@@ -215,7 +216,8 @@ def _short_strings(alphabet, max_len):
         yield from map("".join, itertools.product(alphabet, repeat=n))
 
 
-# The patterns before the fix: each rewrite must match the same strings, and stop at the same place.
+# Each old pattern is the piece exactly as it was before this PR; each rewrite must match the same strings,
+# and stop at the same place.
 @pytest.mark.parametrize(
     ("old", "new", "alphabet", "max_len"),
     [
@@ -225,11 +227,12 @@ def _short_strings(alphabet, max_len):
             [" ", "\t", ".", "-", "0", "O", "3", "5", ")", "a"],
             6,
         ),
-        (r"[0Oo]\s*\)?\s*(?:[./,_-]\s*)?", _ZERO_GAP, [" ", "\t", ".", "_", "0", "o", "3", ")", "a"], 6),
+        (r"\s*[./,_-]?\s*", _SEP, [" ", "\t", ".", "_", "-", "/", "1", "a"], 6),
+        (r"[0Oo]\s*\)?\s*[./,_-]?\s*", _ZERO_GAP, [" ", "\t", ".", "_", "0", "o", "3", ")", "a"], 6),
         (r"(?:\s*[./,_-]?\s*\d)+", _RUN_ON.pattern, [" ", "\t", ".", ",", "/", "1", "a", ")"], 6),
         (r"\s*(?:\[at\]|\(at\)|\s@\s)\s*", _SPELLED_AT, [" ", "\t", "@", "[at]", "(at)", "a"], 5),
     ],
-    ids=["mobile-start", "zero-gap", "run-on", "spelled-at"],
+    ids=["mobile-start", "sep", "zero-gap", "run-on", "spelled-at"],
 )
 def test_rewritten_regex_matches_the_same_strings(old, new, alphabet, max_len):
     old_re, new_re = re.compile(old), re.compile(new)
