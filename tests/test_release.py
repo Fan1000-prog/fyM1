@@ -12,6 +12,7 @@ from pathlib import Path, PurePath
 import pytest
 
 from fym1 import release
+from fym1.data import name_scan
 from fym1.data.anonymize import fold
 from fym1.data.known_words import PERSON_NAMES
 from fym1.data.messenger import Message, load_threads
@@ -525,6 +526,14 @@ def test_nothing_shipped_imports_or_describes_the_release_tooling():
         assert "fym1.release" not in text and "INNER_NAME_ALLOWED" not in text, path
         if path.endswith(".py"):
             assert not _imports_release(text), path
+
+
+def test_release_uses_the_shared_name_scan_unchanged():
+    """The snapshot and the synth gate run the same scan: release re-uses fym1.data.name_scan, it keeps no copy."""
+    shared = ["RefusedError", "count_name_hits", "name_tokens", "is_name_word", "words", "readings", "read_export",
+              "export_files", "export_senders", "export_conversations", "ChatIndex", "chat_words", "is_distinctive",
+              "has_chat_text", "CHAT_TEXT_NGRAM", "SHORT_MESSAGE_DISTINCTIVE"]
+    assert all(getattr(release, n) is getattr(name_scan, n) for n in shared)
 
 
 def test_no_inner_name_allow_list_entry_names_an_unshipped_file():
@@ -1135,7 +1144,7 @@ def test_a_hidden_file_in_the_export_is_refused_and_the_message_says_so(tmp_path
 
 def test_the_chat_index_reads_every_chat_form(monkeypatch):
     """ChatIndex joins as many forms as `_chat_forms` gives, not a fixed number."""
-    monkeypatch.setattr(release, "_chat_forms", lambda text: ("", "", "", text))
+    monkeypatch.setattr(name_scan, "_chat_forms", lambda text: ("", "", "", text))
     index = release.ChatIndex([[FAKE_CHAT]], "test")
     assert index.shares_with(_run(FAKE_CHAT_WORDS[:8]))
 

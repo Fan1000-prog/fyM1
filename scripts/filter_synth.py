@@ -3,6 +3,8 @@
     uv run python scripts/filter_synth.py --real ~/malagasy-data/private/chats-2026-10-18d/chats.jsonl
     uv run python scripts/filter_synth.py --real ~/malagasy-data/private/chats-2026-10-18d/chats.jsonl --upload
     uv run python scripts/filter_synth.py --real ~/malagasy-data/private/chats-2026-10-18d/chats.jsonl --upload --promote
+    uv run python scripts/filter_synth.py --real ~/malagasy-data/private/chats-2026-10-18d/chats.jsonl --upload \
+        --promote --keep-ids ~/malagasy-data/private/synth-gate/kept_ids.txt
 
 notebooks/04_synth.ipynb filters with the code and the real chats.jsonl it started with. This script redoes that
 step after either changes: it downloads every `synth/raw/part-*.ndjson`, runs
@@ -11,6 +13,9 @@ step after either changes: it downloads every `synth/raw/part-*.ndjson`, runs
 tree). --upload writes both to `synth/filtered.ndjson` and `synth/synth_stats.json` in fyM1-chats, in one commit.
 --promote also writes the kept chats to `synth/synth_chats.jsonl`, the file 01_train reads, with the same bytes as
 filtered.ndjson (what 04_synth writes with PROMOTE = True). Use it only after the sample check.
+--keep-ids FILE (one chat id per line, e.g. the kept_ids.txt scripts/synth_gate.py writes) makes --promote ship only
+those chats; filtered.ndjson and synth_stats.json still hold every chat the filter kept. Refused (exit 1, nothing
+written) when the file is empty or any listed id is not in the filtered chats (the gate saw other chats).
 Run settings the raw rows do not carry (seed, few_shot_k, target_raw, gpus) are kept from the Hub's current
 synth_stats.json when there is one; `data_revision` is a hash of the --real file. The Hugging Face token comes
 from the local cache, never an argument.
@@ -46,7 +51,36 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT, help="dry-run output folder, outside any repo")
     parser.add_argument("--upload", action="store_true", help=f"write {FILTERED} and {STATS} to {DATA_REPO}")
     parser.add_argument("--promote", action="store_true", help=f"also write the kept chats to {PROMOTED} (training)")
-    return parser.parse_args(argv)
+    parser.add_argument("--keep-ids", type=Path,
+                        help="with --promote: promote only the chat ids in this file, one per line")
+    args = parser.parse_args(argv)
+    if args.keep_ids is not None and not args.promote:
+        parser.error("--keep-ids only applies with --promote")
+    return args
+
+
+def read_keep_ids(path: Path) -> set[str]:
+    """The chat ids in `path`, one per line (blank lines skipped). Exits (code 1) when the file is unreadable or
+    lists no id: an empty list would promote nothing, or, read wrongly, everything."""
+    try:
+        ids = {line.strip() for line in path.expanduser().read_text(encoding="utf-8").splitlines() if line.strip()}
+    except (OSError, UnicodeDecodeError) as error:
+        raise SystemExit(f"refused: --keep-ids file could not be read ({type(error).__name__})") from None
+    if not ids:
+        raise SystemExit("refused: --keep-ids file lists no chat id")
+    return ids
+
+
+def promoted_rows(kept: list[dict], keep_ids: set[str] | None) -> list[dict]:
+    """The kept chats to promote: all of them, or only those in `keep_ids`. Exits (code 1) when a listed id is not
+    among the kept chats, so the promoted file is exactly the set the sample gate passed."""
+    if keep_ids is None:
+        return kept
+    missing = keep_ids - {row["id"] for row in kept}
+    if missing:
+        raise SystemExit(f"refused: {len(missing)} of {len(keep_ids)} --keep-ids ids are not in the filtered chats; "
+                         "nothing written")  # fmt: skip
+    return [row for row in kept if row["id"] in keep_ids]
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -83,11 +117,15 @@ def local_revision(real: Path) -> str:
     return "local-sha256-" + hashlib.sha256(real.expanduser().read_bytes()).hexdigest()[:12]
 
 
-def bodies(kept: list[dict], stats: dict, promote: bool) -> dict[str, bytes]:
-    files = {FILTERED: "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept).encode(),
-             STATS: (json.dumps(stats, indent=2) + "\n").encode()}  # fmt: skip
-    if promote:
-        files[PROMOTED] = files[FILTERED]
+def ndjson_bytes(rows: list[dict]) -> bytes:
+    return "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows).encode()
+
+
+def bodies(kept: list[dict], stats: dict, promoted: list[dict] | None) -> dict[str, bytes]:
+    """Files to write. `promoted` None: no training file. Promoting every kept chat writes filtered.ndjson's bytes."""
+    files = {FILTERED: ndjson_bytes(kept), STATS: (json.dumps(stats, indent=2) + "\n").encode()}
+    if promoted is not None:
+        files[PROMOTED] = ndjson_bytes(promoted)
     return files
 
 
@@ -98,6 +136,7 @@ def main(argv: list[str] | None = None, api: HfApi | None = None,
     if is_malagasy is None:
         from fym1.eval.lang import is_malagasy  # loads the language-ID model: only when actually filtering
     out_dir = None if args.upload else private_path(args.out_dir)  # refuse a repo path before downloading
+    keep_ids = read_keep_ids(args.keep_ids) if args.keep_ids is not None else None  # refuse before downloading
 
     real = read_jsonl(args.real.expanduser())  # private chat text: in memory only, never printed
     revision = api.dataset_info(DATA_REPO).sha  # one Hub revision for every file read
@@ -109,13 +148,14 @@ def main(argv: list[str] | None = None, api: HfApi | None = None,
     meta = {key: previous.get(key) for key in CARRIED_META}
     meta |= {"code_sha": sha(), "data_revision": local_revision(args.real)}
     kept, stats = synth.filter_raw_rows(rows, real, is_malagasy, meta)
-    files = bodies(kept, stats, args.promote)
+    promoted = promoted_rows(kept, keep_ids) if args.promote else None
+    files = bodies(kept, stats, promoted)
 
     if args.upload:
         api.create_commit(DATA_REPO, repo_type="dataset", parent_commit=revision,  # fails if the Hub moved on
                           operations=[CommitOperationAdd(path, body) for path, body in files.items()],
                           commit_message=f"synth refilter: {len(kept)}/{len(rows)} kept (code {stats['code_sha']})"
-                                         + (", promoted" if args.promote else ""))  # fmt: skip
+                                         + (f", promoted {len(promoted)}" if promoted is not None else ""))  # fmt: skip
         where = f"{DATA_REPO} ({', '.join(files)})"
     else:
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -123,7 +163,8 @@ def main(argv: list[str] | None = None, api: HfApi | None = None,
             (out_dir / Path(path).name).write_bytes(body)
         where = str(out_dir)
     print(f"hub {revision[:7]} | real chats {len(real)} | raw parts {parts} | raw {stats['raw']} | kept {stats['kept']} | "
-          f"dropped {json.dumps(stats['dropped'])} | wrote {where}")  # fmt: skip
+          f"dropped {json.dumps(stats['dropped'])}" + (f" | promoted {len(promoted)}" if promoted is not None else "")
+          + f" | wrote {where}")  # fmt: skip
     return 0
 
 
