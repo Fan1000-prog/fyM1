@@ -4,7 +4,7 @@ An open AI model that chats in everyday Malagasy — the way people really text,
 
 "fy" means sweet or pleasant in Malagasy. M is for Malagasy. 1 is the first version.
 
-**[Try it](#try-it)** · [Paper](paper/fym1.tex) · [Model card](MODEL_CARD.md) ·
+**[Try it](#try-it)** · [Paper](paper/fym1.tex) · [Model card](MODEL_CARD.md) · [Roadmap](#roadmap) ·
 [Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)
 
 > **Status: v0.1.** *pending* means not measured yet. Coming in v0.2: the full panel's blind human
@@ -135,6 +135,17 @@ Then, in order:
 The training chats are private, so you cannot retrain on the same data. You can rerun everything else,
 and train on your own chats with `scripts/build_chats.py`. Kaggle and Colab steps are in
 [`docs/kaggle_operator.md`](docs/kaggle_operator.md) and [`docs/colab_operator.md`](docs/colab_operator.md).
+
+## Roadmap
+
+Plans, not promises. In this order:
+
+1. **v0.2:** the full panel's blind human ratings, each model's answer to each test prompt, the
+   layer-pruning test, and longer training.
+2. **More everyday Malagasy text.** A bigger, hand-picked set of everyday Malagasy writing, from people who
+   agree to share it, cleaned with the same strict privacy checks. More real data is what fy-m1 needs most.
+3. **A Malagasy speech model.** A lot of everyday Malagasy is spoken, not typed. Next comes a model that
+   understands and speaks it.
 
 ## Repo layout
 
