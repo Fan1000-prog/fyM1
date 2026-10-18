@@ -10,7 +10,8 @@ Read `docs/superpowers/specs/2026-10-17-resaka-design.md` (§7 and §8 override 
   Colab, or any HF repo.
   Only anonymised, owner-approved data goes to the private HF dataset `Fan1000-Prog/fyM1-chats`.
 - Test fixtures are synthetic. Never paste real chat text into tests, commits, PRs, or results.
-- No closed-API (Claude/GPT/Gemini API) outputs in training data. Budget $0.
+- Paid compute = Colab Pro (A100 for training + eval; free T4 on Kaggle/Colab for baseline + smoke tests). Still no
+  closed-API (Claude/GPT/Gemini API) outputs in training data.
 - No AI attribution anywhere: no `Co-Authored-By`, no "Generated with", no 🤖.
 - Every number in README / paper / model card comes from a file in `results/` written by a script here.
 - One branch + worktree per task (`../fyM1-<topic>`), PR, fresh reviewer. Blocked review → a fresh ML-engineer agent
@@ -24,8 +25,8 @@ Read `docs/superpowers/specs/2026-10-17-resaka-design.md` (§7 and §8 override 
 
 ## Layout
 - `src/fym1/{data,eval,shrink,train}` — tested Python (`uv run pytest`).
-- `scripts/` — CLI entry points. `notebooks/` — Colab/Kaggle (T4) notebooks; `00_baseline`, `01_train` and `04_synth` are
-  built by `scripts/build_notebooks.py` (edit it, rebuild, commit both; a test checks they match).
+- `scripts/` — CLI entry points. `notebooks/` — Colab/Kaggle notebooks (T4 for baseline/smoke, Colab Pro A100 for
+  training/eval); `00_baseline`, `01_train` and `04_synth` are built by `scripts/build_notebooks.py` (edit it, rebuild, commit both; a test checks they match).
 - `spaces/{chat,arena}` — Hugging Face Spaces. `paper/` — LaTeX. `results/` — measured outputs.
 
 ## Style target

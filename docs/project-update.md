@@ -37,10 +37,10 @@ Tooling, the export reader and the greeting gate are merged. The base model is p
   synthetic chats are needed.
 - **Base model:** picked: `McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1` (CC-BY-4.0), lead decision 2026-10-18
   (§4a). Gemma 4 12B stays a comparison row.
-- **GPU:** Kaggle ran the Gemma 3 baseline (version 5). The Gemma 4 baseline moved to Colab; Kaggle stays free
-  for synthetic chats and training.
+- **GPU:** Kaggle ran the Gemma 3 baseline (version 5). The Gemma 4 baseline moved to Colab. Training and eval
+  run on Colab Pro (A100, paid; owner order 2026-10-18); a Kaggle T4 is only the fallback.
 
-`main`: 2,410 tests pass, 1 skipped, 12 expected failures (`uv run pytest -q`). The strict xfails pin known
+`main`: 3,753 tests pass, 12 expected failures (`uv run pytest -q`). The strict xfails pin known
 anonymiser limits.
 
 ## 2. Done
@@ -100,7 +100,8 @@ Older ones are also in spec §8 and the plan's "Changes from the plan"; the 2026
 - **Privacy backstops**, kept whatever the cleaner does: count-only phone check, strict 8-word leak gate,
   fail-closed phone masking (losing a price is cheap, leaking a number is not). Raw answers and the arena A/B
   key stay private until v0.2.
-- **Compute:** $0. On a T4 the measured smokes of Gemma 3 and AfriqueQwen3.5-9B-Instruct ran in float16
+- **Compute (owner, 2026-10-18):** paid compute = Colab Pro. Free T4s (Kaggle, Colab) run the baseline and smoke
+  tests; a Colab Pro A100 runs training and eval. Still no closed-API outputs in training data. On a T4 the measured smokes of Gemma 3 and AfriqueQwen3.5-9B-Instruct ran in float16
   (`qlora_smoke.compute_dtype` in `results/baseline/`); Gemma 4 is expected to need float32 under Unsloth (slower),
   not measured yet. Training code reaches
   the GPU only by syncing clean `origin/main` to the Hub, never during a run.
@@ -108,8 +109,8 @@ Older ones are also in spec §8 and the plan's "Changes from the plan"; the 2026
   `src/fym1/eval/judge_rubric.md`." Methods disclosure, not attribution.
 
 GPU history: Kaggle versions 2–4 of the baseline failed (no GPU, no internet or no HF token reached the run);
-version 5 ran Gemma 3 to the end; version 7 (Gemma 4) was queued, then cancelled and moved to Colab, so Kaggle
-stays free for training.
+version 5 ran Gemma 3 to the end; version 7 (Gemma 4) was queued, then cancelled and moved to Colab. Training
+later moved to Colab Pro (A100).
 
 **What the lead decided for the owner** (full list with reasons in the private operator handoff):
 
@@ -189,9 +190,10 @@ simple open licence (owner rule). Gemma 4's FLORES+ and smoke were not waited fo
 4. **Synthetic chats** with AfriqueQwen3.5-9B-Instruct (first entry of `04_synth` `GENERATORS`): run on Kaggle,
    automatic sample gate, promote.
 5. **Sync code** from clean `main`; set `MODEL_ID = "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1"` and a
-   `RUN_ID` in `01_train` (no defaults); **train** on Kaggle; log to `results/train_log.json`.
+   `RUN_ID` in `01_train` (no defaults); **train** on Colab Pro (A100; Kaggle T4 fallback only); log to
+   `results/train_log.json`.
 6. Optional: Gemma 4 FLORES+/smoke (Kaggle version 8) as a comparison row only.
-7. **Eval** (Task 5): 150 answers from base and fy-m1, Belebele + FLORES+ rerun, perplexity, blind judge,
+7. **Eval** (Task 5, Colab Pro A100): 150 answers from base and fy-m1, Belebele + FLORES+ rerun, perplexity, blind judge,
    `scores.json`; merge LoRA, 4-bit + GGUF Q4_K_M.
 8. **Leak gate** (automatic, strict): any 8-word match fails → fix data, filter or retrain. Automatic identity
    check (`scripts/identity_check.py`, strict): the 20 identity/safety answers plus the extra identity

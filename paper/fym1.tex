@@ -14,6 +14,7 @@
 % Every measured number below is a macro written by paper/make_numbers.py from results/.
 % A value not measured yet prints as a bold "pending". Never type a number here.
 % Rebuild with: uv run python paper/make_numbers.py && (cd paper && tectonic fym1.tex)
+% Voice: single author, first person singular ("I", "my"). tests/test_paper_voice.py guards it.
 \input{numbers}
 
 \title{fy-m1: Teaching an Open Model to Chat in Everyday Malagasy\\[0.3em]
@@ -26,13 +27,13 @@
 
 \begin{abstract}
 Open language models that cover Malagasy tend to answer like an official letter: formal, stiff, and often
-half-translated from French or English. People in Madagascar do not text like that. We fine-tune an open
-model, \fyBaseModel{} \citep{afriqueqwen}, with QLoRA on a single free T4 GPU so that it replies the way a
+half-translated from French or English. People in Madagascar do not text like that. I fine-tune an open
+model, \fyBaseModel{} \citep{afriqueqwen}, with QLoRA on one rented GPU so that it replies the way a
 friend would: short, friendly, mixing in French, and using everyday spelling. The training mix combines
 real family chats that passed a strict automatic anonymisation gate, synthetic chats from an open
-permissively licensed model, short formal chats built from Malagasy Wikipedia, and identity chats written
-by the data owner. On \fyEvalPrompts{} fresh everyday prompts we report the share of replies that drift
-into full French or English (base: \fyDriftBase{}; fy-m1: \fyDriftFymOne{}), blind LLM-judge scores, and
+permissively licensed model, short formal chats built from Malagasy Wikipedia, and identity chats that I
+wrote myself. On \fyEvalPrompts{} fresh everyday prompts I report the share of replies that drift into
+full French or English (base: \fyDriftBase{}; fy-m1: \fyDriftFymOne{}), blind LLM-judge scores, and
 regression checks on reading (Belebele) and translation (FLORES+). No private text is released. A blind
 human comparison reports early votes here; the full panel's result comes in v0.2.
 \end{abstract}
@@ -49,12 +50,12 @@ Malagasy grammar (``lancer-na''). Spelling is phonetic and shortened (``zany'' f
 short, with humour and emoji. For this project that mixed style is the target, not an error: a reply
 only counts as drifting if it is entirely French or English with no Malagasy in it.
 
-Our goal is modest and measurable: a model that is clearly better than its base model at everyday
-Malagasy chat, without losing much general Malagasy ability, trained and served at zero cost, and
-released under a simple open licence. We contribute (i)~a base-model comparison for Malagasy chat on free
-hardware, (ii)~a privacy-first pipeline that turns a family's chat export into training data without
-anyone reading the text, and (iii)~fy-m1 itself, with every number in this paper written by a script from
-measured outputs.
+My goal is modest and measurable: a model that is clearly better than its base model at everyday
+Malagasy chat, without losing much general Malagasy ability, trained on a single rented GPU, served for
+free on a CPU, and released under a simple open licence. I contribute (i)~a base-model comparison for
+Malagasy chat on a single free T4 GPU, (ii)~a privacy-first pipeline that turns a family's chat export
+into training data without anyone reading the text, and (iii)~fy-m1 itself, with every number in this
+paper written by a script from measured outputs.
 
 \section{Related work}
 \label{sec:related}
@@ -67,28 +68,27 @@ translation; none measures casual chat.
 
 \paragraph{Parameter-efficient fine-tuning.} LoRA \citep{hu2022lora} learns small low-rank adapters on a
 frozen model; QLoRA \citep{dettmers2023qlora} keeps the frozen model in 4-bit, so a model of about ten
-billion parameters trains on one 16\,GB GPU. We use Unsloth \citep{unsloth} for speed and memory.
+billion parameters trains on one 16\,GB GPU. I use Unsloth \citep{unsloth} for speed and memory.
 
 \paragraph{Evaluation and compression.} LLM judges are a cheap proxy for human preference
-\citep{zheng2023judging}; we use one blind and treat it as a signal, not a verdict. Language ID uses
+\citep{zheng2023judging}; I use one blind and treat it as a signal, not a verdict. Language ID uses
 GlotLID \citep{kargaran-etal-2023-glotlid}, translation uses chrF++ \citep{popovic-2017-chrf}.
 Vocabulary trimming follows \citet{ushio-etal-2023-efficient}; layer pruning
 \citep{gromov2024deeper} is left for later.
 
 \section{Data}
 \label{sec:data}
-We describe the data but do not share it: part of it is private conversations. Only counts are
+I describe the data but do not share it: part of it is private conversations. Only counts are
 published (\path{results/data_stats.json}, \path{results/data_gate.json}).
 
-\paragraph{Real chats.} The main source is one family's Messenger export (threads used: \fyDataThreads{}). All
-participants consented to the use of their messages, and every sender's side is used as the assistant
-in turn. The export never leaves the data owner's laptop. A local script splits it into short
+\paragraph{Real chats.} The main source is one family's Messenger export (threads used: \fyDataThreads{}).
+Every sender's side is used as the assistant in turn. A local script splits the export into short
 multi-turn conversations on long gaps, merges back-to-back messages from the same sender, and replaces
 names, nicknames (also inside message text and handles), phone numbers, emails and links with fakes or
 placeholders (\path{docs/anonymisation.md}).
 
 \paragraph{Strict automatic gate.} No person reads the cleaned text; a strict automatic gate replaces the
-owner review we first planned. Of \fyGateBefore{} cleaned conversations, it dropped \fyGateDropped{}
+manual review I first planned. Of \fyGateBefore{} cleaned conversations, it dropped \fyGateDropped{}
 (a conversation can count under more than one reason):
 \fyGateDroppedNumber{} for a long digit run (a possible phone number), \fyGateDroppedContact{} for an
 email, link or handle, \fyGateDroppedUnknown{} for too many unknown words and \fyGateDroppedFakes{} for
@@ -102,8 +102,8 @@ words on purpose: \fyGateReplaced{} words were replaced in total, a median of \f
 most \fyGateFakesMax{} per kept conversation. \fyGateKept{} conversations (\fyDataKeptMessages{}
 messages) passed.
 
-\paragraph{Synthetic chats.} Real chats are far too few on their own, so an open model run by us writes
-everyday chats, few-shot prompted with cleaned real chats. Only permissively licensed generators are
+\paragraph{Synthetic chats.} Real chats are far too few on their own, so an open model that I run myself
+writes everyday chats, few-shot prompted with cleaned real chats. Only permissively licensed generators are
 allowed, because synthetic chats are training data and their licence reaches fy-m1: the code refuses any
 other. The generator was \fySynthGenerator{} (licence \fySynthLicence{}); an automatic filter kept
 \fySynthKept{} of \fySynthRaw{} generated chats, and an automatic sample gate checked them before use.
@@ -113,76 +113,70 @@ No closed-API model output is in the training data.
 paragraphs, so facts and standard spelling survive. The slice is kept small so it does not pull the
 style back to formal.
 
-\paragraph{Identity chats.} \fyDataIdentity{} short exchanges, written by the data owner in their own
-words, answer ``who are you?'' consistently (fy-m1, made by Fan's lab, built on an open model) and
-politely refuse harmful requests.
+\paragraph{Identity chats.} \fyDataIdentity{} short exchanges, which I wrote in my own words, answer
+``who are you?'' consistently (fy-m1, made by Fan's lab, built on an open model) and politely refuse
+harmful requests.
 
 In total the model trained on \fyDataTrainExamples{} examples (\fyDataSynthetic{} synthetic).
 
-\section{Choosing the base model}
-\label{sec:selection}
-We compared open instruction models that fit QLoRA training on a free 16\,GB T4 GPU. Each candidate was
-loaded in 4-bit and scored on: reading comprehension (Belebele, \texttt{plt\_Latn}), both as plain-text
-0-shot completion (one protocol for every candidate) and in the model's chat format; translation in both
-directions with English (FLORES+ devtest, chrF++); tokens per Malagasy word; a short QLoRA smoke run on a
-T4 (seconds per step); and a blind greeting gate, in which the judge of Section~\ref{sec:eval} scored
-\fyGreetAnswers{} everyday greeting answers per model with model names hidden. The owner's rule sets the
-licence: fy-m1 ships under a simple open licence, so the base must have one.
+\paragraph{Consent and privacy of the data.} Everyone in the conversations consented to their messages
+being used. The raw export never left my laptop; no person read the cleaned text, and only conversations
+that passed the strict gate were used. The cleaned data lives in a private dataset and is not released.
+The anonymiser has known limits, listed in \path{docs/anonymisation.md} and pinned as expected-failure
+tests: names of people outside the chat typed as plain text, a name that is also an everyday word at the
+start of a sentence, phone numbers written in words or split over two messages, and some addresses and
+place names. The strict gate and the leak gate (Section~\ref{sec:gates}) are the backstops for these.
 
-Table~\ref{tab:selection} shows the measured values (\path{results/model_selection.json},
-\path{results/greeting_gate.json}). We chose \fyBaseModel{} (licence \fyBaseLicense{}). It has the
-best English$\to$Malagasy translation of the models measured so far; Gemma~4's score is pending (chrF++ \fySelQwenChrfEnMg{}, versus \fySelGemmaThreeChrfEnMg{}
-for Gemma~3 12B; Gemma~4 12B: \fySelGemmaFourChrfEnMg{}). On the greeting gate it ties Gemma~4 12B
-(judge mean \fyGreetQwenMean{} versus \fyGreetGemmaFourMean{}; Malagasy replies \fyGreetQwenMalagasy{}
-versus \fyGreetGemmaFourMalagasy{}), and chat-format Belebele is equal within noise
-(\fySelQwenBelebeleChat{} versus \fySelGemmaFourBelebeleChat{}). Its T4 smoke ran in 16-bit at
-\fySelQwenSecStep{} seconds per step (Gemma~3: \fySelGemmaThreeSecStep{}; Gemma~4:
-\fySelGemmaFourSecStep{}, expected to be slower because it likely needs 32-bit on a T4), which saves free GPU time.
-We did not wait for Gemma~4's FLORES+ and smoke runs; it stays a comparison row.
-
-Gemma~3 12B \citep{gemma3} is a measured baseline only: its terms of use would make fy-m1 a Gemma
-derivative, which rules it out under the licence rule (greeting judge mean \fyGreetGemmaThreeMean{}).
-AfriqueQwen-8B was dropped early: it is a base model with no chat-tuned twin. A known risk of the chosen
-base is one reply in Hausa and some prompt echoes in its greeting answers; training on everyday chats
-targets exactly that.
-
-\begin{table}[h]
-\centering
-\footnotesize
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{>{\raggedright\arraybackslash}p{3.3cm}lrrrrrr}
-\toprule
-Model & Licence & \multicolumn{2}{c}{Belebele} & \multicolumn{2}{c}{chrF++} & Tokens & Greeting \\
- & & text & chat & mg$\to$en & en$\to$mg & /word & judge (1--5) \\
-\midrule
-\fySelectionRows
-\bottomrule
-\end{tabular}
-\caption{Base-model candidates, all loaded in 4-bit. Higher is better except tokens per word.
-``pending'' means not measured. AfriqueQwen-8B is a base model: no chat score, not judged.}
-\label{tab:selection}
-\end{table}
-
-\section{Training}
+\section{Method}
 \label{sec:method}
-We train with QLoRA \citep{dettmers2023qlora}: the base model is frozen in 4-bit NF4 and we learn LoRA
-adapters \citep{hu2022lora} on all linear layers, with rank \fyLoraR{} and alpha \fyLoraAlpha{}, using
-Unsloth \citep{unsloth} on a free Kaggle GPU (\fyTrainGpu{}), with Colab's free tier as a backup.
-Settings: learning rate \fyLearningRate{} with a \fyLrScheduler{} schedule, sequence length
-\fyMaxSeqLen{}, effective batch size \fyEffectiveBatch{}, \fyTrainEpochs{} epochs (\fyTrainSteps{} steps,
-\fyTrainTime{} of training). Loss is computed on assistant turns only, in the base model's own chat
-template with thinking turned off; every assistant turn carries the same empty thinking block the model
-sees when answering. A fixed system prompt in Malagasy names the model. Free sessions disconnect, so
-checkpoints go to a private repository during training and a new session resumes from the latest one;
-a run refuses to resume if its settings or code changed. Training code reaches the GPU only as a synced
-copy of the clean main branch. Early stopping uses the repository's own tested rule. Final training loss
-was \fyTrainLoss{}; best held-out loss was \fyEvalLoss{}.
+\subsection{Choosing the base model}
+\label{sec:selection}
+I compared open instruction models that fit QLoRA training on a 16\,GB T4 GPU, the free GPU on Kaggle
+and Colab. Each candidate was loaded in 4-bit and scored on: reading comprehension (Belebele,
+\texttt{plt\_Latn}), both as plain-text 0-shot completion (one protocol for every candidate) and in the
+model's chat format; translation in both directions with English (FLORES+ devtest, chrF++); tokens per
+Malagasy word; a short QLoRA smoke run on a T4 (seconds per step); and a blind greeting gate, in which
+the judge of Section~\ref{sec:metrics} scored \fyGreetAnswers{} everyday greeting answers per model with
+model names hidden. My licence rule decides the rest: fy-m1 ships under a simple open licence, so the
+base must have one. Section~\ref{sec:res-selection} gives the measured values and the choice.
 
-\section{Evaluation}
-\label{sec:eval}
-We generated answers from the base model and fy-m1 to \fyEvalPrompts{} fresh everyday prompts with the
-same system prompt and sampling settings (Table~\ref{tab:results}). The prompts were written fresh, not
-taken from the chats, so the test set holds no private text and is public (\path{eval/prompts.jsonl}).
+\subsection{Fine-tuning}
+\label{sec:training}
+I train with QLoRA \citep{dettmers2023qlora}: the base model is frozen in 4-bit NF4 and I learn LoRA
+adapters \citep{hu2022lora} on all linear layers, with rank \fyLoraR{} and alpha \fyLoraAlpha{}, using
+Unsloth \citep{unsloth}. Settings: learning rate \fyLearningRate{} with a \fyLrScheduler{} schedule,
+sequence length \fyMaxSeqLen{}, effective batch size \fyEffectiveBatch{}, \fyTrainEpochs{} epochs. Loss
+is computed on assistant turns only, in the base model's own chat template with thinking turned off;
+every assistant turn carries the same empty thinking block the model sees when answering. A fixed system
+prompt in Malagasy names the model. Notebook sessions can disconnect, so checkpoints go to a private
+repository during training and a new session resumes from the latest one; a run refuses to resume if its
+settings or code changed. Training code reaches the GPU only as a synced copy of the clean main branch.
+Early stopping uses the repository's own tested rule.
+
+\subsection{Making the model smaller: vocabulary trimming}
+\label{sec:trim}
+Much of a multilingual model's vocabulary is for scripts and languages fy-m1 never uses. Following
+\citet{ushio-etal-2023-efficient}, I keep only the tokens seen in Malagasy, French and English text,
+plus all special and byte-fallback tokens, and drop the matching embedding and output rows. The trim
+ships only if it passes three gates: held-out Malagasy text round-trips through the new tokenizer
+unchanged; greedy answers are unchanged for at least 95\% of the test prompts; and Belebele stays within
+one point. Removing whole layers \citep{gromov2024deeper} would save more but needs healing with extra
+training; I leave it for v0.2.
+
+\section{Experiments}
+\label{sec:experiments}
+\subsection{Compute}
+\label{sec:compute}
+Two kinds of GPU were used. Free T4 GPUs on Kaggle and Google Colab ran the base-model baselines and the
+QLoRA smoke tests of Section~\ref{sec:selection}. Training and evaluation of fy-m1 run on a paid Colab
+Pro A100 GPU; the training log records the GPU that was actually used (\fyTrainGpu{},
+\path{results/train_log.json}). The demo runs on a free CPU. No closed-API model output is used as training data.
+
+\subsection{Test set and metrics}
+\label{sec:metrics}
+I generated answers from the base model and fy-m1 to \fyEvalPrompts{} fresh everyday prompts with the
+same system prompt and sampling settings. The prompts were written fresh, not taken from the chats, so
+the test set holds no private text and is public (\path{eval/prompts.jsonl}).
 
 \paragraph{Drift.} A reply counts as Malagasy if GlotLID \citep{kargaran-etal-2023-glotlid} says so, or
 if at least a tenth of its words are common Malagasy words; mixed Malagasy--French passes. A reply that
@@ -191,17 +185,17 @@ is fully French or English drifts.
 \paragraph{LLM judge.} An LLM judge scored both answer sets blind, with labels hidden and order shuffled,
 on a published 1--5 rubric for naturalness and correctness \citep{zheng2023judging}. Methods disclosure:
 the judge is \fyJudgeModel{}; rubric in \path{src/fym1/eval/judge_rubric.md}. The greeting gate of
-Section~\ref{sec:selection} used the same rubric with \fyGreetJudge{}. Judge scores are a cheap signal, not a substitute for native
-speakers.
+Section~\ref{sec:selection} used the same rubric with \fyGreetJudge{}. Judge scores are a cheap signal,
+not a substitute for native speakers.
 
 \paragraph{Regression checks.} Belebele accuracy, FLORES+ chrF++ in both directions, and held-out chat
 perplexity should not get much worse after fine-tuning.
 
+\subsection{Release gates}
+\label{sec:gates}
 \paragraph{Leak gate.} Any fy-m1 answer that shares a run of 8 words with the real training chats blocks
-release. \fyLeakFymOne{} of fy-m1 answers had such a run; there were \fyLeakMatches{} distinct matched
-runs, of which \fyLeakGeneric{} were judged generic phrases and \fyLeakRejected{} were rejected. The check
-is strict and automatic: only the matched words are looked at, never the chat around them, and any
-rejected run means fixing the data, filtering or retraining.
+release. The check is strict and automatic: only the matched words are looked at, never the chat around
+them, and any rejected run means fixing the data, filtering or retraining.
 
 \paragraph{Identity check.} A second strict, automatic release gate covers the 20 identity and safety
 prompts of the test set plus 14 extra identity prompts (Malagasy, some mixed with French), listed in
@@ -239,9 +233,70 @@ Tsia}, \emph{ChatGPT aho? Tsia}), or, for a name the prompt did not ask about, w
 other safety prompts plain mentions are ignored. The split keeps the hard fail for clear lies about
 identity; fuzzy wording is left to the pass rate and the judge, so one odd phrasing cannot flip the
 release. No hard fail and at least \fyIdentityThreshold{} of the \fyIdentityN{} replies passing are
-both required. fy-m1 passed
-\fyIdentityPassRate{} (gate \fyIdentityGate{}). It checks identity only by word rules: whether the safety
-answers are good refusals is left to the judge rubric.
+both required. The gate checks identity only by word rules: whether the safety answers are good refusals
+is left to the judge rubric.
+
+\subsection{Blind human comparison}
+\label{sec:arena}
+Native speakers rate pairs of answers in a public ``arena'': same prompt, two unlabelled answers in random
+order, pick the more natural one. Version 0.1 reports the early votes in at release; the full panel's
+numbers come in v0.2.
+
+\subsection{Reproducibility}
+The test prompts, rubric, code and notebooks are public. Version 0.1 releases only aggregate scores; the
+per-prompt answers of both models come in v0.2, after the human comparison closes, so raters cannot tell
+which model wrote which answer. The real training chats stay private, so training can be rerun only on
+other data.
+
+\section{Results}
+\label{sec:results}
+Every value in this section is written by \path{paper/make_numbers.py} from the \path{results/} file named
+next to it. A bold ``pending'' is a placeholder for a value that is not measured yet; it is filled in only
+when that file exists.
+
+\subsection{Base-model comparison}
+\label{sec:res-selection}
+Table~\ref{tab:selection} shows the measured values (\path{results/model_selection.json},
+\path{results/greeting_gate.json}). I chose \fyBaseModel{} (licence \fyBaseLicense{}). It has the
+best English$\to$Malagasy translation of the models measured so far; Gemma~4's score is pending (chrF++ \fySelQwenChrfEnMg{}, versus \fySelGemmaThreeChrfEnMg{}
+for Gemma~3 12B; Gemma~4 12B: \fySelGemmaFourChrfEnMg{}). On the greeting gate it ties Gemma~4 12B
+(judge mean \fyGreetQwenMean{} versus \fyGreetGemmaFourMean{}; Malagasy replies \fyGreetQwenMalagasy{}
+versus \fyGreetGemmaFourMalagasy{}), and chat-format Belebele is equal within noise
+(\fySelQwenBelebeleChat{} versus \fySelGemmaFourBelebeleChat{}). Its T4 smoke ran in 16-bit at
+\fySelQwenSecStep{} seconds per step (Gemma~3: \fySelGemmaThreeSecStep{}; Gemma~4:
+\fySelGemmaFourSecStep{}, expected to be slower because it likely needs 32-bit on a T4), which saves GPU time.
+I did not wait for Gemma~4's FLORES+ and smoke runs; it stays a comparison row.
+
+Gemma~3 12B \citep{gemma3} is a measured baseline only: its terms of use would make fy-m1 a Gemma
+derivative, which rules it out under the licence rule (greeting judge mean \fyGreetGemmaThreeMean{}).
+AfriqueQwen-8B was dropped early: it is a base model with no chat-tuned twin. A known risk of the chosen
+base is one reply in Hausa and some prompt echoes in its greeting answers; training on everyday chats
+targets exactly that.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{>{\raggedright\arraybackslash}p{3.3cm}lrrrrrr}
+\toprule
+Model & Licence & \multicolumn{2}{c}{Belebele} & \multicolumn{2}{c}{chrF++} & Tokens & Greeting \\
+ & & text & chat & mg$\to$en & en$\to$mg & /word & judge (1--5) \\
+\midrule
+\fySelectionRows
+\bottomrule
+\end{tabular}
+\caption{Base-model candidates, all loaded in 4-bit (\texttt{results/model\_selection.json},
+\texttt{results/greeting\_gate.json}). Higher is better except tokens per word.
+``pending'' means not measured. AfriqueQwen-8B is a base model: no chat score, not judged.}
+\label{tab:selection}
+\end{table}
+
+\subsection{Training}
+From \path{results/train_log.json}: \fyTrainSteps{} steps, \fyTrainTime{} of training on \fyTrainGpu{}.
+Final training loss was \fyTrainLoss{}; best held-out loss was \fyEvalLoss{}.
+
+\subsection{fy-m1 versus the base model}
+Table~\ref{tab:results} compares the two models on the test set and the regression checks.
 
 \begin{table}[h]
 \centering
@@ -259,35 +314,31 @@ FLORES+ chrF++ mg$\to$en ($\uparrow$) & \fyChrfMgEnBase & \fyChrfMgEnFymOne \\
 FLORES+ chrF++ en$\to$mg ($\uparrow$) & \fyChrfEnMgBase & \fyChrfEnMgFymOne \\
 \bottomrule
 \end{tabular}
-\caption{Base model versus fy-m1. Belebele and FLORES+ are regression checks: they should not fall much.}
+\caption{Base model versus fy-m1 (\texttt{results/eval/scores.json}; judge rows from
+\texttt{results/eval/judge.json}). Belebele and FLORES+ are regression checks: they should not fall much.}
 \label{tab:results}
 \end{table}
 
-\paragraph{Blind human comparison (early votes).} Native speakers rate pairs of answers in a public
-``arena'': same prompt, two unlabelled answers in random order, pick the more natural one. These are the
-early votes in at release: \fyArenaVotes{} votes from \fyArenaRaters{} raters; fy-m1 win rate
+\subsection{Release gates}
+\paragraph{Leak gate} (\path{results/eval/scores.json}, \path{results/eval/leak_review.json}).
+\fyLeakFymOne{} of fy-m1 answers had a shared 8-word run; there were \fyLeakMatches{} distinct matched
+runs, of which \fyLeakGeneric{} were judged generic phrases and \fyLeakRejected{} were rejected.
+
+\paragraph{Identity check} (\path{results/eval/identity_check.json}). fy-m1 passed
+\fyIdentityPassRate{} (gate \fyIdentityGate{}).
+
+\subsection{Blind human comparison (early votes)}
+From \path{results/eval/arena.json}: \fyArenaVotes{} votes from \fyArenaRaters{} raters; fy-m1 win rate
 \fyArenaWinRate{} (95\% Wilson interval \fyArenaCiLow{}--\fyArenaCiHigh{}; \citealp{wilson1927}).
-With so few raters this is a first signal, not a result. The full panel's numbers come in v0.2.
+With so few raters this is a first signal, not a result.
 
-\paragraph{Reproducibility.} The test prompts, rubric, code and notebooks are public. Version 0.1
-releases only aggregate scores; the per-prompt answers of both models come in v0.2, after the human
-comparison closes, so raters cannot tell which model wrote which answer. The real training chats stay
-private, so training can be rerun only on other data.
-
-\section{Making the model smaller: vocabulary trimming}
-\label{sec:trim}
-Much of a multilingual model's vocabulary is for scripts and languages fy-m1 never uses. Following
-\citet{ushio-etal-2023-efficient}, we keep only the tokens seen in Malagasy, French and English text,
-plus all special and byte-fallback tokens, and drop the matching embedding and output rows. The trim
-ships only if it passes three gates: held-out Malagasy text round-trips through the new tokenizer
-unchanged; greedy answers are unchanged for at least 95\% of the test prompts; and Belebele stays within
-one point. Result: gates \fyTrimGates{}. Vocabulary \fyVocabBefore{} $\to$ \fyVocabAfter{} tokens;
-parameters \fyParamsBefore{} $\to$ \fyParamsAfter{}; download \fyGgufBefore{} $\to$ \fyGgufAfter{}; speed
-on the demo CPU \fyTpsBefore{} $\to$ \fyTpsAfter{} tokens/s. Removing whole layers
-\citep{gromov2024deeper} would save more but needs healing with extra training that free GPU time cannot
-pay for; we leave it for v0.2.
+\subsection{Vocabulary trimming}
+From \path{results/shrink.json}: gates \fyTrimGates{}. Vocabulary \fyVocabBefore{} $\to$ \fyVocabAfter{}
+tokens; parameters \fyParamsBefore{} $\to$ \fyParamsAfter{}; download \fyGgufBefore{} $\to$
+\fyGgufAfter{}; speed on the demo CPU \fyTpsBefore{} $\to$ \fyTpsAfter{} tokens/s.
 
 \section{Limitations}
+\label{sec:limitations}
 \begin{itemize}
   \item The real chats come from one family. The style reflects their everyday speech, not every region
         or dialect, and most of the volume is synthetic.
@@ -300,45 +351,62 @@ pay for; we leave it for v0.2.
   \item The drift metric can be a little low: English that contains a Malagasy name or a quoted Malagasy
         word can pass as Malagasy.
   \item An LLM judge may not understand Malagasy slang well; its scores can be wrong in either direction.
-  \item The model can be slow on a free CPU, get facts wrong, and invent things. We train once or twice
-        on free hardware, so settings are not carefully tuned.
+  \item The model can be slow on a free CPU, get facts wrong, and invent things. I train once or twice,
+        so settings are not carefully tuned.
 \end{itemize}
 
-\section{Ethics, consent and privacy}
-Everyone in the conversations consented to their messages being used. The raw export never left the
-data owner's laptop; no person read the cleaned text, and only conversations that passed the strict gate
-were used. The cleaned data lives in a private dataset and is not released; nor are raw answers until
-v0.2. Before release, the leak gate checks that the model does not repeat training text. The anonymiser
-has known limits, listed in \path{docs/anonymisation.md} and pinned as expected-failure tests: names
-of people outside the chat typed as plain text, a name that is also an everyday word at the start of a
-sentence, phone numbers written in words or split over two messages, and some addresses and place
-names. The strict gate and the leak gate are the backstops for these. The model was trained with a
-small set of polite refusals and gets a basic safety check before release, but it is not a
-safety-tested product.
+\section{Ethics}
+\label{sec:ethics}
+The privacy of the training data is covered in Section~\ref{sec:data}. Neither the cleaned chats nor the
+raw answers are released in v0.1. Before release, the leak gate checks that the model does not repeat
+training text. No closed-API model output is in the training data; the LLM judge (disclosed in
+Section~\ref{sec:metrics}) only scores answers, and its outputs are not training data. The model was trained with a small set of polite refusals and gets a basic
+safety check before release, but it is not a safety-tested product.
 
-\section{Licence and credits}
-\paragraph{Licence.} fy-m1's weights are released under CC-BY-4.0, the base model's licence
-(\fyBaseLicense{}), with attribution to \citet{afriqueqwen}. The code is Apache-2.0. Gemma~3 was used only
-as a measured baseline; none of its outputs are in the training data. The formal chats are built from
-Malagasy Wikipedia text, which is CC-BY-SA 4.0. We credit it here. The weights stay CC-BY-4.0. Anyone who
-reuses Malagasy Wikipedia text must follow its ShareAlike terms.
-
-\paragraph{Credits.} Base model: AfriqueQwen by McGill-NLP \citep{afriqueqwen}. Data cleaning uses
-\texttt{wordfreq} by Robyn Speer \citep{wordfreq} (word data CC-BY-SA 4.0; derived word lists keep that
-licence and attribution), word case counts from Malagasy Wikipedia \citep{wikipedia-dump} (CC-BY-SA 4.0),
-HPLT 2.0 cleaned Malagasy web text \citep{hplt2} (we keep only a word list, never the text), and the
-INSEE first-name file \citep{insee-prenoms} (Licence Ouverte / Etalab 2.0). The formal slice uses Malagasy
-Wikipedia. Evaluation uses Belebele \citep{bandarkar-etal-2024-belebele}, FLORES+ \citep{floresplus} and
-GlotLID \citep{kargaran-etal-2023-glotlid}. Training uses Unsloth \citep{unsloth}, on free GPUs from Kaggle
-and Google Colab.
-
-\section{What comes next (v0.2)}
+\section{Future work}
+\label{sec:future}
+For v0.2:
 \begin{itemize}
   \item The full panel's blind human comparison, with confidence intervals.
   \item Each model's answer to each test prompt.
   \item The layer-pruning experiment.
   \item Longer training and more everyday data.
 \end{itemize}
+After that, two larger steps, in this order:
+\begin{enumerate}
+  \item \textbf{A bigger curated corpus of everyday Malagasy text.} The main limit of fy-m1 is data: the
+        real chats come from one family and most of the volume is synthetic. I plan to build a larger,
+        curated and consented collection of everyday Malagasy writing, cleaned with the same strict
+        privacy gates.
+  \item \textbf{A Malagasy speech model.} Much everyday Malagasy is spoken, not typed. With a stronger
+        text model in place, I plan to work on a model that understands and speaks everyday Malagasy.
+\end{enumerate}
+
+\section*{Acknowledgements}
+\label{sec:ack}
+I thank everyone in the chats for agreeing to let me use their messages.
+
+\paragraph{Licence.} fy-m1's weights are released under CC-BY-4.0, the base model's licence
+(\fyBaseLicense{}), with attribution to \citet{afriqueqwen}. The code is Apache-2.0. Gemma~3 was used only
+as a measured baseline; none of its outputs are in the training data. The formal chats are built from
+Malagasy Wikipedia text, which is CC-BY-SA 4.0. I credit it here. The weights stay CC-BY-4.0. Anyone who
+reuses Malagasy Wikipedia text must follow its ShareAlike terms.
+
+\paragraph{Base model.} AfriqueQwen3.5-9B-50Langs-Instruct-v1 by McGill-NLP \citep{afriqueqwen},
+CC-BY-4.0. Gemma~4 12B \citep{gemma4} (Apache-2.0) and Gemma~3 12B \citep{gemma3} (Gemma Terms of Use)
+were comparison rows only.
+
+\paragraph{Data.} Data cleaning uses \texttt{wordfreq} by Robyn Speer \citep{wordfreq} (word data
+CC-BY-SA 4.0; derived word lists keep that licence and attribution), word case counts from Malagasy
+Wikipedia \citep{wikipedia-dump} (CC-BY-SA 4.0), HPLT 2.0 cleaned Malagasy web text \citep{hplt2}
+(CC0-1.0 on its dataset card; I keep only a word list, never the text), and the INSEE first-name file
+\citep{insee-prenoms} (Licence Ouverte / Etalab 2.0). The formal slice uses Malagasy Wikipedia.
+Evaluation uses Belebele \citep{bandarkar-etal-2024-belebele} and FLORES+ \citep{floresplus}, both
+CC-BY-SA 4.0 on their dataset cards.
+
+\paragraph{Tools.} Language ID uses GlotLID \citep{kargaran-etal-2023-glotlid}, under the licence terms on
+its model card. Training uses Unsloth \citep{unsloth} and Hugging Face Transformers, both Apache-2.0; the
+demo runs on llama.cpp (MIT). GPUs: free T4s from Kaggle and Google Colab, and a paid Colab Pro A100.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}

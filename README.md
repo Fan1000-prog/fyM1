@@ -4,7 +4,7 @@ An open AI model that chats in everyday Malagasy — the way people really text,
 
 "fy" means sweet or pleasant in Malagasy. M is for Malagasy. 1 is the first version.
 
-**[Try it](#try-it)** · [Paper](paper/fym1.tex) · [Model card](MODEL_CARD.md) ·
+**[Try it](#try-it)** · [Paper](paper/fym1.tex) · [Model card](MODEL_CARD.md) · [Roadmap](#roadmap) ·
 [Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)
 
 > **Status: v0.1.** *pending* means not measured yet. Coming in v0.2: the full panel's blind human
@@ -25,7 +25,7 @@ fy-m1 aims for that style. Mixing Malagasy and French is correct here. A reply o
 if it is fully French or English with no Malagasy at all.
 
 fy-m1 is not a frontier model. The goal is simple: clearly and measurably better than its base model at
-everyday Malagasy chat, trained for $0 and shared under an open licence.
+everyday Malagasy chat, trained on one rented GPU and shared under an open licence.
 
 ## Try it
 
@@ -74,7 +74,7 @@ Where each number comes from:
 
 ## How the base model was chosen
 
-We tested open chat models that fit training on one free 16 GB T4 GPU. fy-m1 must ship under a simple open
+We tested open chat models that fit training on one 16 GB T4 GPU (the free GPU on Kaggle and Colab). fy-m1 must ship under a simple open
 licence, so the base needs one too.
 
 | | AfriqueQwen3.5-9B-Instruct | Gemma 4 12B | Gemma 3 12B (baseline only) |
@@ -88,7 +88,7 @@ licence, so the base needs one too.
 | Licence | <!-- n:sel-qwen-license -->CC-BY-4.0<!-- /n --> | <!-- n:sel-gemma4-license -->Apache-2.0<!-- /n --> | <!-- n:sel-gemma3-license -->Gemma Terms of Use<!-- /n --> |
 
 Winner: AfriqueQwen3.5-9B-Instruct. Of the models measured so far, it translates English into Malagasy
-best (Gemma 4's score is still pending). It ties Gemma 4 on greetings and reading, and trains in 16-bit on a free GPU (Gemma 4 is expected to need slower 32-bit). Gemma 3 is only a
+best (Gemma 4's score is still pending). It ties Gemma 4 on greetings and reading, and trains in 16-bit on a T4 (Gemma 4 is expected to need slower 32-bit). Gemma 3 is only a
 comparison: its terms would make fy-m1 a Gemma derivative. Full table: the paper, Table 1.
 
 ## How it was made
@@ -98,18 +98,19 @@ comparison: its terms would make fy-m1 a Gemma derivative. Full table: the paper
 | Real chats | One family's Messenger export. Everyone in it agreed. Each person's side is used as the assistant in turn. | That is where the everyday style lives. |
 | Cleaning | Names, nicknames, phone numbers, emails, links and handles are replaced **on the owner's laptop**. Raw chats never go to git, the cloud or any public place. | Privacy. |
 | Strict gate | No one reads the cleaned text. A script drops any conversation with a long number, a contact or too many unknown words, and replaces every word it does not know with a fake name. <!-- n:gate-kept -->192<!-- /n --> of <!-- n:gate-before -->260<!-- /n --> conversations passed. | Losing a word is cheap. Leaking a name is not. |
-| Synthetic chats | An open model with a permissive licence, run by us, writes more everyday chats from cleaned examples. | Real chats are too few. No paid APIs, no closed-model outputs. Budget: $0. |
+| Synthetic chats | An open model with a permissive licence, run by us, writes more everyday chats from cleaned examples. | Real chats are too few. No closed-model outputs. |
 | Formal slice | A small set of chats from Malagasy Wikipedia. | Keeps facts and spelling. Small, so the style stays casual. |
 | Identity chats | A few "who are you?" answers and polite refusals, written by the owner. | It says it is fy-m1, made by Fan's lab, and refuses harmful requests. Not a safety feature. |
-| Training | **QLoRA** on a free Kaggle T4 GPU (Colab as backup): the model stays frozen in 4-bit and we train small add-on weights. Loss on the assistant's replies only. | A model this size fits one free GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). |
-| Checkpoints | Saved to a private repo often; a new session resumes from the latest one. | Free sessions disconnect. |
+| Training | **QLoRA** on a Colab Pro A100 GPU (paid): the model stays frozen in 4-bit and we train small add-on weights. Loss on the assistant's replies only. | A model this size fits one GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). I train on a Colab Pro A100; the free T4 is used for the baseline and smoke tests. |
+| Checkpoints | Saved to a private repo often; a new session resumes from the latest one. | Colab sessions can disconnect. |
 | Test prompts | Written fresh, never taken from the chats. | So they can be public and anyone can run them. |
 | Leak check | Any fy-m1 answer that shares a run of 8 words with the real chats blocks release, unless it is a generic phrase. | Privacy again. |
 | Trimming | Drop tokens Malagasy, French and English never use. Ships only if it passes its checks. | A smaller download. |
 
 ## How to reproduce
 
-You need [uv](https://docs.astral.sh/uv/) and a free Kaggle or Google Colab account.
+You need [uv](https://docs.astral.sh/uv/), a free Kaggle or Google Colab account for the T4 steps, and
+Colab Pro (paid) for training and evaluation on an A100.
 
 ```bash
 git clone https://github.com/Fan1000-prog/fy-m1 && cd fy-m1
@@ -119,10 +120,10 @@ uv run pytest -q          # all code tests
 
 Then, in order:
 
-1. `notebooks/00_baseline.ipynb` — scores the candidate models on a T4.
+1. `notebooks/00_baseline.ipynb` — scores the candidate models on a free T4.
 2. `notebooks/04_synth.ipynb` — writes synthetic chats with an open, permissively licensed model.
-3. `notebooks/01_train.ipynb` — trains fy-m1. Rerun it after a disconnect; it resumes.
-4. Evaluation: answers the test prompts, scores both models (`scripts/score.py`), exports the GGUF.
+3. `notebooks/01_train.ipynb` — trains fy-m1 on a Colab Pro A100. Rerun it after a disconnect; it resumes.
+4. Evaluation (Colab Pro A100): answers the test prompts, scores both models (`scripts/score.py`), exports the GGUF.
 5. `notebooks/03_trim.ipynb` — vocabulary trimming and its checks.
 6. Rebuild the numbers and the paper:
 
@@ -135,6 +136,17 @@ The training chats are private, so you cannot retrain on the same data. You can 
 and train on your own chats with `scripts/build_chats.py`. Kaggle and Colab steps are in
 [`docs/kaggle_operator.md`](docs/kaggle_operator.md) and [`docs/colab_operator.md`](docs/colab_operator.md).
 
+## Roadmap
+
+Plans, not promises. In this order:
+
+1. **v0.2:** the full panel's blind human ratings, each model's answer to each test prompt, the
+   layer-pruning test, and longer training.
+2. **More everyday Malagasy text.** A bigger, hand-picked set of everyday Malagasy writing, from people who
+   agree to share it, cleaned with the same strict privacy checks. More real data is what fy-m1 needs most.
+3. **A Malagasy speech model.** A lot of everyday Malagasy is spoken, not typed. Next comes a model that
+   understands and speaks it.
+
 ## Repo layout
 
 | Path | What |
@@ -143,7 +155,7 @@ and train on your own chats with `scripts/build_chats.py`. Kaggle and Colab step
 | `src/fym1/eval/` | Drift metric, baseline scoring, judge rubric |
 | `src/fym1/train/`, `src/fym1/shrink/` | Training helpers, vocabulary trimming |
 | `scripts/` | Command-line tools (build data, score, make the selection table) |
-| `notebooks/` | Kaggle / Colab notebooks (T4) |
+| `notebooks/` | Kaggle / Colab notebooks (free T4: baseline, smoke tests; Colab Pro A100: training, eval) |
 | `eval/prompts.jsonl` | The public test prompts |
 | `spaces/chat`, `spaces/arena` | The demo and the rating app on Hugging Face |
 | `paper/` | The paper; `make_numbers.py` turns `results/` into its numbers |
@@ -169,7 +181,7 @@ and train on your own chats with `scripts/build_chats.py`. Kaggle and Colab step
 - Tests: [Belebele](https://huggingface.co/datasets/facebook/belebele) and
   [FLORES+](https://huggingface.co/datasets/openlanguagedata/flores_plus); language ID with
   [GlotLID](https://huggingface.co/cis-lmu/glotlid). Training with [Unsloth](https://github.com/unslothai/unsloth).
-- Free GPUs: Kaggle and Google Colab.
+- GPUs: free T4s on Kaggle and Google Colab (baseline, smoke tests); a paid Colab Pro A100 (training, eval).
 
 ### Third-party data
 
