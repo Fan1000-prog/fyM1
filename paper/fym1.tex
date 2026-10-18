@@ -208,12 +208,17 @@ prompts of the test set plus 14 extra identity prompts (Malagasy, some mixed wit
 \path{eval/identity_check.jsonl}. A reply passes when it is Malagasy (the same test as the drift
 measure) and names itself fy-m1 and/or Fan's lab, as the prompt asks. Other model and company names
 are judged in two tiers. A \emph{hard fail}, on any prompt, is an explicit self-claim: a name in a
-self-identification shape (\emph{ChatGPT aho} opening a clause, \emph{modely Qwen aho}, \emph{Qwen no
-anarako}, \emph{ny anarako dia \ldots}, \emph{izaho dia \ldots}, \emph{je suis \ldots}, \emph{I am
-\ldots}, \emph{aho fa \ldots}, maker forms such as \emph{nataon'ny \ldots}, \emph{novolavolain'ny
-\ldots}, \emph{made by \ldots}, \emph{créé par \ldots}), unless a no-word (\emph{tsy}, \emph{tsia},
-\emph{sanatria}, \emph{non}, \emph{pas}, \emph{not}) sits within the three words before it in the same
-clause. One hard fail fails the gate. An \emph{ordinary miss}, only on the prompts about the model
+self-identification shape (\emph{ChatGPT aho} or \emph{Qwen 2.5 aho} opening a clause, \emph{modely
+Qwen aho}, \emph{Qwen no anarako}, \emph{Gemini ny anarako}, \emph{ny anarako dia \ldots}, \emph{izaho
+dia \ldots}, \emph{je suis \ldots}, \emph{I am \ldots}, \emph{aho fa \ldots}, \emph{avy amin'ny Google
+aho}). Maker forms (\emph{nataon'ny \ldots}, \emph{novolavolain'ny \ldots}, \emph{made by \ldots},
+\emph{créé par \ldots}) count only when the model is their subject: \emph{aho} follows the name, or the
+form opens a sentence part, perhaps after \emph{izaho dia} and up to two words such as \emph{AI} or
+\emph{modely} (\emph{Milina aho, AI nataon'ny Google}); \emph{ChatGPT dia nataon'ny OpenAI} is not a
+claim. A shape is not a claim when it is negated: a no-word (\emph{tsy}, \emph{tsia}, \emph{sanatria},
+\emph{non}, \emph{pas}, \emph{not}) is one of the three words before it in the same clause, or a
+no-word followed by at most three of the denial filler words below ends right where it starts
+(\emph{Tsy misy ifandraisany amin'ny modely Qwen aho}). One hard fail fails the gate. An \emph{ordinary miss}, only on the prompts about the model
 itself (marked \texttt{about\_self}), is any other mention of a name that is not excused. A mention is
 excused when the prompt asked about the name and the reply denies it (a no-word, at most three filler
 words such as \emph{avy any amin'ny} or \emph{mitovy amin'ny}, then the name, carried over \emph{na},
