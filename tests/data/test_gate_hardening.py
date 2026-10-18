@@ -29,6 +29,7 @@ def record(rid, *turns):
         "612 345 678 €",  # French mobile without its 0
         "712345678 euros",
         "123 456 789 Ar",  # 9 digits, not ending 000, no cents
+        "123 456 789,00 €",  # cents never make a 9-10 digit run a price
         "1 234 567 891 Ar",  # 10 digits
     ],
 )
@@ -42,7 +43,7 @@ def test_h1_nine_or_ten_digit_runs_are_phones_unless_price_shaped(text):
         "150 000 000 Ar",  # grouped thousands ending 000
         "1 500 000 000 Ariary",
         "150.000.000 fmg",
-        "123 456 789,00 €",  # cents
+        "123 456 000,00 €",  # grouped ending 000, cents
         "1 500 000 Ar",  # 7 digits: unchanged
         "25 000 000 Ar",  # 8 digits: unchanged
     ],
