@@ -36,12 +36,12 @@ def test_load_threads_skips_media_and_unsent():
 def test_load_threads_merges_pages_in_time_order():
     [thread] = load_threads(FIXTURES / "dyi_export")
 
-    assert thread.title == "Nirina Rakoto"
-    assert thread.participants == ["Nirina Rakoto", "Tojo Randria"]
+    assert thread.title == "Hanta Rakoto"
+    assert thread.participants == ["Hanta Rakoto", "Tojo Randria"]
     timestamps = [m.ts_ms for m in thread.messages]
     assert timestamps == sorted(timestamps)
     assert thread.messages[0] == Message(
-        sender="Nirina Rakoto", text="Salama ry Tojo! De aona?", ts_ms=1_760_000_000_000
+        sender="Hanta Rakoto", text="Salama ry Tojo! De aona?", ts_ms=1_760_000_000_000
     )
 
 
@@ -65,14 +65,14 @@ def test_load_threads_harvests_nicknames():
     "text",
     [
         "You sent a photo.",
-        "Nirina sent 3 photos.",
-        "Nirina a envoyé 2 photos.",
-        "Nirina sent a link.",
-        "Nirina started a video chat.",
-        "You missed a call from Nirina.",
-        "Nirina liked a message",
-        "You reacted 😂 to Nirina's message",
-        "Nirina set the nickname for Tojo to Bebe.",
+        "Hanta sent 3 photos.",
+        "Hanta a envoyé 2 photos.",
+        "Hanta sent a link.",
+        "Hanta started a video chat.",
+        "You missed a call from Hanta.",
+        "Hanta liked a message",
+        "You reacted 😂 to Hanta's message",
+        "Hanta set the nickname for Tojo to Bebe.",
     ],
 )
 def test_placeholder_matches_messenger_event_text(text):
@@ -86,19 +86,19 @@ def test_placeholder_keeps_typed_text():
 @pytest.mark.parametrize(
     "event, nickname, person",
     [
-        ("Nirina set the nickname for Soa to Niry.", "Niry", "Soa"),
+        ("Hanta set the nickname for Soa to Niry.", "Niry", "Soa"),
         ("Soa set her own nickname to Niry.", "Niry", "Soa"),
         ("You set your nickname to Niry.", "Niry", "Soa"),
-        ("Nirina a défini le surnom de Soa sur Niry.", "Niry", "Soa"),
+        ("Hanta a défini le surnom de Soa sur Niry.", "Niry", "Soa"),
         ("Vous avez défini le pseudo de Soa sur Niry.", "Niry", "Soa"),
         ("Vous avez défini votre surnom sur Niry.", "Niry", "Soa"),
         ("Soa a défini son surnom sur Niry.", "Niry", "Soa"),
     ],
 )
 def test_nickname_events_en_and_fr(event, nickname, person):
-    raw = {"sender_name": "Soa" if event.startswith(("Soa", "You", "Vous")) else "Nirina", "content": event}
+    raw = {"sender_name": "Soa" if event.startswith(("Soa", "You", "Vous")) else "Hanta", "content": event}
 
-    assert parse_nickname_event(raw, ["Nirina", "Soa"]) == (nickname, person)
+    assert parse_nickname_event(raw, ["Hanta", "Soa"]) == (nickname, person)
     assert PLACEHOLDER.match(event)
 
 
@@ -106,10 +106,10 @@ def test_unharvested_nickname_events_are_counted(tmp_path):
     thread_dir = tmp_path / "messages" / "inbox" / "x_1"
     thread_dir.mkdir(parents=True)
     page = {
-        "participants": [{"name": "Nirina"}, {"name": "Soa"}],
+        "participants": [{"name": "Hanta"}, {"name": "Soa"}],
         "messages": [
-            {"sender_name": "Nirina", "timestamp_ms": 1, "content": "Nirina set the nickname for Koto to Bebe."},
-            {"sender_name": "Nirina", "timestamp_ms": 2, "content": "Nirina a modifié le surnom de Soa."},
+            {"sender_name": "Hanta", "timestamp_ms": 1, "content": "Hanta set the nickname for Koto to Bebe."},
+            {"sender_name": "Hanta", "timestamp_ms": 2, "content": "Hanta a modifié le surnom de Soa."},
             {"sender_name": "Soa", "timestamp_ms": 3, "content": "Soa set her own nickname to Niry."},
             {"sender_name": "Soa", "timestamp_ms": 4, "content": "Salama"},
         ],
@@ -125,16 +125,16 @@ def test_unharvested_nickname_events_are_counted(tmp_path):
 @pytest.mark.parametrize(
     "event, sender, person",
     [
-        ("Nirina set your nickname to Fanfan.", "Nirina", "Soa"),  # "your" = the reader
-        ("Nirina a défini votre surnom sur Fanfan.", "Nirina", "Soa"),
+        ("Hanta set your nickname to Fanfan.", "Hanta", "Soa"),  # "your" = the reader
+        ("Hanta a défini votre surnom sur Fanfan.", "Hanta", "Soa"),
         ("You set your nickname to Fanfan.", "Soa", "Soa"),
         ("Vous avez défini votre surnom sur Fanfan.", "Soa", "Soa"),
-        ("Nirina a défini son propre pseudo sur Fanfan.", "Nirina", "Nirina"),
-        ("Nirina set the nickname for you to Fanfan.", "Nirina", "Soa"),
-        ("Soa a défini le pseudo de Nirina sur Fanfan.", "Soa", "Nirina"),
+        ("Hanta a défini son propre pseudo sur Fanfan.", "Hanta", "Hanta"),
+        ("Hanta set the nickname for you to Fanfan.", "Hanta", "Soa"),
+        ("Soa a défini le pseudo de Hanta sur Fanfan.", "Soa", "Hanta"),
     ],
 )
 def test_nickname_events_attribute_your_to_the_reader(event, sender, person):
     raw = {"sender_name": sender, "content": event}
 
-    assert parse_nickname_event(raw, ["Nirina", "Soa"]) == ("Fanfan", person)
+    assert parse_nickname_event(raw, ["Hanta", "Soa"]) == ("Fanfan", person)

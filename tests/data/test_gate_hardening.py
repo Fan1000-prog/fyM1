@@ -62,14 +62,14 @@ def test_h1_a_price_still_needs_groups_and_a_currency(text):
 def _thread(text):
     return Thread(
         title="t",
-        participants=["Nirina Rakoto", "Tojo Randria"],
-        messages=[Message("Nirina Rakoto", text, 0), Message("Tojo Randria", FILLER, 60_000)],
+        participants=["Hanta Rakoto", "Tojo Randria"],
+        messages=[Message("Hanta Rakoto", text, 0), Message("Tojo Randria", FILLER, 60_000)],
     )
 
 
 def test_h2_mention_fake_from_one_chat_is_replaced_as_a_real_name_in_another():
     mention_chat = _thread("hoy @Tsiky Bema omaly")
-    probe = Anonymizer({"Nirina Rakoto": "x", "Tojo Randria": "y"})
+    probe = Anonymizer({"Hanta Rakoto": "x", "Tojo Randria": "y"})
     probe("hoy @Tsiky Bema omaly")
     fake_first = next(iter(probe.mention_fakes)).split()[0]
 
@@ -86,10 +86,10 @@ def test_h2_mention_fake_from_one_chat_is_replaced_as_a_real_name_in_another():
 
 @pytest.mark.parametrize("hidden", ["\u200b", "\u00ad", "\u2060", "\ufeff"])
 def test_h3_invisible_char_inside_a_real_name_still_matches_the_text(hidden):
-    anonymize = Anonymizer({f"Ni{hidden}rina Rakoto": "Soa Rabe"})
+    anonymize = Anonymizer({f"Han{hidden}ta Rakoto": "Soa Rabe"})
 
-    assert "Nirina" not in anonymize("Nirina tonga")
-    assert name_keys(f"Ni{hidden}rina") == ["nirina"]
+    assert "Hanta" not in anonymize("Hanta tonga")
+    assert name_keys(f"Han{hidden}ta") == ["hanta"]
 
 
 def test_h3_fake_pool_skips_a_real_name_hidden_by_an_invisible_char():
@@ -109,9 +109,9 @@ def test_h3_fake_pool_skips_a_real_name_hidden_by_an_invisible_char():
         "Nir\u3164ina tonga",  # Hangul filler: a default-ignorable letter
         "Nir\uffa0ina tonga",
         "Nir\u115fina tonga",
-        "a \u200dNirina",  # format char not after a letter
-        "salut \u2066Nirina\u2069",  # bidi isolates
-        "a \U0001d173Nirina",  # musical format char not after a letter
+        "a \u200dHanta",  # format char not after a letter
+        "salut \u2066Hanta\u2069",  # bidi isolates
+        "a \U0001d173Hanta",  # musical format char not after a letter
     ],
 )
 def test_h4_leftover_hidden_chars_are_found(text):

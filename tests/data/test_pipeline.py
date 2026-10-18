@@ -10,8 +10,8 @@ MIN = 60_000
 
 def chat(lines, nicknames=None):
     return Thread(
-        title="Nirina Rakoto",
-        participants=["Nirina Rakoto", "Tojo Randria"],
+        title="Hanta Rakoto",
+        participants=["Hanta Rakoto", "Tojo Randria"],
         messages=[Message(sender=s, text=t, ts_ms=i * MIN) for i, (s, t) in enumerate(lines)],
         nicknames=nicknames or {},
     )
@@ -26,19 +26,19 @@ def all_text(records):
 
 
 def test_build_records_anonymises_and_ids():
-    thread = chat([("Nirina Rakoto", "salama ry Tojo"), ("Tojo Randria", "Eny ry nirin, 034 12 345 67")])
+    thread = chat([("Hanta Rakoto", "salama ry Tojo"), ("Tojo Randria", "Eny ry hant, 034 12 345 67")])
 
     records = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy).records
 
     assert len(records) == 1
     text = all_text(records)
-    assert "Tojo" not in text and "nirin" not in text.lower() and "<TEL>" in text
+    assert "Tojo" not in text and "hant" not in text.lower() and "<TEL>" in text
     assert len(records[0]["id"]) == 12
     assert records[0]["messages"][0]["role"] == "user"
 
 
 def test_build_records_ids_are_stable():
-    thread = chat([("Nirina Rakoto", "salama"), ("Tojo Randria", "Eny")])
+    thread = chat([("Hanta Rakoto", "salama"), ("Tojo Randria", "Eny")])
 
     first = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy).records
     again = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy).records
@@ -47,15 +47,15 @@ def test_build_records_ids_are_stable():
 
 
 def test_build_records_keeps_half_malagasy_drops_less():
-    half = chat([("Nirina Rakoto", "fr: bonjour"), ("Tojo Randria", "salama")])
-    mostly_french = chat([("Nirina Rakoto", "fr: bonjour"), ("Tojo Randria", "fr: Ça va")])
+    half = chat([("Hanta Rakoto", "fr: bonjour"), ("Tojo Randria", "salama")])
+    mostly_french = chat([("Hanta Rakoto", "fr: bonjour"), ("Tojo Randria", "fr: Ça va")])
 
     assert len(build_records([half], owner="Tojo Randria", is_malagasy=says_malagasy).records) == 1
     assert build_records([mostly_french], owner="Tojo Randria", is_malagasy=says_malagasy).records == []
 
 
 def test_build_records_drops_duplicates():
-    thread = chat([("Nirina Rakoto", "salama"), ("Tojo Randria", "Eny")])
+    thread = chat([("Hanta Rakoto", "salama"), ("Tojo Randria", "Eny")])
 
     records = build_records([thread, thread], owner="Tojo Randria", is_malagasy=says_malagasy).records
 
@@ -63,7 +63,7 @@ def test_build_records_drops_duplicates():
 
 
 def test_build_records_replaces_nicknames():
-    thread = chat([("Nirina Rakoto", "Salama Bebe"), ("Tojo Randria", "Eny")], nicknames={"Bebe": "Tojo Randria"})
+    thread = chat([("Hanta Rakoto", "Salama Bebe"), ("Tojo Randria", "Eny")], nicknames={"Bebe": "Tojo Randria"})
 
     records = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy).records
 
@@ -119,7 +119,7 @@ def test_deleted_account_display_names_are_not_treated_as_names(deleted):
 
 
 def test_build_records_applies_blocklist_everywhere():
-    thread = chat([("Nirina Rakoto", "Hoy i Koto sy Kotoaaa"), ("Tojo Randria", "Eny, Koto ve?")])
+    thread = chat([("Hanta Rakoto", "Hoy i Koto sy Kotoaaa"), ("Tojo Randria", "Eny, Koto ve?")])
 
     records = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy, blocklist=["Koto"]).records
 
@@ -127,7 +127,7 @@ def test_build_records_applies_blocklist_everywhere():
 
 
 def test_build_records_reports_leftover_names():
-    thread = chat([("Nirina Rakoto", "Hoy i Bema"), ("Tojo Randria", "Eny, Bema ve?")])
+    thread = chat([("Hanta Rakoto", "Hoy i Bema"), ("Tojo Randria", "Eny, Bema ve?")])
 
     result = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
 
@@ -137,13 +137,13 @@ def test_build_records_reports_leftover_names():
 def test_build_records_every_sender_drops_exact_duplicates():
     group = Thread(
         title="t",
-        participants=["Nirina Rakoto", "Tojo Randria", "Hery Rabe"],
+        participants=["Hanta Rakoto", "Tojo Randria", "Hery Rabe"],
         messages=[
             Message(sender=s, text=t, ts_ms=m * MIN)
             for s, m, t in [
-                ("Nirina Rakoto", 0, "salama"),
+                ("Hanta Rakoto", 0, "salama"),
                 ("Tojo Randria", 1, "Eny"),
-                ("Nirina Rakoto", 600, "salama"),  # same exchange again, hours later
+                ("Hanta Rakoto", 600, "salama"),  # same exchange again, hours later
                 ("Tojo Randria", 601, "Eny"),
             ]
         ],
@@ -151,14 +151,14 @@ def test_build_records_every_sender_drops_exact_duplicates():
 
     records = build_records([group], owner=None, is_malagasy=says_malagasy).records
 
-    assert len(records) == 1  # Tojo as assistant, twice -> once; Nirina and Hery yield nothing
+    assert len(records) == 1  # Tojo as assistant, twice -> once; Hanta and Hery yield nothing
 
 
 def test_build_records_gate_keeps_prices_drops_numbers_and_replaces_leftover_names():
     threads = [
-        chat([("Nirina Rakoto", "inona ny vidiny?"), ("Tojo Randria", "1 500 000 Ar")]),
-        chat([("Nirina Rakoto", "inona ny ref?"), ("Tojo Randria", "ref 123-4567")]),
-        chat([("Nirina Rakoto", "hoy i Bema"), ("Tojo Randria", "eny")]),
+        chat([("Hanta Rakoto", "inona ny vidiny?"), ("Tojo Randria", "1 500 000 Ar")]),
+        chat([("Hanta Rakoto", "inona ny ref?"), ("Tojo Randria", "ref 123-4567")]),
+        chat([("Hanta Rakoto", "hoy i Bema"), ("Tojo Randria", "eny")]),
     ]
 
     result = build_records(threads, owner="Tojo Randria", is_malagasy=says_malagasy)
@@ -183,17 +183,17 @@ def test_build_records_gate_keeps_prices_drops_numbers_and_replaces_leftover_nam
 
 
 def test_build_records_every_sender_hides_every_name_from_every_side():
-    people = ["Nirina Rakoto", "Tojo Randria", "Hery Rabe"]
+    people = ["Hanta Rakoto", "Tojo Randria", "Hery Rabe"]
     group = Thread(
         title="t",
         participants=people,
         messages=[
             Message(sender=s, text=t, ts_ms=i * MIN)
             for i, (s, t) in enumerate([
-                ("Nirina Rakoto", "salama ry Tojo sy Hery"),
-                ("Tojo Randria", "eny ry Nirina, aiza i hery?"),
-                ("Hery Rabe", "ato aho ry NIRINA sy tojo, Rakoto ve?"),
-                ("Nirina Rakoto", "Randria sy Rabe tonga"),
+                ("Hanta Rakoto", "salama ry Tojo sy Hery"),
+                ("Tojo Randria", "eny ry Hanta, aiza i hery?"),
+                ("Hery Rabe", "ato aho ry HANTA sy tojo, Rakoto ve?"),
+                ("Hanta Rakoto", "Randria sy Rabe tonga"),
             ])
         ],
     )
@@ -203,12 +203,12 @@ def test_build_records_every_sender_hides_every_name_from_every_side():
     assistants = {turn["content"] for r in records for turn in r["messages"] if turn["role"] == "assistant"}
     assert len(assistants) == 3  # every sender answered at least once, so every side was built
     text = all_text(records).lower()
-    for part in ("nirina", "rakoto", "tojo", "randria", "hery", "rabe"):
+    for part in ("hanta", "rakoto", "tojo", "randria", "hery", "rabe"):
         assert part not in text
 
 
 def test_build_records_replaces_a_real_name_that_is_also_a_pool_name():
-    thread = chat([("Nirina Rakoto", "Rabe no nandeha omaly"), ("Tojo Randria", "eny tsara ihany")])
+    thread = chat([("Hanta Rakoto", "Rabe no nandeha omaly"), ("Tojo Randria", "eny tsara ihany")])
 
     result = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
 

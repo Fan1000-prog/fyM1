@@ -346,13 +346,13 @@ def _mask_phones(text: str) -> str:
 # Malagasy plot addresses: "Lot II M 85 Ter", "Lot IVG 12 Bis". Kept only if it holds a number.
 _LOT_PART = r"(?:[IVX]+[A-Z]*|\d+[A-Za-z]*|[A-Z]{1,3}|[Bb]is|[Tt]er|[Qq]uater)\b"
 LOT_ADDRESS = re.compile(rf"\b[Ll][Oo][Tt]\.?\s+{_LOT_PART}(?:[\s-]+{_LOT_PART})*")
-# "ig: nirina.rk", "insta nirina_rk", "snap: nirinark" (not "fb 2 andro", "Ig: tsy mampiasa")
+# "ig: hanta.rk", "insta hanta_rk", "snap: hantark" (not "fb 2 andro", "Ig: tsy mampiasa")
 LABELLED_HANDLE = re.compile(
     r"\b(?P<label>ig|insta(?:gram)?|snap(?:chat)?|tiktok|tg|telegram|twitter|fb|facebook|viber|wa|whatsapp)"
     r"(?P<sep>\s*[:=]\s*@?|\s*@|\s+)(?P<handle>[\w.]*\w)",
     re.IGNORECASE,
 )
-# "@nirina.rk", or a display-name mention "@Marie-Claire Rasoanaivo": up to 3 words, read
+# "@hanta.rk", or a display-name mention "@Marie-Claire Rasoanaivo": up to 3 words, read
 # by Anonymizer._mention; it decides how many belong to the name. Never "@15h".
 MENTION_MAX_WORDS = 3
 _LETTER_START = r"[^\W\d_]"
@@ -417,7 +417,7 @@ def name_keys(name: str) -> list[str]:
     """Compare keys of a real name's words, read through the same `normalise()` as the text.
 
     The one entry point for turning a real name into match keys: a zero-width space or soft hyphen
-    inside a display name ("Ni\u200brina") must not split it where the normalised text does not.
+    inside a display name ("Han\u200bta") must not split it where the normalised text does not.
     """
     return [compare_key(part) for part in WORD.findall(normalise(name))]
 
@@ -539,11 +539,11 @@ class Anonymizer:
     def _fake_for_mention(self, words: list[str]) -> tuple[int, str]:
         """(how many leading `words` the mention covers, the one fake name replacing them).
 
-        A capitalised mention covers every capitalised word after it ("@Nirina Mbola" ->
+        A capitalised mention covers every capitalised word after it ("@Hanta Mbola" ->
         one fake): the owner chose losing a word over leaking a surname. A lower-case
         one ("@haja rabe ok") runs while words are not everyday words.
         """
-        if _HANDLE_CHARS.search(words[0]):  # @nirina.rk: a handle, one word
+        if _HANDLE_CHARS.search(words[0]):  # @hanta.rk: a handle, one word
             known = self._fake_for_word(words[0])
             return 1, known or _hashed_fake(words[0], 1, self._free_firsts, self._free_lasts)
         taken = 1
@@ -621,7 +621,7 @@ def anonymize(text: str, names: dict[str, str]) -> str:
     name, or any single part of it, becomes the fake (first name -> fake first name,
     other parts -> fake surname). Matching ignores case, accents and stretched letters,
     and also catches a part with a possessive ending ("Soako"). A word that shares a
-    4+ letter prefix with a name part ("nirin") is replaced too, unless it is a common
+    4+ letter prefix with a name part ("hant") is replaced too, unless it is a common
     Malagasy word. Labelled handles ("ig: x") become <HANDLE>; other @handles and
     @mentions become a fake name derived from the handle.
     """

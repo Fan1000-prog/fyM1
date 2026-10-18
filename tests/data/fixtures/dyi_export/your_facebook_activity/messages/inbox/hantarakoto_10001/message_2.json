@@ -1,7 +1,7 @@
 {
   "participants": [
     {
-      "name": "Nirina Rakoto"
+      "name": "Hanta Rakoto"
     },
     {
       "name": "Tojo Randria"
@@ -9,18 +9,18 @@
   ],
   "messages": [
     {
-      "sender_name": "Nirina Rakoto",
+      "sender_name": "Hanta Rakoto",
       "timestamp_ms": 1760000270000,
-      "content": "Nirina Rakoto set the nickname for Tojo Randria to Bebe."
+      "content": "Hanta Rakoto set the nickname for Tojo Randria to Bebe."
     },
     {
-      "sender_name": "Nirina Rakoto",
+      "sender_name": "Hanta Rakoto",
       "timestamp_ms": 1760000240000,
       "content": "tsy tokony ho hita ity",
       "is_unsent": true
     },
     {
-      "sender_name": "Nirina Rakoto",
+      "sender_name": "Hanta Rakoto",
       "timestamp_ms": 1760000180000,
       "sticker": {
         "uri": "stickers/1.png"
@@ -42,12 +42,12 @@
       "content": "Tsara be, ary ianao?"
     },
     {
-      "sender_name": "Nirina Rakoto",
+      "sender_name": "Hanta Rakoto",
       "timestamp_ms": 1760000000000,
       "content": "Salama ry Tojo! De aona?"
     }
   ],
-  "title": "Nirina Rakoto",
+  "title": "Hanta Rakoto",
   "is_still_participant": true,
-  "thread_path": "inbox/nirinarakoto_10001"
+  "thread_path": "inbox/hantarakoto_10001"
 }
