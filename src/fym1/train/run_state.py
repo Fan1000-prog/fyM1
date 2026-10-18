@@ -1,10 +1,14 @@
 """Per-run bookkeeping saved with every checkpoint, so a resumed Colab session continues the same run."""
 
 
+RECORD_ONLY_KEYS = {"hardware"}  # which GPU / dtype ran a session: recorded, not a different run
+
+
 def config_mismatch(saved: dict, current: dict) -> list[str]:
-    """Differences between the run config stored with a checkpoint and the notebook's current one."""
+    """Differences between the run config stored with a checkpoint and the notebook's current one. Batch and
+    grad-accum are compared like any setting; the hardware record is not (a reconnect may land on another A100)."""
     return [f"{k}: {saved.get(k)} -> {current.get(k)}" for k in sorted(saved.keys() | current.keys())
-            if saved.get(k) != current.get(k)]
+            if k not in RECORD_ONLY_KEYS and saved.get(k) != current.get(k)]
 
 
 def session_progress(resumed: dict | None, session_seconds: float) -> dict:

@@ -815,6 +815,17 @@ def test_an_archive_fails_the_release_before_anything_is_written(tmp_path, capsy
     assert "refused" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("path", ["keep_ids.json", "results/shrink/keep_ids.json", "trimmed/KEEP_IDS.json"])
+def test_trim_keep_ids_fail_the_release_before_anything_is_written(tmp_path, path):
+    """The trim's kept token ids are a private build record (security finding #13)."""
+    repo = make_repo(tmp_path, {**CLEAN_FILES, path: b"[0, 1, 2]"})
+    out = tmp_path / "public"
+    with pytest.raises(RefusedError, match="1 private build files") as error:
+        snap(repo, out, make_export(tmp_path))
+    assert path not in str(error.value)
+    assert not out.exists() and not _leftovers(tmp_path)
+
+
 @pytest.mark.parametrize(("path", "archive"), [("a.tar.gz", True), ("a.ZIP", True), ("v0.1.jar.md", True),
                                                ("notes.md", False), ("zip.md", False), ("data/gz", False)])
 def test_is_archive_reads_every_suffix_of_the_file_name(path, archive):

@@ -77,11 +77,13 @@ def test_every_word_list_file_starts_with_a_source_line():
 
 def test_build_pins_the_wikipedia_revision():
     """Read from the script text, so this runs without the `data` group the script imports."""
-    pinned = re.search(r'^WIKIPEDIA_REVISION = "([0-9a-f]+)"', BUILD_SCRIPT.read_text("utf-8"), re.MULTILINE)
+    from fym1.data import public_sources
 
-    assert pinned and len(pinned.group(1)) == 40
-    hplt = re.search(r'^HPLT_REVISION = "([0-9a-f]+)"', BUILD_SCRIPT.read_text("utf-8"), re.MULTILINE)
-    assert hplt and len(hplt.group(1)) == 40
+    assert re.fullmatch(r"[0-9a-f]{40}", public_sources.WIKIPEDIA_REVISION)
+    assert re.fullmatch(r"[0-9a-f]{40}", public_sources.HPLT_REVISION)
+    script = BUILD_SCRIPT.read_text("utf-8")
+    assert re.search(r"^from fym1\.data\.public_sources import .*HPLT_REVISION.*WIKIPEDIA_REVISION", script, re.MULTILINE)
+    assert not re.search(r"^(WIKIPEDIA|HPLT)_REVISION = ", script, re.MULTILINE)  # one pin, shared with the trim
 
 
 def test_build_keeps_first_names_a_wikipedia_uses_as_words_and_not_names(build_known_words):
