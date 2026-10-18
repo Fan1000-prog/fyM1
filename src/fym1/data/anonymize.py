@@ -9,6 +9,7 @@ import hashlib
 import re
 import unicodedata
 from collections.abc import Iterable
+from itertools import pairwise
 from importlib.resources import files
 
 FIRST_NAMES = (
@@ -54,6 +55,16 @@ _MG_COUNTRY = rf"(?:\(\s*{_INTL}?261\s*\)|{_INTL}?261)"  # +261, 00261, 261, (+2
 _ZERO_TRUNK = rf"(?:\(\s*0\s*\)|0){_SEP}"  # 0 or (0), then any gap
 
 
+def _clean_amount(sep_name: str) -> str:
+    """A price in clean 3-digit groups, one separator all through: "1 500", "25.000", "2 500 000"."""
+    return rf"\d{{1,3}}(?P<{sep_name}>[ .,])\d{{3}}(?:(?P={sep_name})\d{{3}})*"
+
+
+# A price that ends there (no digit after its own separator), or is followed by another price:
+# "35 000, 3 500", "35.000 2015", "35 000 3 500"; not "34 123 45 67"
+_PRICE_AHEAD = rf"{_clean_amount('price_sep')}(?:(?!\d|(?P=price_sep)\d)|[ .,]\s*\d{{1,3}}[ .,]\d{{3}}(?!\d))"
+
+
 def _mg_phone(trunk: str) -> str:
     """A Malagasy number with the given leading-0 form."""
     return (
@@ -76,10 +87,9 @@ PHONE = re.compile(
     rf"{_MG_PHONE_SPACED}"
     rf"|{_INTL}\d{{1,3}}(?:\s*\(\d{{1,4}}\))?(?:{_SEP}\d){{6,13}}"  # other intl: +33 6 …, +1 (555) …
     rf"|[0Oo](?:{_SEP}\d){{9}}"  # national, 10 digits however grouped; "O34" typed with a letter O
-    # mobile without the 0: "34 12" as separate pairs, then any grouping ("34 12 2019/5"); a pair
-    # after "3x" keeps price pairs out ("35 000, 3 500")
-    rf"|3[2-9](?=[\s./,_-]){_SEP}\d\d(?=[\s./,_-]){_SEP}\d(?:{_SEP}\d){{4}}"
-    rf"|3[2-9]{_SEP}\d\d{_SEP}\d{{3}}{_SEP}\d\d"  # 34 12 345 67 grouped or glued: "3412 345 67"
+    # mobile without the 0, any grouping ("34 12 345 67", "34 123 45 67", "34 1234567"), unless it
+    # reads as a price in clean 3-digit groups ("35 000, 3 500", "32 500 000 Ar")
+    rf"|(?!{_PRICE_AHEAD})3[2-9](?:{_SEP}\d){{7}}"
     r"|\d{9,15}"  # any other long run of digits
     r")(?!\w)"
     rf"|(?<![\d+]){_MG_PHONE_GLUED}(?!\d)"  # glued to a word: "laharana034 …", "wa+26134…", "tel(034) …"
@@ -136,8 +146,8 @@ _ASCII_MARKS = str.maketrans(
 )
 
 
-def _continues_amount(blanked: str, start: int) -> bool:
-    """The digits from `start` are more 3-digit groups of the amount right before them.
+def _amount_end(blanked: str, start: int) -> int | None:
+    """Where the amount right before `start` ends, if the digits from `start` are more of its 3-digit groups.
 
     Dates and times are blanked, so "15/03/2026 034 …" and "12h16 261 …" have no amount before
     them. The amount must go on to its end in clean 3-digit groups with its own separator:
@@ -146,10 +156,10 @@ def _continues_amount(blanked: str, start: int) -> bool:
     """
     before = _AMOUNT_BEFORE.search(blanked, 0, start)
     if not before or not set(before["groups"][::4]) <= {before["sep"]}:  # one separator all through
-        return False
+        return None
     groups = re.compile(rf"\d{{3}}(?:{re.escape(before['sep'])}\d{{3}})*")
     rest = groups.match(blanked, start)
-    return bool(rest and _AMOUNT_ENDS.match(blanked, rest.end()))
+    return rest.end() if rest and _AMOUNT_ENDS.match(blanked, rest.end()) else None
 
 
 def _stop_before_trailing_date(match: re.Match, dates: list[tuple[int, int]]) -> int:
@@ -166,50 +176,151 @@ def _stop_before_trailing_date(match: re.Match, dates: list[tuple[int, int]]) ->
     return end
 
 
-def _matches_outside_dates(pattern: re.Pattern, text: str, dates: list[tuple[int, int]]) -> list[re.Match]:
-    """Every match of `pattern` that does not start inside a date or time, overlapping ones too."""
+# Numbers a date or time may stand next to without being part of a phone, each a whole word: a clock
+# time with a space ("14 30"), a price in clean 3-digit groups ("1 500", "25.000"), a year ("2026"),
+# a round number ("2500000"), or one short number ("150", "1500"). Several may follow each other
+# ("2026 150 olona", "2025 150,000Ar"), but only one short number, not next to a price, and none
+# with a time: "15/03 41 23 45 67", "15/03 412 345 67", "15/03 352 83 538", "15/03 22 34 5678" are phones.
+_CLEAR_PIECE = re.compile(
+    rf"(?<!\d)(?:(?P<time>(?:[01]?\d|2[0-3]) [0-5]\d)|(?P<amount>{_clean_amount('amount_sep')})"
+    rf"|(?P<year>(?:19|20)\d\d)|(?P<round>\d+000)|(?P<short>\d{{1,4}}))(?![.,]?\d)"
+)
+_NEXT_PIECE = re.compile(r" +(?=\d)")
+_NUMBER_BEFORE = re.compile(r"\d[ .,]?$")  # a number goes on right before: not a word start
+# Numbers right before a phone shape, which may start the clear numbers it is part of: "02 " in
+# "02 01 2029-02-02" starts the time "02 01", "350," in "350,000,000 15-03-2026" the price
+_NUMBERS_BEFORE = re.compile(r"(?:\d+[ .,] *)+$")
+# Digits that run on after a phone shape (any gap, no date or time in between)
+_RUN_ON = re.compile(r"(?:\s*[./,_-]?\s*\d)+")
+
+
+def _clear_number_end(blanked: str, start: int) -> int | None:
+    """Where the clear numbers starting at `start` end, if they are clear (see _CLEAR_PIECE)."""
+    if _NUMBER_BEFORE.search(blanked, 0, start):
+        return None  # not a word start: "5 034", "12,5"
+    kinds, pos = [], start
+    while piece := _CLEAR_PIECE.match(blanked, pos):
+        kinds.append(piece.lastgroup)
+        pos = piece.end()
+        if not (gap := _NEXT_PIECE.match(blanked, pos)):
+            break
+        pos = gap.end()
+    else:
+        return None  # a word that is no clear number
+    short_by_a_price = any({a, b} == {"amount", "short"} for a, b in pairwise(kinds))
+    if kinds.count("short") > 1 or short_by_a_price or ("time" in kinds and len(kinds) > 1):
+        return None
+    return piece.end() if _AMOUNT_ENDS.match(blanked, piece.end()) else None
+
+
+def _explained_by_dates(blanked: str, start: int, end: int, strong: bool, found: list[tuple[int, int]]) -> bool:
+    """Every digit from `start` to `end` is in a date or time, a phone already found, or a clear number.
+
+    `blanked` has dates and times blanked out. A strong start ("034", "+261", "261") counts only as
+    more groups of an amount right before it ("1 034 000 15/03"), and nothing else of it may lie
+    outside a date. Elsewhere, digits outside dates must be clear numbers (see _CLEAR_PIECE), which
+    may start a little before a weak start ("02 01 2029-02-02"): "15/03/2026 1 500 Ar" and
+    "15/03/2026 14 30" are explained, "12/03 41 23 45 67" and "15/03/2026 1 500 34 12" are not.
+    """
+    pos = start
+    while pos < end:
+        if not blanked[pos].isdigit() or any(s <= pos < e for s, e in found):
+            pos += 1
+            continue
+        if strong:
+            number_end = _amount_end(blanked, pos) if pos == start else None
+        elif pos == start:
+            number_end = _amount_end(blanked, pos) or _clear_number_end(blanked, pos)
+            if number_end is None and (before := _NUMBERS_BEFORE.search(blanked, 0, pos)):
+                word_starts = [m.start() for m in re.finditer(r"(?<![\d.,])\d", blanked[:pos])]
+                ends = (_clear_number_end(blanked, w) for w in word_starts if w >= before.start())
+                number_end = next((e for e in ends if e is not None and e > pos), None)
+        else:
+            number_end = _clear_number_end(blanked, pos)
+        if number_end is not None and number_end <= pos:
+            number_end = None
+        if number_end is None:
+            return False
+        pos = number_end
+    return True
+
+
+def _date_overlapping_spans(
+    marks: str, blanked: str, dates: list[tuple[int, int]], found: list[tuple[int, int]]
+) -> list[tuple[int, int]]:
+    """Phone shapes that touch a date or time and are not fully explained by it: masked, fail closed.
+
+    Every phone shape is tried from every start, inside a date too ("12/03 41 23 45 67" hides
+    "03 41 23 45 67"). It is spared only when its digits lie in dates and times, plus a clear
+    price or time next to them. A strong start (+, 00x, 261, 0[23]x, 0-3-x) outside a date is judged
+    first: it runs through stray digits ("034 12 01/02/26") but stops before a date that follows a
+    whole phone ("034 12 345 67 15/03/2026"). Any other shape is also spared when its digits past
+    the date are a phone masked anyway ("15/03/2026 034 12 345 67" keeps its date); `found` are the
+    phones matched with dates blanked.
+    """
+    candidates = [(m, m.end()) for m in _all_match_objects(PHONE, marks)]
+    candidates += [(m, _stop_before_trailing_date(m, dates)) for m in _all_match_objects(_STRONG_RUN, marks)]
+    touching = [
+        (m.start(), end, m)
+        for m, end in candidates
+        if any(s < end and m.start() < e for s, e in dates) and not _starts_with_date_digits(m, dates)
+    ]
+    strong = [
+        (start, end)
+        for start, end, match in touching
+        if not any(s <= start < e for s, e in dates) and _STRONG_PHONE_START.match(match.group())
+    ]
+    spans = [
+        _with_run_on(blanked, start, end)
+        for start, end in strong
+        if not _explained_by_dates(blanked, start, end, True, [])
+    ]
+    masked = found + spans
+    for start, end, _ in touching:
+        if (start, end) not in strong and not _explained_by_dates(blanked, start, end, False, masked):
+            spans.append(_with_run_on(blanked, start, end))
+    return spans
+
+
+def _starts_with_date_digits(match: re.Match, dates: list[tuple[int, int]]) -> bool:
+    """A shape starting inside a date or time on a digit other than 0: "39 00 12 617" in "09:39 00 12 617".
+
+    A phone carries its 0 (or +, 261) into a date; a no-0 mobile's "3x" read off a date's last
+    digits is the date's own.
+    """
+    inside = any(s <= match.start() < e for s, e in dates)
+    return inside and match.group()[0] in "123456789"
+
+
+def _with_run_on(blanked: str, start: int, end: int) -> tuple[int, int]:
+    """The span widened over digits that run on after it, so no tail of the number is left."""
+    run_on = _RUN_ON.match(blanked, end)
+    return start, run_on.end() if run_on else end
+
+
+def _all_match_objects(pattern: re.Pattern, text: str) -> list[re.Match]:
+    """Every match from every start, overlapping ones too."""
     matches, pos = [], 0
     while match := pattern.search(text, pos):
-        date_end = next((e for s, e in dates if s <= match.start() < e), None)
-        if date_end is not None:
-            pos = date_end
-            continue
         matches.append(match)
         pos = match.start() + 1
     return matches
 
 
-def _strong_spans_through_dates(text: str, blanked: str, dates: list[tuple[int, int]]) -> list[tuple[int, int]]:
-    """Strong phones (or strong digit runs) that start outside a date or time and run through one."""
-    phones = [(m, m.end()) for m in _matches_outside_dates(PHONE, text, dates)]
-    runs = [(m, _stop_before_trailing_date(m, dates)) for m in _matches_outside_dates(_STRONG_RUN, text, dates)]
-    return [
-        (match.start(), end)
-        for match, end in phones + runs
-        if any(s < end and match.start() < e for s, e in dates)
-        and _STRONG_PHONE_START.match(match.group())
-        and not _continues_amount(blanked, match.start())
-    ]
-
-
 def _all_matches(pattern: re.Pattern, text: str) -> list[tuple[int, int]]:
     """Every match, overlapping ones too: in "35.000 00261 37 76 034 84" the leftmost match
     ("000 00261 3") hides the real phone; masking both leaves nothing of it."""
-    spans, pos = [], 0
-    while match := pattern.search(text, pos):
-        spans.append(match.span())
-        pos = match.start() + 1
-    return spans
+    return [match.span() for match in _all_match_objects(pattern, text)]
 
 
 def _mask_phones(text: str) -> str:
     """Every phone becomes <TEL>; real dates and clock times are never read as part of one.
 
     Phones are matched on a copy where each date and time is blanked out, so "15/03/2026 1 500 Ar"
-    keeps its price and "15/03/2026 034 12 345 67" masks only the phone. A strong phone
-    (+, 00x, 261, 0[23]x, 0-3-x) that starts outside a date and runs through a date shape is
-    matched on the real text and still wins, stray extra digits included: "034 01/02/26 7",
-    "034 12 01/02/26". Digit groups glued on by a mark after a phone are masked with it.
+    keeps its price and "15/03/2026 034 12 345 67" masks only the phone. Then every phone shape
+    that touches a date or time is matched on the real text and masked unless the date explains
+    all its digits (fail closed): "12/03 41 23 45 67" -> "12/<TEL>", "034 01/02/26 7" -> "<TEL>".
+    Digit groups glued on by a mark after a phone are masked with it.
     Unicode dashes are read as "-" and no-break spaces as " ": "034–12–345–67" is a phone,
     "15–03–2026" a date.
     """
@@ -221,7 +332,7 @@ def _mask_phones(text: str) -> str:
     blanked = "".join(chars)
     spans = _all_matches(PHONE, blanked) + _all_matches(_LETTER_O_PHONE, blanked)
     if dates:
-        spans += _strong_spans_through_dates(marks, blanked, dates)
+        spans += _date_overlapping_spans(marks, blanked, dates, spans)
     pieces, done = [], 0
     for start, end in sorted(spans):
         if tail := _PHONE_TAIL.match(blanked, end):

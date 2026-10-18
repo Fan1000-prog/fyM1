@@ -186,9 +186,7 @@ KNOWN_LIMITS = [
     "Villa 23 Ivandry",
     "tel34 12 345 67",  # glued mobile without the leading 0
     "contactO320 000 000",  # glued letter O before an amount-shaped number: kept as an amount
-    "34 123 45 67",  # no-0 mobile with a 3-digit or 1-digit second group: a wider rule
-    "34 1 234 567",  # risks turning price pairs into phones again
-    "34 123 4567",
+    "18/03/80 559 874",  # a phone whose first digits make a full date and whose rest reads as a price
 ]
 
 
@@ -197,6 +195,16 @@ KNOWN_LIMITS = [
 def test_known_limits(text):
     out = run(text)
     assert out != text and not leaked_parts(out)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["34 12 345 67", "34 1234567", "341234567", "34 123 45 67", "34 1 234 567", "34 123 4567", "32.45.678.90",
+     "laharana: 38 12 345 67", "Antsoy 33 123 45 67 ok"],
+)  # fmt: skip
+def test_mobile_without_the_0_is_masked_in_any_grouping(text):
+    out = run(text)
+    assert "<TEL>" in out and not any(c.isdigit() for c in out), out
 
 
 # --- final review (PR #3 round 3) -------------------------------------------------------
