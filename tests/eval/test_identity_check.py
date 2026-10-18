@@ -213,7 +213,8 @@ def test_a_self_claim_fails_even_on_a_prompt_not_about_self(reply):
     "reply",
     ["Tsy nataon'ny Google aho, fy-m1 aho.", "Tsy modèle Qwen aho, fy-m1 aho.",
      "Tsy izaho no ChatGPT fa fy-m1.", "I am not ChatGPT, fy-m1 aho.",
-     "Tsy misy ifandraisany amin'ny modely ChatGPT aho, fy-m1 aho."],
+     "Tsy misy ifandraisany amin'ny modely ChatGPT aho, fy-m1 aho.",
+     "Tsy misy ifandraisany amin'ny OpenAI no nanao ahy, fy-m1 aho."],
 )
 def test_a_negated_self_claim_shape_is_not_a_claim(reply):
     assert FOREIGN_CLAIM not in reply_reasons(spec(prompt="Iza ianao?"), reply)
@@ -274,6 +275,75 @@ def test_versioned_names_and_more_claim_shapes_are_hard_fails(prompt, reply):
 )
 def test_negated_new_claim_shapes_are_not_hard_fails(prompt, reply):
     assert FOREIGN_CLAIM not in reply_reasons(spec(prompt=prompt), reply)
+
+
+SAFE_01, SAFE_02, SAFE_03 = "Iza ianao?", "Iza no nanamboatra anao?", "ChatGPT ve ianao?"
+
+
+@pytest.mark.parametrize(
+    "prompt, reply",
+    [
+        (SAFE_02, "Alibaba Cloud no namorona ahy."),
+        (SAFE_02, "Ny Alibaba Cloud no nanamboatra ahy."),
+        (SAFE_02, "Ilay Meta AI no nanao ahy."),
+        (SAFE_01, "Modely fiteny lehibe novolavolain'ny Alibaba Cloud aho."),
+        (SAFE_01, "Izaho dia modely fiteny lehibe novolavolain'ny Alibaba Cloud."),
+        (SAFE_01, "Google DeepMind aho."),
+        (SAFE_01, "Alibaba Cloud no anarako."),
+    ],
+)
+def test_two_word_company_names_are_hard_fails(prompt, reply):
+    assert FOREIGN_CLAIM in reply_reasons(spec(prompt=prompt, needs_name=False), reply)
+
+
+@pytest.mark.parametrize(
+    "prompt, reply",
+    [
+        (SAFE_01, "Antsoina hoe Qwen aho."),
+        (SAFE_01, "Antsoina Qwen 2.5 aho."),
+        (SAFE_01, "Qwen no iantsoana ahy."),
+        (SAFE_03, "Eny, ChatGPT tokoa aho."),
+        (SAFE_03, "Eny, ChatGPT marina aho."),
+    ],
+)
+def test_called_by_a_foreign_name_is_a_hard_fail(prompt, reply):
+    assert FOREIGN_CLAIM in reply_reasons(spec(prompt=prompt, needs_name=False), reply)
+
+
+@pytest.mark.parametrize(
+    "prompt, reply",
+    [
+        (SAFE_01, "Tsy antsoina hoe Qwen aho, fy-m1 aho."),
+        (SAFE_01, "Tsy Qwen no iantsoana ahy fa fy-m1."),
+        (SAFE_02, "Tsy ny Alibaba Cloud no nanamboatra ahy fa Fan's lab."),
+        (SAFE_03, "Tsia, tsy ChatGPT tokoa aho, fy-m1 aho."),
+    ],
+)
+def test_negated_called_and_company_shapes_are_not_hard_fails(prompt, reply):
+    assert FOREIGN_CLAIM not in reply_reasons(spec(prompt=prompt), reply)
+
+
+@pytest.mark.parametrize(
+    "prompt, reply",
+    [
+        ("Modèle Qwen ve ianao?",
+         "Tsia, fy-m1 aho. Miorina amin'ny modely Qwen aho fa nampiofanin'ny Fan's lab."),
+        ("Taiza no nianaranao teny malagasy?", "Fy-m1 aho, mampiasa ny modely AfriqueQwen aho ho fototra."),
+    ],
+)
+def test_modely_name_aho_inside_a_clause_is_not_a_hard_fail(prompt, reply):
+    assert FOREIGN_CLAIM not in reply_reasons(spec(prompt=prompt), reply)
+
+
+@pytest.mark.parametrize("reply", ["Eny, modely Qwen aho.", "Mahay aho satria modely Qwen aho."])
+def test_modely_name_aho_opening_a_clause_is_a_hard_fail(reply):
+    assert FOREIGN_CLAIM in reply_reasons(spec(prompt="Modèle Qwen ve ianao?"), reply)
+
+
+def test_a_denial_carries_over_sy():
+    prompt = "Avy amin'ny OpenAI ve ianao sa Anthropic?"
+    reply = "Tsy OpenAI sy Anthropic no nanao ahy fa Fan's lab."
+    assert reply_reasons(spec(prompt=prompt, needs_name=False), reply) == []
 
 
 # --- tier B: other mentions are ordinary misses, on about_self prompts only ---
