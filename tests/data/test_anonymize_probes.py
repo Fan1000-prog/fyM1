@@ -511,3 +511,27 @@ def test_hashed_handle_fake_never_rebuilds_a_split_name(split, first):
     out = NOBODY("@" + split.format(a=key[:2], b=key[2:], a2=key[1:]) + " salama")  # {a}_{a2}: "lo_ova"
 
     assert compare_key(out.split()[0]) != compare_key(first)
+
+
+# --- #16 review notes ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("+261 038 27 2000/5", "<TEL>"),
+        ("Antsoy +261 038 27 2000/5 aho", "Antsoy <TEL> aho"),
+        ("00261 038 27 2000/5", "<TEL>"),
+        ("(+261) 38 27 2000/5", "<TEL>"),
+        ("261 038 27 2000/5", "<TEL>"),
+    ],
+)
+def test_country_code_phone_wins_over_date_filter(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text", ["01/02/2026 03/04 no daty roa", "ny 03/10/2026 amin'ny 14h30", "Taona 2020-03-12 io", "2h03 50 olona"]
+)
+def test_dates_still_kept_after_country_code_rule(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text

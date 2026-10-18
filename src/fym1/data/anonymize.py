@@ -57,7 +57,8 @@ def _mg_phone(trunk: str) -> str:
     """A Malagasy number with the given leading-0 form."""
     return (
         rf"(?:{_MG_COUNTRY}{_SEP}(?:{trunk})?\d(?:{_SEP}\d){{8}}"  # +261 34 …, +261 (0)34 …, (+261)34 …
-        rf"|{trunk}[23]\d(?:{_SEP}\d){{7}}"  # 034 12 345 67; "03" kept together so "2h03 50 …" isn't a phone
+        # 034 12 345 67; the 0 may stand apart ("0 34 …") but "34" must touch, so "2h03 50 …" isn't a phone
+        rf"|{trunk}[23]\d(?:{_SEP}\d){{7}}"
         rf"|\(\s*[0Oo]\d\d\s*\)(?:{_SEP}\d){{7}}(?!\w))"  # area code in brackets: (034) 12 345 67, (089) …
     )
 
@@ -78,6 +79,8 @@ PHONE = re.compile(
 )
 # "01/02/2026 03/04" is dates, not a phone: a year next to / or -.
 _DATE_LIKE = re.compile(r"[/-](?:19|20)\d\d\b|\b(?:19|20)\d\d[/-]")
+# A match that starts with a country code is a phone even if a year shows up in it ("+261 038 27 2000/5").
+_COUNTRY_CODE_START = re.compile(r"\(?\s*(?:\+|00|261)")
 # Malagasy plot addresses: "Lot II M 85 Ter", "Lot IVG 12 Bis". Kept only if it holds a number.
 _LOT_PART = r"(?:[IVX]+[A-Z]*|\d+[A-Za-z]*|[A-Z]{1,3}|[Bb]is|[Tt]er|[Qq]uater)\b"
 LOT_ADDRESS = re.compile(rf"\b[Ll][Oo][Tt]\.?\s+{_LOT_PART}(?:[\s-]+{_LOT_PART})*")
@@ -165,7 +168,9 @@ def _hashed_fake(text: str, words: int, firsts: list[str], lasts: list[str]) -> 
 
 
 def _phone(match: re.Match) -> str:
-    return match.group() if _DATE_LIKE.search(match.group()) else "<TEL>"
+    text = match.group()
+    is_date = _DATE_LIKE.search(text) and not _COUNTRY_CODE_START.match(text)
+    return text if is_date else "<TEL>"
 
 
 def _lot_address(match: re.Match) -> str:
