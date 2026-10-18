@@ -121,20 +121,23 @@ stays free for training.
 ## 4. Baseline numbers so far
 
 From `results/model_selection.json` and `results/greeting_gate.json` on `main` (written by
-`scripts/build_model_selection.py` and the greeting gate). Gemma 3's baseline file arrives with #35. Licences
-come from the script's licence table.
+`scripts/build_model_selection.py` and the greeting gate); Gemma 3's raw run is
+`results/baseline/gemma-3-12b-it.json` (Kaggle version 5). Licences come from the script's licence table.
+Gemma 3 is a comparison baseline only: its licence (Gemma Terms of Use) rules it out as the base. The Status row
+is the `status` field in `model_selection.json`.
 
 | | AfriqueQwen3.5-9B-Instruct | Gemma 4 12B | Gemma 3 12B (baseline only) | AfriqueQwen-8B (dropped) |
 |---|---|---|---|---|
-| Belebele, plain text 0-shot | 0.667 | pending | pending #35 | pending |
-| Belebele, chat format | 0.742 | 0.750 | pending #35 | not valid (base) |
-| FLORES+ chrF++ eng→mg / mg→eng | 49.73 / 56.17 | pending | pending #35 | pending |
-| Tokens per Malagasy word | 2.826 | 2.792 | pending #35 | 2.952 |
-| Smoke: s/step, peak GPU | 83.3, 9.8 GB | pending | pending #35 | 74.3, 7.79 GB |
-| Smoke loss | 1.00 → 0.73 (0.77 last) | pending | pending #35 | 1.13 → 0.70 |
+| Belebele, plain text 0-shot | 0.667 | pending (Colab run) | 0.697 | pending |
+| Belebele, chat format | 0.742 | 0.750 | 0.751 | not valid (base) |
+| FLORES+ chrF++ eng→mg / mg→eng | 49.73 / 56.17 | pending (Colab run) | 36.84 / 51.77 | pending |
+| Tokens per Malagasy word | 2.826 | 2.792 | 2.792 | 2.952 |
+| Smoke: s/step, peak GPU | 83.3, 9.8 GB | pending (Colab run) | 122.4, 10.26 GB | 74.3, 7.79 GB |
+| Smoke loss | 1.00 → 0.73 (0.77 last) | pending (Colab run) | 1.60 → 1.21 (1.24 last) | 1.13 → 0.70 |
 | Greeting gate, judge mean (20 answers) | 2.90 | 2.85 | 1.90 | not judged |
 | Greeting gate, Malagasy rate | 0.95 | 0.90 | 0.80 | not judged |
 | Licence | CC-BY-4.0 | Apache-2.0 | Gemma Terms of Use | CC-BY-4.0 |
+| Status | candidate | candidate | dropped (licence; baseline only) | dropped (base model, no chat) |
 
 The 9B and Gemma 4 are close on greetings (a tie in practice); the pick needs Gemma 4's plain-text Belebele,
 FLORES+ and smoke numbers.
@@ -144,7 +147,6 @@ FLORES+ and smoke numbers.
 | Item | Who | State |
 |---|---|---|
 | PR #33 strict data gate | lead | open; review rounds continue. Must merge before the real `build_chats` run |
-| PR #35 Gemma 3 + Gemma 4 baselines, greeting gate in the selection table | lead | open. It also edits this file: rebase on top of this update |
 | Gemma 4 baseline (plain-text Belebele, FLORES+, smoke) | trainer | on Colab; result JSON goes in a PR |
 | Base-model pick | lead | Gemma 4 vs AfriqueQwen3.5-9B-Instruct, after the Gemma 4 numbers |
 | `synth.py` / `04_synth` default generator | data | still Gemma 3 from #30; must move to the picked permissive base |
@@ -153,7 +155,7 @@ FLORES+ and smoke numbers.
 
 ## 6. Steps to finish
 
-1. **Merge #33** (strict gate) and **#35** (baselines).
+1. **Merge #33** (strict gate). #35 (Gemma 3 + Gemma 4 baselines) merged.
 2. **Finish Gemma 4** on Colab; merge its results PR; **lead picks** Gemma 4 or AfriqueQwen3.5-9B-Instruct and
    sends the table + reason.
 3. **Real data run** from clean `main`: `build_chats.py --all-senders`, strict gate, counts only into
