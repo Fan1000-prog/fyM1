@@ -240,16 +240,18 @@ def _in_emoji_sequence(text: str, i: int) -> bool:
     return False
 
 
+def is_hidden_char(c: str) -> bool:
+    """`c` is invisible or combining: a format character, a combining mark or a default-ignorable letter."""
+    return c in _IGNORABLE_LETTERS or unicodedata.category(c) in _HIDDEN_CATEGORIES
+
+
 def has_hidden_char(text: str) -> bool:
     """`text` (normalised) still holds an invisible or combining character that is not part of an emoji.
 
     normalise() drops the ones that hide a letter; anything left (a spacing mark inside a name, a Hangul
     filler, a format character after a space) fails closed. NFC-composed accents are letters, not marks.
     """
-    return any(
-        (c in _IGNORABLE_LETTERS or unicodedata.category(c) in _HIDDEN_CATEGORIES) and not _in_emoji_sequence(text, i)
-        for i, c in enumerate(text)
-    )
+    return any(is_hidden_char(c) and not _in_emoji_sequence(text, i) for i, c in enumerate(text))
 
 
 def contact_left(text: str) -> bool:

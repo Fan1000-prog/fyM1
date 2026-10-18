@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from fym1.data.anonymize import MIN_NAME_PREFIX, NAME_SUFFIXES, compare_key, is_everyday_word, normalise
-from fym1.data.gate import PERSON_MARKER_WORDS
+from fym1.data.gate import PERSON_MARKER_WORDS, is_hidden_char
 from fym1.data.messenger import load_threads
 
 
@@ -132,6 +132,9 @@ SECRET_FILE_NAMES = frozenset({".env", "kaggle.json", "access_token", "id_rsa", 
 SECRET_FILE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
 
 _LETTERS = re.compile(r"[^\W\d_]+")
+_LETTERS_AND_DIGITS = re.compile(r"[^\W_]+")
+# Digits typed for the letters they look like ("H4nt4", "Rak0to"): the name scan also reads them as letters.
+DIGIT_LETTERS = str.maketrans("140357", "iaoest")
 _ESCAPES = re.compile(r"\\(?:u([0-9a-fA-F]{4})|[nrt\"])")
 
 
@@ -197,9 +200,15 @@ class Report:
 # ---- names ----------------------------------------------------------------------------------------------------
 
 
+def visible(text: str) -> str:
+    """`text` normalised as the anonymiser does, then without any invisible or combining character the gate
+    flags (a spacing mark or Hangul filler inside a name, "Za\u0903fy"), so a split name reads whole."""
+    return "".join(c for c in normalise(text) if not is_hidden_char(c))
+
+
 def words(text: str) -> list[str]:
-    """Letter runs as the anonymiser compares them: normalised, folded, stretched letters collapsed ("Zafyyy")."""
-    return [compare_key(run) for run in _LETTERS.findall(normalise(text))]
+    """Letter runs as the anonymiser compares them: visible, folded, stretched letters collapsed ("Zafyyy")."""
+    return [compare_key(run) for run in _LETTERS.findall(visible(text))]
 
 
 def is_name_word(word: str, names: frozenset[str]) -> bool:
@@ -241,8 +250,18 @@ def export_senders(export: Path) -> list[str]:
 
 
 def count_name_hits(text: str, names: frozenset[str]) -> int:
-    """Whole-word, case/accent-insensitive matches of `names`; JSON/Python escapes are read as characters."""
-    return sum(1 for word in words(_unescape(text)) if is_name_word(word, names))
+    """Whole-word, case/accent-insensitive matches of `names`; JSON/Python escapes are read as characters.
+
+    A run of letters and digits with no name in its letter runs is read again with DIGIT_LETTERS ("Z4fy").
+    """
+    return sum(_run_hits(run, names) for run in _LETTERS_AND_DIGITS.findall(visible(_unescape(text))))
+
+
+def _run_hits(run: str, names: frozenset[str]) -> int:
+    hits = sum(is_name_word(compare_key(word), names) for word in _LETTERS.findall(run))
+    if hits or run.isalpha() or not any(c.isalpha() for c in run):
+        return hits
+    return sum(is_name_word(compare_key(word), names) for word in _LETTERS.findall(run.translate(DIGIT_LETTERS)))
 
 
 def _unescape(text: str) -> str:
@@ -254,7 +273,7 @@ def strip_list(text: str, names: frozenset[str]) -> tuple[str, int]:
     """`text` (one entry per line, `#` comments) without entries holding a name token, and how many went."""
     kept, removed = [], 0
     for line in text.splitlines(keepends=True):
-        if not line.startswith("#") and any(is_name_word(word, names) for word in words(line)):
+        if not line.startswith("#") and count_name_hits(line, names):
             removed += 1
         else:
             kept.append(line)

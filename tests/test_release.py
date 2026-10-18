@@ -94,6 +94,11 @@ def test_strip_list_catches_stretched_and_glued_entries():
     assert (text, removed) == ("mialy\nfanja\n", 2)
 
 
+def test_strip_list_catches_split_and_digit_spelled_entries():
+    text, removed = strip_list("mialy\nZa\u3164fy\nB0d0\nfanja\n", NAMES)
+    assert (text, removed) == ("mialy\nfanja\n", 2)
+
+
 def test_strip_list_removes_matching_entries_any_case_or_accent_and_keeps_comments():
     text, removed = strip_list("# zafy in a comment stays\nmialy\nZÁFY\nbodo be\nfanja\n", NAMES)
     assert removed == 2
@@ -118,6 +123,20 @@ def test_strip_list_removes_matching_entries_any_case_or_accent_and_keeps_commen
     ("iZafyyyko", 1),
     ("Za\u200bfy", 1),
     ("ｚａｆｙ", 1),
+    # split by an invisible or combining character the gate flags
+    ("Za\u0903fy", 1),  # spacing mark (Mc)
+    ("Za\u3164fy Bo\uffa0do", 2),  # Hangul fillers: default-ignorable letters
+    ("Za\u115ffy", 1),
+    ("Za\u0336fy", 1),  # loose strike-through (Mn)
+    ("Z\u200da\u200df\u200dy", 1),  # ZWJ (Cf)
+    ('"Za\\u0903fy"', 1),  # as a JSON/Python escape
+    # digits typed for letters
+    ("Z4fy", 1),
+    ("z4fy_t3st", 2),
+    ("B0d0 tonga", 1),
+    ("iZ4fyko", 1),
+    ("Z4fy2", 1),
+    ("h4ck3r sha256 42 2026", 0),
 ])
 def test_count_name_hits_is_whole_word(text, hits):
     assert count_name_hits(text, NAMES) == hits
