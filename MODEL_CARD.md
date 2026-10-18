@@ -85,7 +85,8 @@ Counts only, never text:
 ## Training procedure
 
 QLoRA (4-bit NF4 base, LoRA on all linear layers, rank <!-- n:lora-r -->pending<!-- /n -->) with Unsloth
-on a free Kaggle T4 GPU (Colab as backup). Loss on assistant turns only, thinking turned off.
+on a paid Colab Pro A100 GPU, which also ran the evaluation. Free T4 GPUs (Kaggle, Colab) ran only the base-model
+baseline and smoke tests. Loss on assistant turns only, thinking turned off.
 <!-- n:train-steps -->pending<!-- /n --> steps, <!-- n:train-time -->pending<!-- /n --> of training. Full settings
 and the loss curve:
 [`results/train_log.json`](https://github.com/Fan1000-prog/fy-m1/blob/main/results/train_log.json).
