@@ -33,9 +33,9 @@ from fym1.data.anonymize import (MIN_NAME_PREFIX, NAME_SUFFIXES, compare_key, fo
                                  is_variation_selector, normalise)
 from fym1.data.gate import PERSON_MARKER_WORDS, is_hidden_char
 from fym1.data.gate import tokens as gate_tokens
-from fym1.data.known_words import KNOWN_WORDS, known_by
-from fym1.data.messenger import (NICKNAME_WORD, PLACEHOLDER, Thread, fix_meta_text, load_dyi_threads,
-                                 load_flat_threads)
+from fym1.data.known_words import FIRST_NAME_WORDS, KNOWN_WORDS, MG_FIRST_NAMES, known_by
+from fym1.data.messenger import (NICKNAME_EVENTS, NICKNAME_WORD, PLACEHOLDER, Thread, fix_meta_text,
+                                 load_dyi_threads, load_flat_threads)
 
 
 @dataclass(frozen=True)
@@ -414,8 +414,9 @@ FLAT_SUFFIX = ".json"  # any other JSON file, at any depth: must be a one-file e
 NAME = "name"  # a person's name (text): joins the name list
 LABEL = "label"  # a conversation title, which may name someone ("Hanta's 30th"): the chat-text check reads it, and
 # its distinctive words (`label_words`) join the name list
-NOTE = "note"  # free text about the export (notes, platform): the chat-text check reads it, and its distinctive words
-# that are not EXPORT_WORDS (`described_words`) join the name list (review finding 24).
+NOTE = "note"  # free text about the export (notes, platform): the chat-text check reads it; its listed given names
+# (`note_names`) and its distinctive words that are not EXPORT_WORDS (`described_words`) join the name list (review
+# findings 24/26: a union, the newer rule never replaces the older one).
 TEXT = "text"  # free text someone typed (a message): the chat-text check reads it
 DATA = "data"  # ids, timestamps, counts, flags, links, emoji: a number, true/false, null or text; no object or list.
 # A DATA text's distinctive letter words that are not EXPORT_WORDS (`described_words`) join the name list (finding 23).
@@ -473,6 +474,9 @@ EXPORT_WORDS: dict[str, str] = {
 # Nickname events as the release check reads them (review round 3): set, cleared, removed or changed, EN and FR UI,
 # about anyone, participant or not. The loaders keep a nickname only when its person is a participant (they map it
 # to that person's fake name); here the actor, the target and the nickname all join the name list, whoever they are.
+# The loaders' own reading (`fym1.data.messenger.NICKNAME_EVENTS`, `Thread.nicknames`) is kept alongside, never
+# replaced (review finding 25): a text either parser reads is an event, and a text the two read differently refuses
+# the export.
 NICKNAME_EVENT_NAMES = (
     re.compile(
         r"^(?P<actor>.+?) (?:set|cleared|removed|changed) (?:the nickname for (?P<target>.+?)"
@@ -488,16 +492,41 @@ NICKNAME_EVENT_NAMES = (
 _READER_WORDS = frozenset({"you", "vous"})  # "You set…", "set the nickname for you": the reader, named elsewhere
 
 
-def nickname_event_names(text: str) -> list[str] | None:
-    """The names a nickname event holds (actor, target, nickname; "you" left out), [] if `text` is not a nickname
-    event, None if it is one (Messenger's event wording with a nickname word) that no pattern reads."""
+UNREAD, DISAGREE = "unread", "disagree"  # why `nickname_event` refuses a text
+
+
+@dataclass(frozen=True)
+class NicknameEvent:
+    names: list[str]  # actor, target, nickname as either parser reads them; "you" left out
+    refused: str | None = None  # UNREAD: event wording no parser reads; DISAGREE: the two parsers read it differently
+
+
+def _first_match(patterns: Iterable[re.Pattern[str]], text: str) -> re.Match[str] | None:
+    return next((m for pattern in patterns if (m := pattern.match(text))), None)
+
+
+def _said(match: re.Match[str]) -> tuple[str | None, str | None]:
+    """(target, nickname) of a nickname-event match, folded for comparison."""
+    return tuple(fold(value.strip()) if value else None for value in (match["target"], match["nickname"]))
+
+
+def nickname_event(text: str) -> NicknameEvent | None:
+    """None if `text` is not a nickname event. Otherwise the names it holds, read by both the release patterns
+    (NICKNAME_EVENT_NAMES, on Messenger's event wording) and the loaders' (`messenger.NICKNAME_EVENTS`); a text with a
+    nickname word that either reads is an event. Refused: event wording neither reads (UNREAD), or one reads it and
+    the other does not, or they read a different target or nickname (DISAGREE)."""
     text = unicodedata.normalize("NFC", text).strip()
-    if not (PLACEHOLDER.match(text) and NICKNAME_WORD.search(text)):
-        return []
-    match = next((m for pattern in NICKNAME_EVENT_NAMES if (m := pattern.match(text))), None)
-    if match is None:
+    if not NICKNAME_WORD.search(text):
         return None
-    return [name for name in match.groupdict().values() if name and name.strip().lower() not in _READER_WORDS]
+    ours = _first_match(NICKNAME_EVENT_NAMES, text) if PLACEHOLDER.match(text) else None
+    theirs = _first_match(NICKNAME_EVENTS, text)
+    if ours is None and theirs is None:
+        return NicknameEvent([], UNREAD) if PLACEHOLDER.match(text) else None
+    # The loaders' `own` and `reader` groups hold a pronoun ("her own nickname"), not a name: left out.
+    held = [*(ours.groupdict().values() if ours else ()), *((theirs["target"], theirs["nickname"]) if theirs else ())]
+    names = [name for name in held if name and name.strip().lower() not in _READER_WORDS]
+    agree = ours is not None and theirs is not None and _said(ours) == _said(theirs)
+    return NicknameEvent(names, None if agree else DISAGREE)
 
 
 def export_files(export: Path) -> ExportFiles:
@@ -591,17 +620,18 @@ class ExportScan:
     free_texts: list[str]  # every LABEL, NOTE and TEXT field, for the chat-text check
     label_words_common: int  # LABEL words left out of the names as common (`label_words`)
     keys: int  # distinct schema keys the export uses
-    nickname_events: int = 0  # nickname events read (`nickname_event_names`)
+    nickname_events: int = 0  # nickname events read (`nickname_event`)
     export_words_allowed: int = 0  # distinctive NOTE and DATA words left out as EXPORT_WORDS
 
 
 def scan_export(export: Path) -> ExportScan:
     """Every person name and free text the export holds, read from its raw files against the format's schema
     (DYI_SCHEMA for thread pages in any folder, FLAT_SCHEMA for one-file exports) rather than from the loaded
-    conversations (which drop unsent, call and event messages), plus the names in every nickname event and the
-    distinctive words of every title, note and data text (`described_words`). Refused, counted, never named: a key
-    outside the schema, a key written twice in one object, a nickname event no pattern reads, a page of any other
-    shape. Errors never carry the export's paths or text."""
+    conversations (which drop unsent, call and event messages), plus the names in every nickname event, the
+    loaders' nicknames (`Thread.nicknames`), the listed given names of every note (`note_names`) and the distinctive
+    words of every title, note and data text (`described_words`). Refused, counted, never named: a key outside the
+    schema, a key written twice in one object, a nickname event no pattern reads or that the release patterns and
+    the loaders' read differently, a page of any other shape. Errors never carry the export's paths or text."""
     found_files, found = export_files(export), _Fields()
     threads = read_export(export, found_files)
     try:
@@ -619,23 +649,35 @@ def scan_export(export: Path) -> ExportScan:
                            f"(fym1.release.DYI_SCHEMA / FLAT_SCHEMA)")
     if found.duplicate_keys:
         raise RefusedError(f"export holds {found.duplicate_keys} keys written twice in one object")
-    events = [names for text in found.values[TEXT] if (names := nickname_event_names(text)) != []]
-    if None in events:
-        raise RefusedError(f"export holds {events.count(None)} nickname events the release check cannot read "
+    events = [event for text in found.values[TEXT] if (event := nickname_event(text)) is not None]
+    refused = Counter(event.refused for event in events if event.refused)
+    if refused[UNREAD]:
+        raise RefusedError(f"export holds {refused[UNREAD]} nickname events the release check cannot read "
                            f"(fym1.release.NICKNAME_EVENT_NAMES)")
+    if refused[DISAGREE]:
+        raise RefusedError(f"export holds {refused[DISAGREE]} nickname events the release check and the loaders "
+                           f"read differently (fym1.release.NICKNAME_EVENT_NAMES / messenger.NICKNAME_EVENTS)")
     labels = [label_words(label) for label in found.values[LABEL]]
     described = [described_words(text) for text in found.values[NOTE]]
     described += [described_words(" ".join(_LETTERS.findall(text))) for text in found.values[DATA]]
     return ExportScan(
         threads=threads,
-        names=[*found.values[NAME], *(name for names in events for name in names),
-               *(word for kept, _ in labels for word in kept), *(word for kept, _ in described for word in kept)],
+        names=[*found.values[NAME], *(name for event in events for name in event.names),
+               *(nickname for thread in threads for nickname in thread.nicknames),
+               *(word for kept, _ in labels for word in kept), *(word for kept, _ in described for word in kept),
+               *(name for note in found.values[NOTE] for name in note_names(note))],
         free_texts=[*found.values[LABEL], *found.values[NOTE], *found.values[TEXT]],
         label_words_common=sum(common for _, common in labels),
         keys=len(found.keys),
         nickname_events=len(events),
         export_words_allowed=sum(allowed for _, allowed in described),
     )
+
+
+def note_names(note: str) -> list[str]:
+    """The words of a NOTE that are listed given names (`first_names.txt`, `mg_first_names.txt`), case and accents
+    folded, EXPORT_WORDS or not: they join the name list alongside `described_words` (review finding 26)."""
+    return [word for word in _LETTERS.findall(fold(note)) if word in FIRST_NAME_WORDS or word in MG_FIRST_NAMES]
 
 
 def described_words(text: str) -> tuple[list[str], int]:

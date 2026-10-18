@@ -795,9 +795,7 @@ def _with_events(tmp_path: Path, flat: bool, events: list[tuple[str, str]], part
 NICKNAME_SLIPS = [  # (sender, event text, the names it must add); no named person is a participant
     ("Zafy Test", "Zafy Test set the nickname for Gonefake Person to Nickfake.", ["Gonefake", "Nickfake"]),
     ("Leftfake Person", "Leftfake Person set her own nickname to Ownnickfake.", ["Leftfake", "Ownnickfake"]),
-    ("Zafy Test", "Zafy Test cleared the nickname for Clearfake Person.", ["Clearfake"]),
     ("Zafy Test", "Zafy Test a défini le surnom de Frgonefake sur Frnickfake.", ["Frgonefake", "Frnickfake"]),
-    ("Zafy Test", "Zafy Test a supprimé le surnom d’Frclearfake.", ["Frclearfake"]),
 ]
 
 
@@ -836,6 +834,91 @@ def test_a_nickname_event_the_check_cannot_read_refuses_the_export(tmp_path, cap
     assert not (tmp_path / "public").exists() and not (tmp_path / "r.json").exists()
     printed = capsys.readouterr()
     assert "fake" not in (printed.out + printed.err).lower()
+
+
+# ---- the loaders' nickname reading is kept alongside the release check's (review finding 25) -----------------------
+
+PARSERS_DISAGREE = [  # event texts one parser reads and the other does not, or that the two read differently
+    "Zafy Test cleared the nickname for Clearfake Person.",  # release patterns only (no "to")
+    "Zafy Test a supprimé le surnom d’Frclearfake.",  # release patterns only (curly apostrophe, "supprimé")
+    "Zafy Test set the nickname for Bodo Fakenaina TO Mid to Nickfake.",  # both: different target and nickname
+    f"{'Zafy Longfake ' * 7}set the nickname for Bodo Fakenaina to Nickfake.",  # loaders only (actor > 80 letters)
+]
+
+
+@pytest.mark.parametrize("text", PARSERS_DISAGREE)
+def test_parsers_that_read_a_nickname_event_differently_disagree(text):
+    event = release.nickname_event(text)
+    assert event is not None and event.refused == release.DISAGREE
+
+
+@pytest.mark.parametrize("flat", [True, False])
+@pytest.mark.parametrize("text", PARSERS_DISAGREE)
+def test_a_nickname_event_the_parsers_read_differently_refuses_the_export(tmp_path, capsys, flat, text):
+    export = _with_events(tmp_path, flat, [("Zafy Test", text)], ["Zafy Test"])
+    with pytest.raises(RefusedError, match="1 nickname events the release check and the loaders read") as error:
+        release.scan_export(export)
+    assert "fake" not in str(error.value).lower()
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    (tmp_path / "cli").mkdir()
+    args = [*cli_args(tmp_path / "cli", repo, tmp_path / "public"), "--results", str(tmp_path / "r.json")]
+    args[args.index("--export") + 1] = str(export)
+    assert cli.main(args) == 2
+    assert not (tmp_path / "public").exists() and not (tmp_path / "r.json").exists()
+    printed = capsys.readouterr()
+    assert "fake" not in (printed.out + printed.err).lower()
+
+
+@pytest.mark.parametrize(("text", "hidden"), [(t, h) for _, t, h in NICKNAME_SLIPS])
+def test_both_parsers_agree_on_every_event_the_loaders_read(text, hidden):
+    event = release.nickname_event(text)
+    assert event is not None and event.refused is None
+    assert {fold(h) for h in hidden} <= {fold(word) for name in event.names for word in name.split()}
+
+
+def test_a_text_without_a_nickname_word_is_no_event():
+    assert release.nickname_event("Zafy Test sent a photo.") is None
+    assert release.nickname_event("tsara be ilay pseudo-nao") is None  # nickname word, no event wording
+
+
+def test_the_loaders_nicknames_join_the_name_list(tmp_path, monkeypatch):
+    """`Thread.nicknames` stays a name source next to the release patterns: a nickname only the loaders hold (here
+    put on the loaded threads) still joins the name list."""
+    export = _with_events(tmp_path, True, [("Zafy Test", NICKNAME_SLIPS[0][1])], ["Zafy Test"])
+    read = release.read_export
+
+    def with_loader_nickname(*args, **kwargs):
+        threads = read(*args, **kwargs)
+        threads[0].nicknames["Loaderfake"] = "Zafy Test"
+        return threads
+
+    monkeypatch.setattr(release, "read_export", with_loader_nickname)
+    names = name_tokens(export_names(export))[0]
+    assert {release.compare_key(n) for n in ("Loaderfake", "Nickfake")} <= names
+
+
+# ---- notes: listed given names and distinctive words, both (review finding 26) -------------------------------------
+
+
+def test_a_listed_given_name_that_is_not_distinctive_in_the_notes_is_a_name(tmp_path):
+    """"Alain" is a listed given name that `described_words` leaves out (not distinctive); `note_names` keeps it."""
+    assert not release.described_words("Alain")[0]
+    names = export_names(_flat_file(tmp_path, {"notes": "chat with Alain and Notefake"}))
+    assert {"alain", "notefake"} <= {fold(n) for n in names}
+
+
+def test_a_listed_given_name_in_the_export_words_is_still_a_name(tmp_path, monkeypatch):
+    monkeypatch.setitem(release.EXPORT_WORDS, "mialy", "synthetic test entry")
+    assert not release.described_words("Mialy")[0]
+    names = export_names(_flat_file(tmp_path, {"platform": "Mialy app"}))
+    assert "mialy" in {fold(n) for n in names}
+
+
+def test_a_listed_given_name_in_the_notes_is_caught_end_to_end(tmp_path):
+    export = _flat_file(tmp_path, {"notes": "export for Alain"})
+    report = snap(make_repo(tmp_path, {**CLEAN_FILES, "docs/thanks.md": "Thanks Alain!\n"}), tmp_path / "public",
+                  export)
+    assert report.name_hits == {"docs/thanks.md": 1} and not report.ok
 
 
 def test_a_reader_nickname_event_adds_no_you(tmp_path):
