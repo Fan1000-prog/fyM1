@@ -196,3 +196,12 @@ def test_build_records_every_sender_hides_every_name_from_every_side():
     text = all_text(records).lower()
     for part in ("nirina", "rakoto", "tojo", "randria", "hery", "rabe"):
         assert part not in text
+
+
+def test_build_records_replaces_a_real_name_that_is_also_a_pool_name():
+    thread = chat([("Nirina Rakoto", "Rabe no nandeha omaly"), ("Tojo Randria", "eny tsara ihany")])
+
+    result = build_records([thread], owner="Tojo Randria", is_malagasy=says_malagasy)
+
+    assert "Rabe" not in all_text(result.records)
+    assert "no nandeha omaly" in all_text(result.records)

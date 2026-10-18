@@ -17,16 +17,25 @@ Capitalised words (not our fake names, placeholders or currency words) are then 
 - replaced: anything else becomes a fake first name from the anonymiser's pool, the same fake
   for the same word within one conversation, never a word already in that conversation.
 
+A pool name the raw conversation already held ("Rabe no nandeha") is a real person there, not
+our fake: the caller passes it in `disallowed` and it is always replaced, word or not.
+
+Lower-case names are replaced too (the same way, never counted as "typed in lower case"):
+
+- after a name particle (`i`, `ry`, `n'i`, `an'i`, `tamin'i`, `ho an'i`): any word that is a pool
+  name or that no list knows ("ry hasina", "tamin'i rakoto"); "ry namana", "i dada" stay.
+- `ra` + a word no list knows ("rakoto"), and any `Ra-`/`ra-` hyphenated word ("Ra-be").
+
 Only counts leave this module; never text or words.
 """
 
 import hashlib
 import re
 from collections import Counter
-from collections.abc import Iterable, Iterator
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from typing import NamedTuple
 
-from fym1.data.anonymize import EMAIL, FALLBACK_NAME, FIRST_NAMES, SURNAMES, compare_key
+from fym1.data.anonymize import EMAIL, FALLBACK_NAME, FIRST_NAMES, SURNAMES, compare_key, fold
 from fym1.data.known_words import KNOWN_WORDS, Lexicon, known_by
 from fym1.data.leftovers import LETTERS, MIN_LETTERS, fake_name_keys
 
@@ -46,6 +55,14 @@ LINK_WITH_PATH = re.compile(r"\b(?:https?://|www\.)\S+|\b(?:[\w-]+\.)+[a-z]{2,}[
 HANDLE = re.compile(r"(?<![\w.])@[\w.]*\w")
 PRIVATE_USE = re.compile("[\ue000-\uf8ff]")
 SENTENCE_END = ".!?…\n"
+
+# A word token: letters only, or a hyphenated "Ra-be" taken whole.
+TOKEN = re.compile(r"(?<![<\w])(?:[Rr]a-)?[^\W\d_]+(?![\w>])")
+NAME_PARTICLE = re.compile(r"(?:(?<![\w'’])(?:i|ry)|\w['’]i)\s+$", re.IGNORECASE)
+PARTICLE_WINDOW = 12  # characters looked back for a particle
+RA_PREFIX = "ra"
+MIN_RA_NAME = 4  # "rabe"
+POOL_KEYS = frozenset(compare_key(name) for name in (*FIRST_NAMES, *SURNAMES))
 
 
 class GateResult(NamedTuple):
@@ -74,17 +91,41 @@ def _sentence_initial(text: str, start: int) -> bool:
     return not before or before[-1] in SENTENCE_END
 
 
+def pool_names_in(texts: Iterable[str]) -> set[str]:
+    """Keys of the fake-name pool's names written capitalised in `texts` (raw, before anonymising)."""
+    capitalised = (w for text in texts for w in LETTERS.findall(text) if w[0].isupper())
+    return {key for w in capitalised if (key := compare_key(w)) in POOL_KEYS}
+
+
 def _is_capitalised(word: str, fake_keys: set[str]) -> bool:
     return word[0].isupper() and len(word) >= MIN_LETTERS and compare_key(word) not in fake_keys
 
 
 def _capitalised(text: str, fake_keys: set[str]) -> Iterator[re.Match]:
-    return (m for m in LETTERS.finditer(text) if _is_capitalised(m.group(), fake_keys))
+    return (m for m in TOKEN.finditer(text) if _is_capitalised(m.group(), fake_keys))
+
+
+def _is_lowercase_name(text: str, match: re.Match, lexicon: Lexicon) -> bool:
+    """A lower-case word that is a name by its place or shape (see the module docstring)."""
+    word = match.group()
+    if not word[0].islower() or len(word) < MIN_LETTERS:
+        return False
+    if "-" in word:  # "ra-koto"
+        return True
+    unknown = known_by(word, lexicon) is None
+    if NAME_PARTICLE.search(text, max(0, match.start() - PARTICLE_WINDOW), match.start()):
+        return unknown or compare_key(word) in POOL_KEYS
+    return unknown and len(word) >= MIN_RA_NAME and fold(word).startswith(RA_PREFIX)
 
 
 def _seen_lowercase(texts: list[str], fake_keys: set[str], lexicon: Lexicon) -> set[str]:
     """Keys of unknown words capitalised only at sentence starts and also seen in lower case."""
-    lower = {compare_key(w) for text in texts for w in LETTERS.findall(text) if w[0].islower()}
+    lower = {
+        compare_key(m.group())
+        for text in texts
+        for m in TOKEN.finditer(text)
+        if m.group()[0].islower() and not _is_lowercase_name(text, m, lexicon)
+    }
     initial_only: dict[str, bool] = {}
     for text in texts:
         for match in _capitalised(text, fake_keys):
@@ -108,29 +149,33 @@ class _Names(NamedTuple):
     cleared: Counter  # list name -> capitalised words it cleared
 
 
-def _clear_or_replace(texts: list[str], fake_keys: set[str], lexicon: Lexicon, seen_lower: set[str]) -> _Names:
-    """One conversation's turns with every unknown capitalised word swapped for a fake first name."""
-    taken = {compare_key(w) for text in texts for w in LETTERS.findall(text)}
+def _clear_or_replace(
+    texts: list[str], fake_keys: set[str], lexicon: Lexicon, seen_lower: set[str], disallowed: set[str]
+) -> _Names:
+    """One conversation's turns with every unknown or disallowed name swapped for a fake first name."""
+    taken = {compare_key(w) for text in texts for w in LETTERS.findall(text)} | disallowed
     fakes: dict[str, str] = {}
     cleared, replaced = Counter(), 0
 
-    def swap(match: re.Match) -> str:
+    def swap(text: str, match: re.Match) -> str:
         nonlocal replaced
         word = match.group()
-        if not _is_capitalised(word, fake_keys):
-            return word
         key = compare_key(word)
-        source = known_by(word, lexicon) or (SEEN_LOWERCASE if key in seen_lower else None)
-        if source:
-            cleared[source] += 1
-            return word
+        if not _is_lowercase_name(text, match, lexicon):
+            if not _is_capitalised(word, fake_keys):
+                return word
+            source = None if key in disallowed else known_by(word, lexicon)
+            source = source or (SEEN_LOWERCASE if key in seen_lower and key not in disallowed else None)
+            if source:
+                cleared[source] += 1
+                return word
         if key not in fakes:
             fakes[key] = _fake_for(key, taken)
             taken.add(compare_key(fakes[key]))
         replaced += 1
         return fakes[key]
 
-    new_texts = [LETTERS.sub(swap, text) for text in texts]
+    new_texts = [TOKEN.sub(lambda m, text=text: swap(text, m), text) for text in texts]
     words = sum(len(LETTERS.findall(text)) for text in texts)
     return _Names(new_texts, words, replaced, cleared)
 
@@ -140,21 +185,30 @@ def _with_texts(record: dict, texts: list[str]) -> dict:
     return {**record, "messages": messages}
 
 
-def strict_gate(records: list[dict], fake_names: Iterable[str], lexicon: Lexicon = KNOWN_WORDS) -> GateResult:
+def strict_gate(
+    records: list[dict],
+    fake_names: Iterable[str],
+    lexicon: Lexicon = KNOWN_WORDS,
+    disallowed: Mapping[str, Collection[str]] | None = None,
+) -> GateResult:
     """Records with nothing unresolved and unknown names replaced, plus counts.
 
     `fake_names` are the participants' fakes; the whole fake-name pool is allowed too, since
-    @mentions get fakes from it, and so are currency words ("Ar"). A conversation dropped for
+    @mentions get fakes from it, and so are currency words ("Ar"). `disallowed` maps a record id
+    to pool names its raw text already held: those are real there, so they are replaced (a
+    participant's fake that equals one is replaced too, the same way). A conversation dropped for
     two reasons counts under both. `cleared_*` counts capitalised words in every conversation
     before the gate; `tokens_replaced` counts words replaced in kept conversations.
     """
     allowed = [*fake_names, *FIRST_NAMES, *SURNAMES, FALLBACK_NAME, *CURRENCY_WORDS]
     fake_keys = fake_name_keys(allowed)
+    disallowed = disallowed or {}
     seen_lower = _seen_lowercase([turn["content"] for r in records for turn in r["messages"]], fake_keys, lexicon)
     kept, dropped, cleared, replaced = [], dict.fromkeys(GATE_REASONS, 0), Counter(), 0
     for record in records:
         texts = [turn["content"] for turn in record["messages"]]
-        names = _clear_or_replace(texts, fake_keys, lexicon, seen_lower)
+        real_pool = {compare_key(name) for name in disallowed.get(record["id"], ())}
+        names = _clear_or_replace(texts, fake_keys - real_pool, lexicon, seen_lower, real_pool)
         cleared += names.cleared
         reasons = _reasons(texts)
         if names.replaced > MAX_REPLACED_SHARE * names.words:

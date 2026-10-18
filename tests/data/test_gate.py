@@ -1,9 +1,11 @@
 """Strict automatic gate: synthetic text only."""
 
+import re
+
 import pytest
 
 from fym1.data.anonymize import FIRST_NAMES
-from fym1.data.gate import GATE_REASONS, contact_left, has_long_number, strict_gate
+from fym1.data.gate import GATE_REASONS, contact_left, has_long_number, pool_names_in, strict_gate
 from fym1.data.known_words import word_list
 
 
@@ -223,3 +225,92 @@ def test_gate_counts_never_hold_text():
 
     assert all(isinstance(v, int) for v in counts.values())
     assert "Bema" not in repr(counts) and "Koto" not in repr(counts)
+
+
+def test_pool_name_already_in_the_raw_conversation_is_replaced_by_a_different_fake():
+    # "Rabe" was in the raw text, so it is a real person here, not one of our fakes
+    records = [
+        record("real", "Rabe no nandeha", "eny tsara ihany"),
+        record("fake", "Rabe no nandeha", "eny tsara"),
+    ]
+
+    result = strict_gate(records, fake_names=[], lexicon=TINY_LEXICON, disallowed={"real": {"Rabe"}})
+
+    real, _, fake, _ = texts(result)
+    assert fake == "Rabe no nandeha"  # elsewhere "Rabe" is still one of our fakes
+    assert "Rabe" not in real and real.split()[0] in FIRST_NAMES
+    assert result.counts["tokens_replaced"] == 1
+
+
+def test_disallowed_pool_name_is_replaced_even_when_it_is_also_a_word():
+    records = [record("a", "nandeha Andry omaly", "eny tsara ihany")]
+
+    result = strict_gate(records, fake_names=["Andry Rabe"], disallowed={"a": {"Andry"}})
+
+    assert "Andry" not in texts(result)[0]
+
+
+def test_pool_names_in_finds_capitalised_pool_names_only():
+    assert pool_names_in(["Rabe sy RASOA no tonga", "ilay andry", "hoy Bema"]) == {"rabe", "rasoa"}
+
+
+@pytest.mark.parametrize(
+    ("text", "name"),
+    [
+        ("niaraka tamin'i rakoto aho", "rakoto"),
+        ("ry hasina, aiza ianao?", "hasina"),  # a pool name: a name after "ry", though also a word
+        ("an'i koto ilay izy", "koto"),
+        ("ho an’i koto ilay izy", "koto"),
+        ("hoy n'i koto", "koto"),
+        ("tonga i koto omaly", "koto"),
+        ("Ry koto, aiza?", "koto"),
+        ("nahita rakoto aho", "rakoto"),  # "ra" + a word no list knows
+        ("tonga i Ra-be omaly", "Ra-be"),
+        ("tonga ra-koto omaly", "ra-koto"),
+    ],
+)
+def test_lowercase_names_after_particles_and_ra_prefix_are_replaced(text, name):
+    result = strict_gate([record("a", text, "eny tsara ihany koa, eny tsara ihany koa")], fake_names=[])
+
+    assert name not in texts(result)[0]
+    assert "Ra-" not in texts(result)[0] and "ra-" not in texts(result)[0]
+    assert result.counts["tokens_replaced"] == 1
+
+
+@pytest.mark.parametrize(
+    "text", ["ry namana, aiza ianao?", "ry malala", "tonga i dada omaly", "ho an'i neny", "raha tonga ianao", "rano"]
+)
+def test_known_lowercase_words_after_particles_stay(text):
+    result = strict_gate([record("a", text, "eny tsara ihany koa")], fake_names=[])
+
+    assert texts(result)[0] == text
+
+
+def test_lowercase_name_typed_elsewhere_does_not_clear_the_capitalised_name():
+    records = [record("a", "Rakoto io. Koto koa.", "ry koto, hitako rakoto, eny tsara ihany koa eny tsara")]
+
+    result = strict_gate(records, fake_names=[])
+
+    words = set(re.findall(r"\w+", " ".join(texts(result))))
+    assert not {"Rakoto", "Koto", "rakoto", "koto"} & words
+    assert result.counts["cleared_seen_lowercase"] == 0
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["Sandrine", "Aurélie", "Émilie", "Manon", "Chloé", "Kevin", "Mickael", "Nadia", "Elodie", "Karine", "Annie",
+     "Jessica", "Johnny", "Tony", "Linda", "Jocelyn"],
+)  # fmt: skip
+def test_real_lists_do_not_clear_french_and_english_first_names(name):
+    result = strict_gate([record("a", f"tonga i {name} omaly", "eny tsara ihany koa")], fake_names=[])
+
+    assert name not in texts(result)[0]
+
+
+@pytest.mark.parametrize(
+    "word", ["Neny", "Dada", "Mama", "Dadabe", "Nenibe", "Dadatoa", "Nenitoa", "Tantine", "Zoky", "Zandry", "Tonton", "Tata", "Ranabavy"]
+)
+def test_real_lists_clear_family_words(word):
+    result = strict_gate([record("a", f"tonga {word} omaly", "eny tsara ihany koa")], fake_names=[])
+
+    assert texts(result)[0] == f"tonga {word} omaly"
