@@ -6,8 +6,9 @@
 Downloads `synth/filtered.ndjson` at --revision (the Hugging Face token comes from the local cache, never an
 argument), reads every sender, participant and message of the raw export in --export (local only), and runs
 `fym1.data.synth_gate` on every chat. Writes the counts report (with dropped chat ids) to --results. When any
-chat is dropped, writes the kept ids, one per line, to <--private-out>/kept_ids.txt (outside every git work
-tree) so the trainer promotes only those. Never uploads and never promotes.
+pass, writes the kept ids, one per line, to <--private-out>/kept_ids.txt (outside every git work tree) so the
+trainer promotes only those; on a fail, removes any old kept_ids.txt so a stale list is never promoted. Never
+uploads and never promotes.
 Exit 0: pass. Exit 1: the gate failed (an 8-word match with the raw export, or nothing kept). Exit 2: refused.
 """
 
@@ -77,14 +78,18 @@ def main(argv: list[str] | None = None, download: Callable[[str], Path] = downlo
               "file_sha256": hashlib.sha256(path.read_bytes()).hexdigest(), **result.report}  # fmt: skip
     args.results.parent.mkdir(parents=True, exist_ok=True)
     args.results.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    if result.report["dropped"]:
+    passed = report["status"] == "pass"
+    kept_file = private_out / KEPT_IDS
+    if passed:
         private_out.mkdir(parents=True, exist_ok=True)
-        (private_out / KEPT_IDS).write_text("".join(f"{i}\n" for i in result.kept_ids), encoding="utf-8")
+        kept_file.write_text("".join(f"{i}\n" for i in result.kept_ids), encoding="utf-8")
+    else:
+        kept_file.unlink(missing_ok=True)
     print(f"checked {report['checked']}, kept {report['kept']}, dropped {report['dropped']}")
     print("dropped by reason: " + ", ".join(f"{k} {v}" for k, v in report["dropped_by_reason"].items()))
-    print(f"report: {args.results}" + (f"; kept ids: {private_out / KEPT_IDS}" if report["dropped"] else ""))
+    print(f"report: {args.results}" + (f"; kept ids: {kept_file}" if passed else ""))
     print(report["status"].upper())
-    return 0 if report["status"] == "pass" else 1
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":
