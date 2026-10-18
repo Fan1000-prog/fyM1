@@ -186,6 +186,9 @@ KNOWN_LIMITS = [
     "Villa 23 Ivandry",
     "tel34 12 345 67",  # glued mobile without the leading 0
     "telO34 12 345 67",  # glued, letter O typed for the 0
+    "34 123 45 67",  # no-0 mobile with a 3-digit or 1-digit second group: a wider rule
+    "34 1 234 567",  # risks turning price pairs into phones again
+    "34 123 4567",
 ]
 
 
