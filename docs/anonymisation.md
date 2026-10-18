@@ -73,21 +73,31 @@ A letter O for the 0 right after a word (`contactO345 40 77 66`, `numO3 74 78 29
 corpus of 20,000 everyday lines with a word ending in o/O right before a number ("Hono 3 kilao", "photo 2",
 "Toamasina 25", glued amounts): none gets a `<TEL>`.
 
-## Leftover names: the owner's second pass
+## Strict gate: nobody reads the text
 
-After anonymising, `build_chats.py` writes `leftover_names.html` next to the review sheet: every
-capitalised word that survived and is not a common Malagasy word, with how often it appears —
-words and counts only, no sentences. The owner ticks the real names, saves `blocklist.txt`, and
-runs `build_chats.py` again with `--blocklist blocklist.txt`; those words are then treated as names
-everywhere (same rules: case, accents, endings, stretched letters).
+After anonymising, `build_chats.py` runs a strict automatic gate (`src/fym1/data/gate.py`,
+tests `tests/data/test_gate.py`). It drops a whole conversation if any turn still holds:
+
+| Reason | Caught | Kept |
+|---|---|---|
+| `long_number` | 7+ digits in one run across space, no-break spaces, `. - / ,` and unicode dashes (`12 34 567`, `15/03/2026`) | a price: clean 3-digit groups or no separator, then `Ar`, `Ariary`, `fmg`, `€`, `euro(s)`, `eur` (`1 500 000 Ar`) |
+| `leftover_name` | a capitalised word that is not a common Malagasy word, a fake name, a placeholder or a currency word | a word capitalised only at sentence starts that the corpus also has in lower case |
+| `contact` | an email, a link with a path or query, an `@handle`, a private-use mark from a failed replacement | `<EMAIL>`, `<URL>`, a bare `host.com` |
+
+Counts only (never text or words) go to `data_gate.json` next to `--out`; `--gate-results
+results/data_gate.json` copies them into the repo. `--dry-run` prints the same counts and writes nothing.
+The 100-sample review sheet (`--sheet`) and the leftover-words list (`--leftover-sheet`) are optional and
+off by default; `--blocklist` still replaces listed words everywhere, so fewer conversations are dropped.
 
 When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit reference number `<TEL>`.
 
-## Known limits — the owner's review sheet is the backstop
+## Known limits — the strict gate is the backstop
 
 - **Third-party names typed as plain text** (someone not in the chat, no `@`) are not detected
-  automatically; that needs named-entity recognition. Capitalised ones show up on the leftover
-  sheet for the owner to block; lower-case ones rely on the review sheet.
+  automatically; that needs named-entity recognition. Capitalised ones make the strict gate drop
+  the conversation; lower-case ones are not caught.
+- A real name that is also on the fake-name pool ("Mamy", "Rabe") passes the strict gate: the
+  pool is allowed because `@mentions` get fakes from it.
 - Names spelled out or disguised: "Ni-ri-na", "N i r i n a", "N1r1na".
 - Phone numbers written in words ("aotra telo efatra…", "034 douze …") or with letters for digits ("l2").
 - A phone whose first digits make a full date and whose rest reads as a price ("18/03/80 559 874",

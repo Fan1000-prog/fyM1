@@ -8,6 +8,7 @@ from dataclasses import replace
 from typing import NamedTuple
 
 from fym1.data.anonymize import Anonymizer, assign_fake_names
+from fym1.data.gate import strict_gate
 from fym1.data.leftovers import leftover_names
 from fym1.data.messenger import Thread
 from fym1.data.segment import Conversation, to_conversations
@@ -18,9 +19,10 @@ DATA_STATS_KEYS = ("threads", "conversations", "approved", "identity", "formal",
 
 
 class BuildResult(NamedTuple):
-    records: list[dict]
+    records: list[dict]  # conversations that passed the strict gate
     common_word_replacements: int  # everyday words wiped because a contact is named that
-    leftover_names: Counter  # capitalised words that survived, for the owner to check
+    leftover_names: Counter  # capitalised words that survived anonymising, before the gate
+    gate: dict[str, int]  # strict-gate counts (fym1.data.gate); counts only, never text
 
 
 def _malagasy_share(conversation: Conversation, is_malagasy: Callable[[str], bool]) -> float:
@@ -54,9 +56,10 @@ def build_records(
 ) -> BuildResult:
     """`{"id", "messages"}` per anonymised conversation that is at least half Malagasy.
 
-`owner=None` makes every sender the assistant in turn (see `to_conversations`).
+    `owner=None` makes every sender the assistant in turn (see `to_conversations`).
 
-    Identical conversations are kept once.
+    Identical conversations are kept once. Then the strict gate drops every conversation
+    with an unresolved name, long number or contact (`fym1.data.gate.strict_gate`).
     """
     names = _fake_names(threads, blocklist)
     anonymize = Anonymizer(names)
@@ -69,8 +72,9 @@ def build_records(
                 record_id = _record_id(conversation)
                 records.setdefault(record_id, {"id": record_id, "messages": conversation})
     texts = [turn["content"] for record in records.values() for turn in record["messages"]]
+    gated = strict_gate(list(records.values()), names.values())
     return BuildResult(
-        list(records.values()), anonymize.common_word_replacements, leftover_names(texts, names.values())
+        gated.kept, anonymize.common_word_replacements, leftover_names(texts, names.values()), gated.counts
     )
 
 
