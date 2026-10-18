@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from fym1.data.messenger import PLACEHOLDER, Message, fix_meta_text, parse_nickname_event, load_threads
+from fym1.data.messenger import PLACEHOLDER, Message, fix_meta_text, parse_nickname_event, load_dyi_threads, load_threads
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -49,6 +49,14 @@ def test_load_threads_ignores_message_requests():
     threads = load_threads(FIXTURES / "dyi_export")
 
     assert all("Olona Tsy Fantatra" not in t.participants for t in threads)
+
+
+def test_load_dyi_threads_reads_every_folder_when_asked():
+    folders = load_dyi_threads(FIXTURES / "dyi_export")
+    every = load_dyi_threads(FIXTURES / "dyi_export", folders=None)
+
+    assert len(every) == len(folders) + 1
+    assert any("Olona Tsy Fantatra" in t.participants for t in every)
 
 
 def test_load_threads_empty_dir_returns_nothing(tmp_path):

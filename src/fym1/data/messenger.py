@@ -166,15 +166,11 @@ def _load_dyi_thread(thread_dir: Path) -> Thread:
     )
 
 
-def load_dyi_threads(export_dir: Path) -> list[Thread]:
-    """Threads from the standard "Download your information" JSON export."""
-    thread_dirs = sorted(
-        {
-            page.parent
-            for folder in DYI_FOLDERS
-            for page in export_dir.glob(f"**/messages/{folder}/*/message_*.json")
-        }
-    )
+def load_dyi_threads(export_dir: Path, folders: Iterable[str] | None = DYI_FOLDERS) -> list[Thread]:
+    """Threads from the standard "Download your information" JSON export, in `folders` only; `folders=None` reads
+    every folder of thread pages anywhere under `export_dir` (message_requests and filtered_threads too)."""
+    patterns = ["**/message_*.json"] if folders is None else [f"**/messages/{f}/*/message_*.json" for f in folders]
+    thread_dirs = sorted({page.parent for pattern in patterns for page in export_dir.glob(pattern)})
     return [_load_dyi_thread(d) for d in thread_dirs]
 
 

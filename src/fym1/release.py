@@ -31,7 +31,7 @@ from fym1.data.anonymize import MIN_NAME_PREFIX, NAME_SUFFIXES, compare_key, fol
 from fym1.data.gate import PERSON_MARKER_WORDS, is_hidden_char
 from fym1.data.gate import tokens as gate_tokens
 from fym1.data.known_words import KNOWN_WORDS, known_by
-from fym1.data.messenger import Thread, load_threads
+from fym1.data.messenger import Thread, fix_meta_text, load_dyi_threads, load_flat_threads
 from fym1.eval.metrics import NgramIndex
 
 
@@ -359,19 +359,40 @@ def name_tokens(senders: Iterable[str]) -> tuple[frozenset[str], int, int]:
 
 
 def read_export(export: Path) -> list[Thread]:
-    """The export's conversations. Errors never carry the export's paths or text."""
+    """The export's conversations, from every folder of thread pages (message requests and filtered threads too)
+    and the one-file format. Errors never carry the export's paths or text."""
     try:
-        threads = load_threads(export)
-    except (ValueError, OSError, KeyError, TypeError) as error:
+        threads = [*load_dyi_threads(export, folders=None), *load_flat_threads(export)]
+    except (ValueError, OSError, KeyError, TypeError, IndexError, AttributeError) as error:
         raise RefusedError(f"export could not be read ({type(error).__name__})") from None
     if not threads:
         raise RefusedError("export holds no conversations")
     return threads
 
 
-def export_senders(threads: list[Thread]) -> list[str]:
-    """Every sender and listed participant in the export."""
-    return [p for thread in threads for p in [*thread.participants, *(m.sender for m in thread.messages)]]
+def export_senders(export: Path) -> list[str]:
+    """Every person name the export lists, read from its raw files rather than the loaded conversations (which drop
+    unsent, call and event messages): in every thread page (`message_*.json`) anywhere under `export`, whatever its
+    folder (inbox, archived_threads, e2ee_cutover, message_requests, filtered_threads, ...), the participants, every
+    message's sender and every reaction's actor; in the one-file format, the listed participants and every sender.
+    A page of any other shape is refused. Errors never carry the export's paths or text."""
+    try:
+        pages = sorted(export.glob("**/message_*.json")) if export.is_dir() else []
+        names = [name for page in pages for name in _page_names(json.loads(page.read_text(encoding="utf-8")))]
+        names += [p for thread in load_flat_threads(export) for p in thread.participants]
+    except (ValueError, OSError, KeyError, TypeError, AttributeError) as error:
+        raise RefusedError(f"export could not be read ({type(error).__name__})") from None
+    return names
+
+
+def _page_names(page: dict) -> list[str]:
+    """Participants, senders and reaction actors of one thread page, as Meta-encoded text fixed."""
+    raw = [*(p["name"] for p in page["participants"]),
+           *(m["sender_name"] for m in page["messages"]),
+           *(r["actor"] for m in page["messages"] for r in m.get("reactions", []))]
+    if not all(isinstance(name, str) for name in raw):
+        raise TypeError("a name is not text")
+    return [fix_meta_text(name) for name in raw]
 
 
 # ---- chat text ------------------------------------------------------------------------------------------------
@@ -721,7 +742,7 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
     ids, id_count = load_private_ids(private_ids, trees)
     turns = read_chats(chats, trees)
     threads = read_export(export)
-    names, short, placeholders = name_tokens(export_senders(threads))
+    names, short, placeholders = name_tokens(export_senders(export))
     if not names:
         raise RefusedError("export gave no sender name tokens")
     messages = export_texts(threads)

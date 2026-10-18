@@ -11,6 +11,7 @@ from pathlib import Path, PurePath
 import pytest
 
 from fym1 import release
+from fym1.data.messenger import load_threads
 from fym1.release import RefusedError, build_snapshot, count_name_hits, name_tokens, secret_hits, strip_list
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -524,6 +525,78 @@ def test_nothing_shipped_imports_or_describes_the_release_tooling():
 
 def test_no_inner_name_allow_list_entry_names_an_unshipped_file():
     assert not any(release.exclusion_reason(path) for path, _ in release.INNER_NAME_ALLOWED)
+
+# ---- every sender in the export (review finding 14) -------------------------------------------------------------
+
+
+def _dyi_page(participants: list[str], messages: list[dict]) -> str:
+    return json.dumps({"title": "t", "participants": [{"name": p} for p in participants], "messages": messages})
+
+
+def make_dyi_export(tmp_path: Path) -> Path:
+    """A synthetic "Download your information" export: the inbox thread holds the 8-word chat; each other name
+    appears only where the conversation loader never looks, or only in what it drops."""
+    messages = tmp_path / "raw" / "your_facebook_activity" / "messages"
+    pages = {
+        "inbox/zafytest_1": _dyi_page(["Zafy Test", "Bodo Fakenaina"], [
+            {"sender_name": "Zafy Test", "timestamp_ms": 2, "content": FAKE_CHAT,
+             "reactions": [{"reaction": "x", "actor": "Lalaofake Reacting"}]},
+            {"sender_name": "Velofake Unsent", "timestamp_ms": 3, "content": "", "is_unsent": True},
+            {"sender_name": "Bodo Fakenaina", "timestamp_ms": 1, "content": "salama"},
+        ]),
+        "message_requests/stranger_2": _dyi_page(["Kotofake Requesting", "Bodo Fakenaina"], [
+            {"sender_name": "Kotofake Requesting", "timestamp_ms": 1, "content": "salama"}]),
+        "filtered_threads/spam_3": _dyi_page(["Bodo Fakenaina"], [
+            {"sender_name": "Ranofake Filtered", "timestamp_ms": 1, "content": "salama"}]),
+        "some_new_folder/other_4": _dyi_page(["Soafake Elsewhere"], []),
+    }
+    for folder, page in pages.items():
+        (messages / folder).mkdir(parents=True)
+        (messages / folder / "message_1.json").write_text(page, encoding="utf-8")
+    return tmp_path / "raw"
+
+
+HIDDEN_SENDERS = ["Lalaofake", "Velofake", "Kotofake", "Ranofake", "Soafake"]
+
+
+def test_export_senders_reads_every_folder_and_every_raw_sender(tmp_path):
+    export = make_dyi_export(tmp_path)
+    names = name_tokens(release.export_senders(export))[0]
+    loaded = {p for t in load_threads(export) for p in [*t.participants, *(m.sender for m in t.messages)]}
+    for sender in HIDDEN_SENDERS:
+        assert release.compare_key(sender) in names, sender
+        assert not any(sender in p for p in loaded), sender  # the conversation loader alone misses it
+
+
+def test_export_senders_reads_the_one_file_format(tmp_path):
+    assert sorted(release.export_senders(make_export(tmp_path))) == sorted(FAKE_SENDERS)
+
+
+def test_a_sender_only_in_message_requests_is_caught_end_to_end(tmp_path):
+    files = {**CLEAN_FILES, **{f"docs/{i}.md": f"Thanks {name}!\n" for i, name in enumerate(HIDDEN_SENDERS)}}
+    report = snap(make_repo(tmp_path, files), tmp_path / "public", make_dyi_export(tmp_path))
+    assert report.name_hits == {f"docs/{i}.md": 1 for i in range(len(HIDDEN_SENDERS))} and not report.ok
+
+
+def test_chat_text_from_a_message_request_is_caught(tmp_path):
+    export = make_dyi_export(tmp_path)
+    page = export / "your_facebook_activity/messages/message_requests/stranger_2/message_1.json"
+    page.write_text(_dyi_page(["Kotofake Requesting"], [
+        {"sender_name": "Kotofake Requesting", "timestamp_ms": 1, "content": FAKE_TURN}]), encoding="utf-8")
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/copied.md": _run(FAKE_TURN_WORDS[3:11])})
+    report = build_snapshot(repo, "HEAD", tmp_path / "public", export, make_ids(tmp_path),
+                            make_chats(tmp_path, turns=["eny"] * 2 + [_run(FAKE_CHAT_WORDS)]))
+    assert report.chat_text_hits == ["docs/copied.md"]
+
+
+@pytest.mark.parametrize("page", ["not json", "[]", '{"messages": []}', '{"participants": [{"name": 7}]}'])
+def test_an_unreadable_thread_page_is_refused(tmp_path, page):
+    export = make_dyi_export(tmp_path)
+    (export / "your_facebook_activity/messages/filtered_threads/spam_3/message_1.json").write_text(page)
+    with pytest.raises(RefusedError, match="export could not be read") as error:
+        snap(make_repo(tmp_path, CLEAN_FILES), tmp_path / "public", export)
+    assert "spam" not in str(error.value)
+
 
 # ---- private ids ----------------------------------------------------------------------------------------------
 
