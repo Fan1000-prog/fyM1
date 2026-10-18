@@ -164,6 +164,21 @@ def test_refuses_non_empty_output_and_unreadable_export(tmp_path):
     assert "zafy" not in str(error.value).lower()
 
 
+def test_symlink_is_refused_unless_excluded(tmp_path):
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    (repo / "CLAUDE.md").symlink_to("AGENTS.md")
+    (repo / "link.md").symlink_to("README.md")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "links")
+    export = make_export(tmp_path)
+    with pytest.raises(RefusedError, match="non-regular"):
+        build_snapshot(repo, "HEAD", tmp_path / "public", export)
+    assert not (tmp_path / "public").exists()
+    git(repo, "rm", "-q", "link.md")
+    git(repo, "commit", "-q", "-m", "drop link")
+    assert build_snapshot(repo, "HEAD", tmp_path / "public", export).ok
+
+
 def test_cli_refusal_exits_2(tmp_path):
     repo = make_repo(tmp_path, CLEAN_FILES)
     assert cli.main(["--repo", str(repo), "--export", str(make_export(tmp_path)), "--out", str(repo / "x")]) == 2

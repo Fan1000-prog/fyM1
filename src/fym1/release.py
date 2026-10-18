@@ -270,15 +270,19 @@ def copy_tracked(root: Path, sha: str, out: Path) -> tuple[list[str], list[dict]
                              check=True, capture_output=True).stdout
     kept, excluded = [], []
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as tar:
+        members = []
         for member in tar.getmembers():
             if member.isdir() or member.name == "pax_global_header":
                 continue
-            path = PurePosixPath(member.name)
-            if path.is_absolute() or ".." in path.parts or not member.isfile():
-                raise RefusedError(f"unsafe or non-regular archive entry: {member.name}")
             if reason := exclusion_reason(member.name):
                 excluded.append({"path": member.name, "reason": reason})
                 continue
+            path = PurePosixPath(member.name)
+            if path.is_absolute() or ".." in path.parts or not member.isfile():  # symlinks too: fail closed
+                raise RefusedError(f"unsafe or non-regular archive entry: {member.name}")
+            members.append(member)
+        out.mkdir(parents=True, exist_ok=True)
+        for member in members:
             dest = out / member.name
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(tar.extractfile(member).read())
@@ -332,7 +336,6 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path) -> Report:
     names, short, placeholders = name_tokens(export_senders(export))
     if not names:
         raise RefusedError("export gave no sender name tokens")
-    out.mkdir(parents=True, exist_ok=True)
     kept, excluded = copy_tracked(root, sha, out)
     report = Report(ref=sha, files_copied=len(kept), excluded=excluded, name_tokens=len(names),
                     short_tokens_skipped=short, placeholder_senders_skipped=placeholders)
