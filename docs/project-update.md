@@ -71,7 +71,7 @@ Recorded in spec §8 and the plan's "Changes from the plan" too.
 
 ## 4. Baseline numbers so far
 
-From `results/model_selection.json` on `main` (written by `scripts/build_model_selection.py`).
+From `results/model_selection.json` on `main` (written by `scripts/build_model_selection.py`). Gemma 3 has no results file yet; its license is from the script's license table.
 
 | | AfriqueQwen3.5-9B-Instruct | Gemma 4 12B | AfriqueQwen-8B (base) | Gemma 3 12B |
 |---|---|---|---|---|
@@ -90,8 +90,8 @@ owner's rating matters. Gemma 4's earlier unscripted smoke (≈126 s/step, loss 
 
 | Item | Who | State |
 |---|---|---|
-| **Known issue: #24 erases common dates** | owner decides | "15/03/2026 1 500 Ar" → "15/<TEL> Ar"; date ranges broken (~1,080 per 97k everyday lines; not a privacy leak). Options: revert #24 back to the #16 cleaner, or fix by masking whole real dates before phone matching. Must be settled before `build_chats` runs on the real export |
-| Kaggle baseline run | trainer | kernel pushed on the owner's account; run order below |
+| **Known issue: #24 breaks dates followed by more numbers** | owner decides | "15/03/2026 1 500 Ar" → "15/<TEL> Ar"; date ranges broken (~1,080 per 97k everyday lines; a plain date or "le 15/03/2026 à 14h" is fine; not a privacy leak). Options: (a) revert #24 to the #16 cleaner, which brings back the rare leak #24 closed ("038 27 2000/5", "+261 038 27 2000/5" kept whole; the post-run phone count would flag them); (b) fix by masking whole real dates in the sentence before phone matching. Must be settled before `build_chats` runs on the real export |
+| Kaggle baseline run | trainer | kernel version 2 running since ~01:48 UTC on Gemma 3 (Hub code 6d13c89); results land on the Hub one section at a time |
 | PR #22 baseline guards (draft) | trainer | parked until Gemma 3's result shows `env.loaded_from == "google/gemma-3-12b-it"`; then sync with main, review, merge |
 | Messenger export | owner | waiting on Meta |
 | 20-greeting ratings per model | owner | after all four candidates have answers |
@@ -116,7 +116,7 @@ Run order: Gemma 3 (full) → Gemma 4 (plain-text Belebele, FLORES+, scripted 15
 9. **Leak gate**: owner reviews every matched 8-word run; owner checks the 20 identity/safety answers.
 10. **Trim** (Task 7): run `03_trim`; ship trimmed GGUF only if all three gates pass.
 11. **Deploy Spaces** (Task 6); Playwright smoke test.
-12. **Write-up** (Task 8) from `results/` via `make_numbers.py --strict`.
+12. **Write-up** (Task 8) from `results/` via `paper/make_numbers.py --strict`.
 13. **Release** (Task 9): recreate the GitHub repo clean, flip public (private repos stay private), check every
     README link, send the owner the arena link and a 2-line Malagasy message.
 
