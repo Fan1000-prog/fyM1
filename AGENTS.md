@@ -14,7 +14,8 @@ Read `docs/superpowers/specs/2026-10-17-resaka-design.md` (§7 overrides earlier
 
 ## Layout
 - `src/fym1/{data,eval,shrink,train}` — tested Python (`uv run pytest`).
-- `scripts/` — CLI entry points. `notebooks/` — Colab (T4) notebooks.
+- `scripts/` — CLI entry points. `notebooks/` — Colab/Kaggle (T4) notebooks; `00_baseline` and `01_train` are
+  built by `scripts/build_notebooks.py` (edit it, rebuild, commit both; a test checks they match).
 - `spaces/{chat,arena}` — Hugging Face Spaces. `paper/` — LaTeX. `results/` — measured outputs.
 
 ## Style target

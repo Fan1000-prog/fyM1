@@ -22,3 +22,14 @@ def test_builds_are_deterministic():
 def test_check_mode_reports_up_to_date(capsys):
     assert build_notebooks.main(["--check"]) == 0
     assert "up to date" in capsys.readouterr().out
+
+
+def test_check_mode_fails_when_a_notebook_is_stale(tmp_path, monkeypatch, capsys):
+    (tmp_path / "notebooks").mkdir()
+    for name in build_notebooks.NOTEBOOKS:
+        (tmp_path / "notebooks" / f"{name}.ipynb").write_text(build_notebooks.build(name))
+    (tmp_path / "notebooks" / "01_train.ipynb").write_text("{}")
+    monkeypatch.setattr(build_notebooks, "REPO_ROOT", tmp_path)
+    assert build_notebooks.main(["--check"]) == 1
+    assert "01_train.ipynb" in capsys.readouterr().out
+    assert (tmp_path / "notebooks" / "01_train.ipynb").read_text() == "{}"  # --check never writes
