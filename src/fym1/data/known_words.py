@@ -19,15 +19,24 @@ is checked before every list: a first name never clears, whatever list has it ("
 `wordlike_first_names.txt` holds first names that are also everyday words ("aime", "rose",
 "claire", "tia"). The gate treats any other first name typed in lower case as a name ("salut sandrine").
 
-A word matches folded (lower case, no accents). Stretched letters are collapsed only when the
-word has some ("Bonjouuur" -> "bonjour"): collapsing always would let "Marie" match "mariée".
+`name_deny_list.txt` holds common Malagasy given names that are also words ("Hery", "Soa", "Vola");
+`mg_first_names.txt` those that are not ("Mialy", "Njaka"), a name even in lower case.
+`PERSON_NAMES` (first names, both Malagasy lists and the anonymiser's fake-name pool) never clear and are
+taken out of `mg_wiki`, `fr` and `en` when they are built.
+
+A word matches folded (lower case, no accents). Stretched letters are collapsed only for real
+stretching, a letter typed 3+ times ("Bonjouuur" -> "bonjour"), and never when the collapsed word
+is a person name: collapsing double letters would let "Anne" match "âne", and "Mariiie" match "marie".
 """
 
+import re
 from collections.abc import Iterable
 from importlib.resources import files
 from typing import NamedTuple
 
-from fym1.data.anonymize import COMMON_WORDS, TEXTING_WORDS, compare_key, fold
+from fym1.data.anonymize import COMMON_WORDS, FALLBACK_NAME, FIRST_NAMES, SURNAMES, TEXTING_WORDS, compare_key, fold
+
+STRETCHED = re.compile(r"(.)\1\1")  # a letter typed 3+ times in a row
 
 
 class WordList(NamedTuple):
@@ -35,8 +44,8 @@ class WordList(NamedTuple):
     keys: frozenset[str]  # compare keys, for stretched words only
 
     def has(self, word: str) -> bool:
-        folded, key = fold(word), compare_key(word)
-        return folded in self.folded or (key != folded and key in self.keys)
+        folded = fold(word)
+        return folded in self.folded or (is_stretched(folded) and compare_key(folded) in self.keys)
 
 
 Lexicon = dict[str, WordList]  # list name -> words, in checking order
@@ -52,7 +61,19 @@ def _words(name: str) -> list[str]:
     return [line.strip() for line in lines if line.strip() and not line.startswith("#")]
 
 
+def is_stretched(folded: str) -> bool:
+    """`folded` has a letter typed 3+ times and does not collapse to a person name."""
+    return bool(STRETCHED.search(folded)) and compare_key(folded) not in PERSON_NAME_KEYS
+
+
 FIRST_NAME_WORDS = frozenset(fold(w) for w in _words("first_names.txt"))
+NAME_DENY_LIST = frozenset(fold(w) for w in _words("name_deny_list.txt"))
+# Malagasy given names that are not everyday words: a name even in lower case ("salut mialy").
+MG_FIRST_NAMES = frozenset(fold(w) for w in _words("mg_first_names.txt"))
+POOL_NAMES = frozenset(fold(w) for w in (*FIRST_NAMES, *SURNAMES, FALLBACK_NAME))
+# Never cleared as a word, whatever list has it.
+PERSON_NAMES = FIRST_NAME_WORDS | NAME_DENY_LIST | MG_FIRST_NAMES | POOL_NAMES
+PERSON_NAME_KEYS = frozenset(compare_key(w) for w in PERSON_NAMES)
 # First names that are also everyday words ("aime", "rose", "tia"): a name only when capitalised.
 WORDLIKE_FIRST_NAMES = frozenset(fold(w) for w in _words("wordlike_first_names.txt"))
 _MG_WIKI = word_list(_words("mg_wiki_words.txt"))
@@ -66,7 +87,7 @@ KNOWN_WORDS: Lexicon = {
 
 
 def known_by(word: str, lexicon: Lexicon) -> str | None:
-    """Name of the first list in `lexicon` that has `word`, else None (always None for a first name)."""
-    if fold(word) in FIRST_NAME_WORDS:
+    """Name of the first list in `lexicon` that has `word`, else None (always None for a person name)."""
+    if fold(word) in PERSON_NAMES:
         return None
     return next((name for name, words in lexicon.items() if words.has(word)), None)

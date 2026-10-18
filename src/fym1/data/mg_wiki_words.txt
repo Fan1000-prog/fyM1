@@ -210,7 +210,6 @@ ai
 aidina
 aiko
 aim
-aina
 ainao
 aine
 ainga
@@ -796,7 +795,6 @@ andinihany
 andinin
 andinindininy
 andininy
-ando
 andoavam
 andoavana
 andohalambo
@@ -858,7 +856,6 @@ androntsika
 androny
 androva
 androvan
-andry
 anefa
 anehoan
 anehoana
@@ -3701,7 +3698,6 @@ falala
 falehan
 fali
 faliska
-faly
 famaboan
 famaboana
 famadihan
@@ -4547,7 +4543,6 @@ faobe
 faoben
 faolex
 far
-fara
 farafahakeliny
 farafaharatsiny
 farafakeliny
@@ -4689,9 +4684,7 @@ fenika
 fenikan
 fenisiana
 fenisianina
-fenitra
 fenitry
-feno
 fenoina
 fenoiny
 fenomanana
@@ -4726,7 +4719,6 @@ fetim
 fetin
 fetisisma
 fetr
-fetra
 fetran
 fetrany
 fetsy
@@ -5292,7 +5284,6 @@ finakaviam
 finamanana
 financier
 financieres
-finaritra
 finday
 findramam
 findramana
@@ -5619,7 +5610,6 @@ fitetezam
 fitetezan
 fitetezana
 fitey
-fitia
 fitiava
 fitiavako
 fitiavam
@@ -6417,7 +6407,6 @@ haitao
 haiteny
 haitsikerafiteny
 haizina
-haja
 hajain
 hajaina
 hajany
@@ -6919,7 +6908,6 @@ haniry
 hanisy
 hanitarana
 hanitatra
-hanitra
 hanitri
 hanitrika
 hanitry
@@ -7096,7 +7084,6 @@ hasidisma
 hasim
 hasimpeo
 hasin
-hasina
 hasinina
 hasinteny
 hasiny
@@ -7301,7 +7288,6 @@ hermetisma
 hermita
 herodiana
 herself
-hery
 hesorina
 het
 hetaheta
@@ -8818,7 +8804,6 @@ kanonikan
 kanonikany
 kanory
 kantao
-kanto
 kanton
 kantoney
 kantsana
@@ -9444,7 +9429,6 @@ lalanan
 lalanao
 lalandava
 lalany
-lalao
 lalaon
 lalaovin
 lalaovina
@@ -9820,7 +9804,6 @@ loteranisma
 loto
 lotsazy
 lotus
-lova
 lovain
 lovale
 lovam
@@ -9995,7 +9978,6 @@ mahenika
 maheno
 maherifo
 maherin
-mahery
 mahia
 mahiporana
 mahita
@@ -10276,7 +10258,6 @@ mampivondrona
 mampizara
 mampody
 mamporisika
-mamy
 man
 mana
 manabe
@@ -14483,7 +14464,6 @@ nomelohin
 nomelohina
 nomem
 nomen
-nomena
 nomenao
 nomeny
 nomerika
@@ -14859,7 +14839,6 @@ olombelon
 olombelona
 olombelonaː
 olon
-olona
 olonao
 olonkendry
 olony
@@ -14920,7 +14899,6 @@ onitarisma
 onitra
 oniversite
 oniversitera
-onja
 onjam
 onjampeo
 onjan
@@ -14930,7 +14908,6 @@ only
 ont
 ontolojia
 onwards
-ony
 oolofo
 open
 opened
@@ -16475,7 +16452,6 @@ rijan
 rijantenin
 rijanteny
 rima
-rindra
 rindrakajy
 rindrambaiko
 rindran
@@ -16501,7 +16477,6 @@ ritual
 rituels
 rivalites
 rivista
-rivo
 rivodoza
 rivotra
 ro
@@ -16799,7 +16774,6 @@ sanskrita
 sanskrity
 santaly
 santarina
-santatra
 sante
 santimetatra
 santiona
@@ -17231,7 +17205,6 @@ site
 sites
 sitra
 sitrak
-sitraka
 sitrako
 sitraky
 sitran
@@ -17280,7 +17253,6 @@ smartphone
 snm
 sns
 so
-soa
 soahely
 soahily
 soanambo
@@ -18342,7 +18314,6 @@ tohy
 toi
 toile
 tojiky
-tojo
 toka
 tokam
 tokamiantoana
@@ -18366,7 +18337,6 @@ tokontanin
 tokontany
 tokony
 tokotanin
-toky
 tolakandro
 tolakandron
 tolam
@@ -19402,7 +19372,6 @@ voahelok
 voaheloka
 voahevitra
 voahidy
-voahirana
 voahitsakitsaka
 voahodidin
 voahodidina
@@ -19657,7 +19626,6 @@ vokatsoa
 vokovoko
 voky
 vol
-vola
 volabe
 volafotsy
 volalohany
@@ -19666,7 +19634,6 @@ volamahery
 volamena
 volamenan
 volan
-volana
 volanao
 volante
 volany

@@ -16,10 +16,15 @@ Writes, into src/fym1/data/:
   does not mostly capitalise it (the name filter below). French and English Wikipedia are read as
   the first --wiki-sample articles of the same pinned revision. "pierre" and "max" stay names.
 
-Name filter, on all three lists: a word Malagasy Wikipedia writes capitalised mid-sentence at
-least NAME_MIN_CAPITALISED times and more than NAME_RATIO times as often as in lower case is
-dropped, and so is every word in first_names.txt. wordfreq is lower case only, so without this
-"marie", "sandrine" or "kevin" would clear a person's name.
+Name filter, on all three lists: every person name is dropped (`name_list`: first_names.txt, the
+anonymiser's fake-name pool, the Malagasy name deny list name_deny_list.txt and mg_first_names.txt), and so is a word
+that Wikipedia writes capitalised mid-sentence at least NAME_MIN_CAPITALISED times and more than
+NAME_RATIO times as often as in lower case in Malagasy Wikipedia. (French and English Wikipedia are not
+used for this: titles capitalise everyday words there, and "Bonjour" or "Hello" would be dropped.)
+wordfreq is lower case only, so without this "marie", "sandrine" or "kevin" would clear a person's name.
+
+NAME_MIN_CAPITALISED is 3, the same floor as --min-lower for a word: a name seen capitalised 3 times
+and never in lower case is a name. (It was 10, which let rarer names through.)
 
 All words are folded (lower case, no accents), letters only, sorted, under one `#` source line.
 
@@ -41,13 +46,14 @@ from typing import NamedTuple
 from datasets import load_dataset
 from wordfreq import top_n_list
 
-from fym1.data.anonymize import fold
+from fym1.data.anonymize import FALLBACK_NAME, FIRST_NAMES, SURNAMES, fold
+from fym1.data.known_words import MG_FIRST_NAMES, NAME_DENY_LIST
 
 DATA = Path(__file__).resolve().parents[1] / "src/fym1/data"
 LETTERS = re.compile(r"[^\W\d_]+")
 MIN_LETTERS = 2
 SENTENCE_END = ".!?…\n:"
-NAME_MIN_CAPITALISED = 10
+NAME_MIN_CAPITALISED = 3  # as low as the lower-case floor for a word (--min-lower)
 NAME_RATIO = 3
 WIKIPEDIA_REVISION = "b04c8d1ceb2f5cd4588862100d08de323dccfbaa"  # wikimedia/wikipedia, 2024-01-09
 INSEE_URL = "https://www.insee.fr/fr/statistiques/fichier/7633685/nat2022_csv.zip"
@@ -103,6 +109,12 @@ def insee_names(rows: Iterable[dict], min_births: int) -> list[str]:
 def first_names(rows: Iterable[dict], cases: CaseCounts, min_births: int) -> list[str]:
     """Folded INSEE first names given `min_births`+ times, minus everyday Malagasy words."""
     return [name for name in insee_names(rows, min_births) if cases.lower[name] < MG_WORD_MIN_LOWER]
+
+
+def name_list(first: Iterable[str]) -> set[str]:
+    """Every person name kept out of the word lists: `first` names, the fake-name pool, both Malagasy lists."""
+    pool = {fold(name) for name in (*FIRST_NAMES, *SURNAMES, FALLBACK_NAME)}
+    return set(first) | pool | NAME_DENY_LIST | MG_FIRST_NAMES
 
 
 def is_word_in(word: str, cases: CaseCounts, min_lower: int) -> bool:
@@ -178,16 +190,17 @@ def main() -> None:
     args = parser.parse_args()
 
     cases = wikipedia_cases(args.config)
+    all_cases = {"mg": cases, **{lang: wikipedia_cases(f"20231101.{lang}", args.wiki_sample) for lang in ("fr", "en")}}
     rows = insee_rows()
-    names = [n for n in first_names(rows, cases, args.min_births) if n not in hand_listed()]
-    write(names, "first_names.txt")
-    write(lower_case_words(cases, args.min_lower, set(names)), "mg_wiki_words.txt")
+    first = [n for n in first_names(rows, cases, args.min_births) if n not in hand_listed()]
+    write(first, "first_names.txt")
+    names = name_list(first)
+    write(lower_case_words(cases, args.min_lower, names), "mg_wiki_words.txt")
     for lang in ("fr", "en"):
-        write(frequent_words(lang, args.top, cases, set(names)), f"{lang}_words.txt")
+        write(frequent_words(lang, args.top, cases, names), f"{lang}_words.txt")
 
     vocabularies = {lang: {fold(w) for w in top_n_list(lang, args.top)} for lang in ("fr", "en")}
     vocabularies["mg"] = set(cases.lower)
-    all_cases = {"mg": cases, **{lang: wikipedia_cases(f"20231101.{lang}", args.wiki_sample) for lang in ("fr", "en")}}
     wordlike = wordlike_first_names(insee_names(rows, args.min_births), vocabularies, all_cases, args.min_lower)
     write(wordlike, "wordlike_first_names.txt")
 
