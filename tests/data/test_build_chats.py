@@ -69,7 +69,6 @@ GATE_KEYS = {
     "cleared_known_names",
     "cleared_fr",
     "cleared_en",
-    "cleared_seen_lowercase",
     "tokens_replaced",
 }
 

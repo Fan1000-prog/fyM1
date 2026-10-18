@@ -462,6 +462,7 @@ class Anonymizer:
         self._free_firsts = [f for f in FIRST_NAMES if _is_free(f, real_keys)] or list(FIRST_NAMES)
         self._free_lasts = [s for s in SURNAMES if _is_free(s, real_keys)] or list(SURNAMES)
         self.common_word_replacements = 0
+        self.mention_fakes: set[str] = set()  # every fake written for an @mention, for the strict gate
 
     def __call__(self, text: str) -> str:
         text = unicodedata.normalize("NFC", text)
@@ -486,6 +487,7 @@ class Anonymizer:
         body = match.group()[1:]
         spans = list(re.finditer(r"\S+", body))
         taken, fake = self._fake_for_mention([s.group() for s in spans])
+        self.mention_fakes.add(fake)
         return self._park(parked, fake) + body[spans[taken - 1].end() :]
 
     def _fake_for_mention(self, words: list[str]) -> tuple[int, str]:

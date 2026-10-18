@@ -137,18 +137,17 @@ def test_replacement_fake_never_matches_a_word_already_in_the_conversation():
 
 
 def test_known_words_are_cleared_and_counted_by_the_first_list_that_knows_them():
-    records = [record("a", "Eny, Zazakely tonga any Tana", "Bonjour! Hello. Eny")]
+    records = [record("a", "Eny. Zazakely tonga any Tana", "Bonjour! Hello. Eny")]
 
     result = strict_gate(records, fake_names=[], lexicon=TINY_LEXICON)
 
-    assert texts(result) == ["Eny, Zazakely tonga any Tana", "Bonjour! Hello. Eny"]
+    assert texts(result) == ["Eny. Zazakely tonga any Tana", "Bonjour! Hello. Eny"]
     assert {k: v for k, v in result.counts.items() if k.startswith("cleared_")} == {
         "cleared_mg_common": 2,
         "cleared_mg_wiki": 1,
         "cleared_known_names": 1,
         "cleared_fr": 1,
         "cleared_en": 1,
-        "cleared_seen_lowercase": 0,
     }
     assert result.counts["tokens_replaced"] == 0
 
@@ -192,21 +191,20 @@ def test_conversation_with_more_than_30_percent_replaced_words_is_dropped():
 def test_gate_keeps_fake_names_placeholders_currency_and_common_words():
     records = [record("ok", "Eny ry Soa, <TEL> ve?", "Eny Rabe, Mialy sy Olona tonga, 1 500 Ar")]
 
-    result = strict_gate(records, fake_names=["Soa Rabe"])
+    # "Mialy" and "Olona" stand for @mention fakes the anonymiser wrote
+    result = strict_gate(records, fake_names=["Soa Rabe", "Mialy", "Olona"])
 
     assert texts(result) == ["Eny ry Soa, <TEL> ve?", "Eny Rabe, Mialy sy Olona tonga, 1 500 Ar"]
     assert result.counts["tokens_replaced"] == 0
 
 
-def test_sentence_initial_word_seen_in_lower_case_is_cleared():
-    # "Vazivazy" is in no list, but it is only capitalised at a sentence start and is
-    # also typed in lower case, so it is an ordinary word, not a name.
-    records = [record("a", "Vazivazy io. Vazivazy koa!", "ilay vazivazy ve? eny eny eny")]
+def test_sentence_initial_word_in_no_list_is_replaced_even_if_seen_in_lower_case():
+    records = [record("a", "Vazivazy io. Vazivazy koa!", "ilay vazivazy ve? eny eny eny eny eny eny")]
 
     result = strict_gate(records, fake_names=[], lexicon=TINY_LEXICON)
 
-    assert texts(result)[0] == "Vazivazy io. Vazivazy koa!"
-    assert result.counts["cleared_seen_lowercase"] == 2
+    assert "Vazivazy" not in texts(result)[0]
+    assert result.counts["tokens_replaced"] == 2
 
 
 def test_word_capitalised_mid_sentence_is_replaced_even_if_seen_in_lower_case():
@@ -234,7 +232,7 @@ def test_pool_name_already_in_the_raw_conversation_is_replaced_by_a_different_fa
         record("fake", "Rabe no nandeha", "eny tsara"),
     ]
 
-    result = strict_gate(records, fake_names=[], lexicon=TINY_LEXICON, disallowed={"real": {"Rabe"}})
+    result = strict_gate(records, fake_names=["Soa Rabe"], lexicon=TINY_LEXICON, disallowed={"real": {"Rabe"}})
 
     real, _, fake, _ = texts(result)
     assert fake == "Rabe no nandeha"  # elsewhere "Rabe" is still one of our fakes
@@ -250,8 +248,8 @@ def test_disallowed_pool_name_is_replaced_even_when_it_is_also_a_word():
     assert "Andry" not in texts(result)[0]
 
 
-def test_pool_names_in_finds_capitalised_pool_names_only():
-    assert pool_names_in(["Rabe sy RASOA no tonga", "ilay andry", "hoy Bema"]) == {"rabe", "rasoa"}
+def test_pool_names_in_finds_pool_names_in_any_case():
+    assert pool_names_in(["Rabe sy RASOA no tonga", "ilay andry", "hoy Bema"]) == {"rabe", "rasoa", "andry"}
 
 
 @pytest.mark.parametrize(
@@ -293,7 +291,6 @@ def test_lowercase_name_typed_elsewhere_does_not_clear_the_capitalised_name():
 
     words = set(re.findall(r"\w+", " ".join(texts(result))))
     assert not {"Rakoto", "Koto", "rakoto", "koto"} & words
-    assert result.counts["cleared_seen_lowercase"] == 0
 
 
 @pytest.mark.parametrize(

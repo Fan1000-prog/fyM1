@@ -80,54 +80,69 @@ tests `tests/data/test_gate.py`). It drops a whole conversation if any turn stil
 
 | Reason | Caught | Kept |
 |---|---|---|
-| `long_number` | 7+ digits in one run across space, no-break spaces, `. - / ,` and unicode dashes (`12 34 567`, `15/03/2026`) | a price: clean 3-digit groups or no separator, then `Ar`, `Ariary`, `fmg`, `€`, `euro(s)`, `eur` (`1 500 000 Ar`) |
+| `long_number` | 7+ digits in one run across any non-letter characters (every kind of space, `. , / \ - _ ( ) + ; * \| :`, unicode dashes) (`12 34 567`, `(034) 12 345 67`, `15/03/2026`) | a price: clean 3-digit groups or no separator, then `Ar`, `Ariary`, `fmg`, `€`, `euro(s)`, `eur` (`1 500 000 Ar`), and not phone-shaped: no `+` before it, digits not starting `0` or `261`, not `3[2-9]` + 7 digits (`0341234567 Ar`, `341234567 Ar` are long numbers) |
 | `contact` | an email, a link with a path or query, an `@handle`, a private-use mark from a failed replacement | `<EMAIL>`, `<URL>`, a bare `host.com` |
 | `too_many_unknown` | more than 30% of the conversation's words would be replaced as names (below) | 30% or less |
 
-Every other capitalised word (2+ letters, not one of our fake names, the fake-name pool, a
-placeholder or a currency word) is either cleared or replaced. A hyphenated `Ra-be` is one word.
+The gate fails closed: replacing or dropping too much is fine, a leak is not. Words are letter runs
+split at digits, underscores, punctuation and a lower-to-upper case change, so "Rakoto2", "2Rakoto",
+"jean_r" and "salutRakoto" are checked; only the exact placeholders (`<TEL>`, `<EMAIL>`, `<URL>`,
+`<HANDLE>`, `<ADDRESS>`) are skipped. A hyphenated `Ra-be` is one word.
 
-- **Cleared** if a known-word list has it (`src/fym1/data/known_words.py`), checked in this order;
-  the first list that has it gets the count (`cleared_<list>`):
+Every capitalised word (2+ letters) that is not a fake the anonymiser actually wrote (participants'
+fakes and @mention fakes, reported by `Anonymizer.mention_fakes`) or a currency word is cleared or
+replaced. Any other pool name ("Mialy" where nobody got that fake) is replaced like an unknown word.
+
+- **Cleared at a sentence start** if a known-word list has it (`src/fym1/data/known_words.py`),
+  checked in this order; the first list that has it gets the count (`cleared_<list>`):
   1. `mg_common`: the anonymiser's common Malagasy words that `mg_wiki` also has, plus short texting words.
   2. `mg_wiki` (`mg_wiki_words.txt`): words Malagasy Wikipedia types in lower case 3+ times.
   3. `known_names` (`mg_known_names.txt`): a short hand list of places, brands, religious, family,
      calendar and title words and texting words that are not person names (Tana, Mvola, Jesoa, Neny,
      Dada, Zoky, Zoma, Alatsinainy, Desambra, Krismasy, Rtoa, Dr, Andao, ...).
   4. `fr`, `en` (`fr_words.txt`, `en_words.txt`): the 30,000 most frequent French and English words from `wordfreq`.
-
-  A first name in `first_names.txt` never clears, whatever list has it ("Sandrine", "Kevin", "Tony").
-
-  Or (`cleared_seen_lowercase`) if it is capitalised only at sentence starts and the corpus also
-  has it in lower case (a lower-case name below does not count).
+- **Cleared mid-sentence or after a person marker** (`i`, `ry`, `ra`, `n'i`, `an'i`, `amin'i`,
+  `tamin'i`, `@`) only by the hand list `known_names` ("any Tana", "i Neny"). "tonga ny Fiara",
+  "hoy Bonjour" are replaced.
+- **Never cleared**: a person name (`PERSON_NAMES`): `first_names.txt`, the fake-name pool, and
+  `name_deny_list.txt`, common Malagasy given names that are also words (Hery, Soa, Vola, Mamy,
+  Lalao, Fetra, Rivo, Tiana, Fara, Noro, Voahangy, ...). No corpus-wide evidence clears a word: a
+  word typed in lower case elsewhere does not clear it.
 - **Replaced** otherwise, by a fake first name from the anonymiser's pool: the same fake for the
   same word within one conversation, never a word already in that conversation. Counted as
   `tokens_replaced` (kept conversations only).
 
 Also replaced, the same way:
 
-- **A pool name that was already in the raw conversation** ("Rabe no nandeha" before anonymising):
-  there it is a real person, not our fake, so it is replaced by a different fake, word or not.
-  `build_records` finds these per conversation and passes them to the gate.
-- **Lower-case names.** After a name particle (`i`, `ry`, `n'i`, `an'i`, `tamin'i`, `ho an'i`), a word
-  that is a pool name or that no list knows ("ry hasina", "tamin'i rakoto"; "ry namana", "i dada" stay).
+- **A pool name that was already in the raw conversation** ("Rabe no nandeha", "RABE2" before
+  anonymising): there it is a real person, not our fake, so it is replaced by a different fake, word
+  or not. `build_records` finds these per conversation and passes them to the gate.
+- **Lower-case names.** Anywhere, a Malagasy given name that is not an everyday word
+  (`mg_first_names.txt`: "salut mialy", "aiza ianao njaka?"), and letters with digits inside ("n1r1na").
+  After a person marker, a person name or a word no list knows ("ry hasina",
+  "ry hery", "tamin'i rakoto"; "ry namana", "i dada" stay).
   Anywhere, `ra` + a word no list knows ("rakoto"), and any `ra-` hyphenated word.
   Anywhere, a word in `first_names.txt` that is not in `wordlike_first_names.txt` ("salut sandrine",
   "chez kevin"; "je t'aime", "une rose", "tia" stay), and a first name hyphen-joined to another
   ("jean-pierre", "marie-claire").
 
-Words match folded (lower case, no accents). Stretched letters are collapsed only when the word has
-some ("Bonjouuur" -> "bonjour"); always collapsing would let "Marie" match "mariée".
+Words match folded (lower case, no accents). Stretched letters are collapsed only for real
+stretching, a letter typed 3+ times ("Bonjouuur" -> "bonjour"), and never into a person name: double
+letters are spelling ("Anne" does not match "âne"), and "Mariiie" does not match "mariée".
 
 `scripts/build_known_words.py` (needs `uv sync --group data`) builds `first_names.txt`, `mg_wiki`, `fr`
-and `en`. It drops from the last three any word Malagasy Wikipedia writes capitalised mid-sentence 10+
-times and more than 3x as often as in lower case, and every word in `first_names.txt`. `wordfreq` and the
-common-word list ignore case, so without this "marie", "sandrine" or "kevin" would clear a person's name.
-`first_names.txt` is every French first name given 1,000+ times since 1900 (3,035 names, English ones
+and `en`. It drops from the last three every person name (`first_names.txt`, the fake-name pool, the
+deny list) and any word Wikipedia writes capitalised mid-sentence 3+ times and more than 3x as often as
+in lower case in Malagasy Wikipedia (French and English Wikipedia capitalise everyday words in titles,
+so they would drop "Bonjour"). The floor of 3 matches the lower-case floor for a word; it was 10, which
+let rarer names through.
+`wordfreq` and the common-word list ignore case, so without this "marie", "sandrine" or "kevin" would
+clear a person's name.
+`first_names.txt` is every French first name given 1,000+ times since 1900 (English ones
 common in France included), minus first names Malagasy Wikipedia types in lower case 150+ times
 (everyday words: "tia", "mila", "amin") and the hand list. The Wikipedia revision and the INSEE file's
 hash are pinned in the script. Every list file starts with a `#` source line.
-It also builds `wordlike_first_names.txt` (185 names): INSEE first names that wordfreq's top 30k
+It also builds `wordlike_first_names.txt`: INSEE first names that wordfreq's top 30k
 French/English or Malagasy Wikipedia has, and that the same language's Wikipedia types in lower case
 3+ times and does not mostly capitalise (the 3x name filter). French and English Wikipedia are read
 as the first 100,000 articles of the pinned revision. So "rose", "claire", "aime", "tia" are words,
@@ -157,17 +172,21 @@ When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit ref
   automatically; that needs named-entity recognition. Capitalised ones are replaced by the strict
   gate unless they are also an ordinary word; lower-case ones are caught only after a name particle
   or with a `ra` prefix.
-- **A name that is also a word** passes the gate: Malagasy names are often words ("Hery", "Soa",
-  "Vola", "Fitia") unless typed right after a name particle or already a pool name in the raw text.
-  French first names are refused outright, but a name that is also an everyday Malagasy word
-  ("Tia", "Mila") still passes, and so do English-only names rare in France. In lower case, a
-  first name in `wordlike_first_names.txt` passes ("rose", "tiana", "liam", "karen") unless after
-  a particle or hyphen-joined to another first name.
-- Capitalised ordinary words in no list (rare words, typos, places) are replaced by a fake name:
-  over-masking, not a leak.
+- **A name that is also a word** passes only at a sentence start, and only if it is in no name list:
+  a Malagasy given name missing from `name_deny_list.txt`, a name that is also an everyday Malagasy
+  word ("Tia", "Mila"), or an English-only name rare in France. Mid-sentence it is always replaced
+  unless the hand list has it. In lower case and not after a marker, a name that is also a word
+  stays ("mila vola", "soa ve", "une rose").
+- Capitalised ordinary words in no list (rare words, typos, places), any capitalised word
+  mid-sentence that the hand list lacks, and sentence-start words that are also names ("Faly be aho")
+  are replaced by a fake name: over-masking, not a leak.
 - A real pool name ("Rabe") is caught only in a conversation whose raw text holds it capitalised.
   Typed in lower case and not after a name particle ("hitako mamy"), it stays.
-- Names spelled out or disguised: "Ni-ri-na", "N i r i n a", "N1r1na".
+- Names spelled out or disguised: "Ni-ri-na", "N i r i n a". ("N1r1na", "Rak0to" are replaced: letters
+  with digits inside are always a name.)
+- A phone split over two turns ("nomerao 034 12", then "345 67 io"): the gate checks one turn at a time.
+- Digits joined by any non-letter characters count as one number, so a list of times or numbered
+  lines ("14:30-15:30") can drop a conversation: over-dropping, not a leak.
 - Phone numbers written in words ("aotra telo efatra…", "034 douze …") or with letters for digits ("l2").
 - A phone whose first digits make a full date and whose rest reads as a price ("18/03/80 559 874",
   "18/03/80 559000"): kept as a date and a price.

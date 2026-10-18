@@ -78,7 +78,8 @@ def build_records(
                 records.setdefault(record_id, {"id": record_id, "messages": conversation})
                 real_pool_names.setdefault(record_id, set()).update(pool_names_in(t["content"] for t in raw))
     texts = [turn["content"] for record in records.values() for turn in record["messages"]]
-    gated = strict_gate(list(records.values()), names.values(), disallowed=real_pool_names)
+    fakes_written = [*names.values(), *anonymize.mention_fakes]
+    gated = strict_gate(list(records.values()), fakes_written, disallowed=real_pool_names)
     return BuildResult(
         gated.kept, anonymize.common_word_replacements, leftover_names(texts, names.values()), gated.counts
     )
