@@ -465,7 +465,7 @@ class Anonymizer:
         self.mention_fakes: set[str] = set()  # every fake written for an @mention, for the strict gate
 
     def __call__(self, text: str) -> str:
-        text = unicodedata.normalize("NFC", text)
+        text = unicodedata.normalize("NFKC", text)  # full-width "＠", circled "Ⓡ" read as plain
         text = EMAIL.sub("<EMAIL>", text)
         text = URL.sub("<URL>", text)
         text = _mask_phones(text)

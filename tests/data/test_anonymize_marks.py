@@ -4,6 +4,7 @@ All inputs are synthetic. The corpora below are generated, seeded, and contain n
 """
 
 import random
+import unicodedata
 
 import pytest
 
@@ -11,6 +12,11 @@ from fym1.data.anonymize import Anonymizer
 
 ANON = Anonymizer({})
 UNICODE_DASHES = "‐‑‒–—―−"  # ‐ ‑ ‒ – — ― −
+
+
+def nfkc(text: str) -> str:
+    """What the anonymiser writes for `text` it leaves alone: NFKC turns no-break spaces and "‑" plain."""
+    return unicodedata.normalize("NFKC", text)
 
 
 @pytest.mark.parametrize(
@@ -34,13 +40,13 @@ def test_phone_with_unicode_dashes_or_spaces_is_masked(text, expected):
 @pytest.mark.parametrize("dash", list(UNICODE_DASHES))
 def test_date_with_unicode_dashes_is_kept(dash):
     for text in [f"15{dash}03{dash}2026 1 500 Ar", f"2026{dash}10{dash}17 14h30", f"le 15/03{dash}20/03/2026 ok"]:
-        assert ANON(text) == text
+        assert ANON(text) == nfkc(text)
 
 
 @pytest.mark.parametrize("dash", list(UNICODE_DASHES))
 def test_phone_after_a_date_with_unicode_dashes(dash):
     text = f"15{dash}03{dash}2026 034{dash}12{dash}345{dash}67"
-    assert ANON(text) == f"15{dash}03{dash}2026 <TEL>"
+    assert ANON(text) == nfkc(f"15{dash}03{dash}2026 <TEL>")
 
 
 @pytest.mark.parametrize(
@@ -79,7 +85,7 @@ def test_letter_o_glued_to_a_word_is_masked(text, expected):
     ],
 )
 def test_everyday_words_ending_in_o_before_numbers_are_kept(text):
-    assert ANON(text) == text
+    assert ANON(text) == nfkc(text)
 
 
 O_WORDS = ["Hono", "kilao", "photo", "manao", "toko", "radio", "vao", "loto", "moto", "Toamasina", "numero", "Lalao"]
@@ -131,6 +137,6 @@ def test_unicode_dash_phone_corpus_is_fully_masked():
             ]
         )
         before = rng.choice(["", "tél: ", "antsoy ", f"{_date(rng)} ", "14h30 ", "1 500 Ar "])
-        if ANON(f"{before}{phone} ok") != f"{before}<TEL> ok":
+        if ANON(f"{before}{phone} ok") != nfkc(f"{before}<TEL> ok"):
             wrong.append(f"{before}{phone} ok")
     assert wrong == [], f"{len(wrong)} unicode-dash phones not masked, e.g. {wrong[:5]}"

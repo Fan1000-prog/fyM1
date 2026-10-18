@@ -152,14 +152,14 @@ def test_build_records_every_sender_drops_exact_duplicates():
 
 def test_build_records_gate_keeps_prices_drops_numbers_and_replaces_leftover_names():
     threads = [
-        chat([("Nirina Rakoto", "ohatrinona?"), ("Tojo Randria", "1 500 000 Ar")]),
+        chat([("Nirina Rakoto", "inona ny vidiny?"), ("Tojo Randria", "1 500 000 Ar")]),
         chat([("Nirina Rakoto", "inona ny ref?"), ("Tojo Randria", "ref 123-4567")]),
         chat([("Nirina Rakoto", "hoy i Bema"), ("Tojo Randria", "eny")]),
     ]
 
     result = build_records(threads, owner="Tojo Randria", is_malagasy=says_malagasy)
 
-    assert "ohatrinona? 1 500 000 Ar" in all_text(result.records)
+    assert "inona ny vidiny? 1 500 000 Ar" in all_text(result.records)
     assert "Bema" not in all_text(result.records) and "hoy i " in all_text(result.records)
     assert {k: v for k, v in result.gate.items() if not k.startswith("cleared_")} == {
         "conversations_before_gate": 3,

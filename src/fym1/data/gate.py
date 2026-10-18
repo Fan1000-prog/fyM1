@@ -8,9 +8,14 @@ fine, letting a name or number through is not. A whole conversation is dropped i
   is plain digits or clean 3-digit groups, is followed by a currency word (`1 500 000 Ar`,
   `2500000 ariary`, `1 250 000,50 €`), and does not look like a phone: no `+` before it and its
   digits do not start with `0`, `261` or read `3[2-9]` + 7 digits. A full date (8 digits) counts too.
-- `contact`: an email, a link with a path or query, an `@handle`, or a private-use mark the
-  anonymiser leaves only when a replacement failed.
+- `contact`: an email, a link with a path or query, an `@` before a word or a placeholder (spaces
+  allowed: "@ njaka", "njaka@ <URL>"), an `at`/`arobase`/`(at)`/`[at]` before a placeholder or a
+  mail host ("njaka at gmail"), or a private-use mark the anonymiser leaves only when a
+  replacement failed.
 - `too_many_unknown`: more than 30% of its words would be replaced as names (below).
+
+Every turn is NFKC-normalised first, so full-width (`＠`, `Ｒ`) and circled (`Ⓡ`) letters are
+checked as plain ones; kept turns are returned normalised.
 
 Words are letter runs, split at digits, underscores, punctuation, `<`/`>` and a lower-to-upper case change
 ("Rakoto2", "jean_r", "salutRakoto", "<<Njaka"); only the exact placeholders (`<TEL>`, `<EMAIL>`, ...)
@@ -27,20 +32,23 @@ Capitalised words that are not fakes the anonymiser wrote (`fake_names`) or curr
 A pool name the raw conversation already held ("Rabe no nandeha") is a real person there, not
 our fake: the caller passes it in `disallowed` and it is always replaced, word or not.
 
-Lower-case names are replaced too:
+Lower-case words fail closed too. Name lists cannot hold every name, so any lower-case word that no
+known-word list knows is replaced like an unknown capitalised word ("salut tsanta", "rakoto",
+"sandrinerakoto"). Kept without a marker: words a list knows ("trano", "lol", "mdr"), and names that
+are also everyday words (`name_deny_list.txt`: "soa", "vola"; `wordlike_first_names.txt`: "une
+rose"). Also replaced:
 
-- a Malagasy given name that is not an everyday word (`mg_first_names.txt`: "salut mialy").
-- after a person marker (`i`, `ry`, `ra`, `n'i`, `an'i`, `amin'i`, `tamin'i`, `@`): any word that is a
-  person name or that no list knows ("ry hasina", "ry hery", "tamin'i rakoto"); "ry namana", "i dada" stay.
-- `ra` + a word no list knows ("rakoto"), and any `Ra-`/`ra-` hyphenated word ("Ra-be").
-- a first name that is not also an everyday word ("salut sandrine"; "je t'aime", "une rose" stay),
-  and any first name hyphen-joined to another ("jean-pierre", "marie-claire").
+- after a person marker (`i`, `ry`, `ra`, `n'i`, `an'i`, `amin'i`, `tamin'i`): any word that is a
+  person name or that no list knows ("ry hery"); "ry namana", "i dada" stay.
+- any `Ra-`/`ra-` hyphenated word ("Ra-be"), and any first name hyphen-joined to another
+  ("jean-pierre", "marie-claire").
 
 Only counts leave this module; never text or words.
 """
 
 import hashlib
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from typing import NamedTuple
@@ -50,6 +58,7 @@ from fym1.data.known_words import (
     FIRST_NAME_WORDS,
     KNOWN_WORDS,
     MG_FIRST_NAMES,
+    NAME_DENY_LIST,
     WORDLIKE_FIRST_NAMES,
     Lexicon,
     known_by,
@@ -71,7 +80,13 @@ PRICE = re.compile(r"\d{1,3}(?:([ \u00a0\u202f.,])\d{3})?(?:\1\d{3})*(?:[.,]\d{1
 PHONE_DIGITS = re.compile(r"0|261|3[2-9]\d{7}$")
 
 LINK_WITH_PATH = re.compile(r"\b(?:https?://|www\.)\S+|\b(?:[\w-]+\.)+[a-z]{2,}[/?]\S*", re.IGNORECASE)
-HANDLE = re.compile(r"(?<![\w.])@[\w.]*\w")
+_PLACEHOLDER_AFTER = r"<(?:URL|EMAIL|HANDLE)>"
+# "@njaka", "@ njaka", "njaka@ <URL>"; not "@ 3 ora"
+HANDLE = re.compile(rf"@(?:\w|\s*(?:[^\W\d_]|{_PLACEHOLDER_AFTER}))")
+MAIL_HOSTS = r"(?:gmail|yahoo|hotmail|outlook|live|ymail|icloud)\b"
+SPELLED_AT = re.compile(
+    rf"\w\s*(?:\b(?:at|arobase)\b|\(at\)|\[at\])\s*(?:{_PLACEHOLDER_AFTER}|{MAIL_HOSTS})", re.IGNORECASE
+)
 PRIVATE_USE = re.compile("[\ue000-\uf8ff]")
 SENTENCE_END = ".!?…\n"
 
@@ -81,14 +96,14 @@ PLACEHOLDERS = ("<TEL>", "<EMAIL>", "<URL>", "<HANDLE>", "<ADDRESS>")  # what th
 _LEET = r"[^\W\d_]+(?:\d+[^\W\d_]+)+"
 _PIECE = re.compile("|".join(map(re.escape, PLACEHOLDERS)) + rf"|{_LEET}|(?:[Rr]a-)?[^\W\d_]+")
 LETTER_RUN = re.compile(r"[^\W\d_]+")
-PERSON_MARKER = re.compile(r"(?:(?<![\w'’])(?:i|ry|ra)|\w['’]i)\s+$|@\s*$", re.IGNORECASE)
+PERSON_MARKER = re.compile(r"(?:(?<![\w'’])(?:i|ry|ra)|\w['’]i)\s+$", re.IGNORECASE)
 MARKER_WINDOW = 12  # characters looked back for a marker
-RA_PREFIX = "ra"
-MIN_RA_NAME = 4  # "rabe"
 # Pool names (and the fallback) written in raw text: real people there, never our fakes.
 RAW_POOL_KEYS = frozenset(compare_key(name) for name in (*FIRST_NAMES, *SURNAMES, FALLBACK_NAME))
 ANY_FIRST_NAME = FIRST_NAME_WORDS | WORDLIKE_FIRST_NAMES
-LOWERCASE_NAMES = FIRST_NAME_WORDS - WORDLIKE_FIRST_NAMES | MG_FIRST_NAMES  # a name even in lower case
+# Names that are also everyday words: kept in lower case unless after a person marker ("soa ve", "une rose").
+# The fallback fake "Olona" is the everyday word for "person".
+EVERYDAY_NAMES = (NAME_DENY_LIST | WORDLIKE_FIRST_NAMES | {fold(FALLBACK_NAME)}) - MG_FIRST_NAMES
 NAME_BEFORE_HYPHEN = re.compile(r"([^\W\d_]+)-$")
 NAME_AFTER_HYPHEN = re.compile(r"-([^\W\d_]+)")
 HYPHEN_WINDOW = 30  # characters looked back for "jean-" before "pierre"
@@ -103,6 +118,11 @@ class Token(NamedTuple):
     start: int
     end: int
     word: str
+
+
+def normalise(text: str) -> str:
+    """`text` NFKC-normalised: full-width and circled forms read as plain letters, digits and `@`."""
+    return unicodedata.normalize("NFKC", text)
 
 
 def tokens(text: str) -> Iterator[Token]:
@@ -144,7 +164,7 @@ def has_long_number(text: str) -> bool:
 
 def contact_left(text: str) -> bool:
     """An email, link with a path or query, @handle, or failed-replacement mark is left in `text`."""
-    return any(p.search(text) for p in (EMAIL, LINK_WITH_PATH, HANDLE, PRIVATE_USE))
+    return any(p.search(text) for p in (EMAIL, LINK_WITH_PATH, HANDLE, SPELLED_AT, PRIVATE_USE))
 
 
 def _sentence_initial(text: str, start: int) -> bool:
@@ -158,7 +178,7 @@ def _after_marker(text: str, start: int) -> bool:
 
 def pool_names_in(texts: Iterable[str]) -> set[str]:
     """Keys of the fake-name pool's names written in `texts` in any case (raw, before anonymising)."""
-    parts = (part for text in texts for token in tokens(text) for part in LETTER_RUN.findall(token.word))
+    parts = (part for text in map(normalise, texts) for token in tokens(text) for part in LETTER_RUN.findall(token.word))
     return {key for part in parts if (key := compare_key(part)) in RAW_POOL_KEYS}
 
 
@@ -182,12 +202,12 @@ def _is_lowercase_name(text: str, token: Token, lexicon: Lexicon) -> bool:
         return False
     if "-" in word or any(c.isdigit() for c in word):  # "ra-koto", "n1r1na"
         return True
-    if fold(word) in LOWERCASE_NAMES or _in_compound_first_name(text, token):
+    if _in_compound_first_name(text, token):
         return True
     unknown = known_by(word, lexicon) is None  # person names are never known
     if _after_marker(text, token.start):
         return unknown
-    return unknown and len(word) >= MIN_RA_NAME and fold(word).startswith(RA_PREFIX)
+    return unknown and fold(word) not in EVERYDAY_NAMES
 
 
 def _clearing_list(text: str, token: Token, lexicon: Lexicon) -> str | None:
@@ -268,7 +288,7 @@ def strict_gate(
     disallowed = disallowed or {}
     kept, dropped, cleared, replaced = [], dict.fromkeys(GATE_REASONS, 0), Counter(), 0
     for record in records:
-        texts = [turn["content"] for turn in record["messages"]]
+        texts = [normalise(turn["content"]) for turn in record["messages"]]
         real_pool = {compare_key(name) for name in disallowed.get(record["id"], ())}
         names = _clear_or_replace(texts, fake_keys - real_pool, lexicon, real_pool)
         cleared += names.cleared

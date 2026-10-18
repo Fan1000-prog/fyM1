@@ -76,8 +76,11 @@ def test_masked_or_bare_text_is_not_a_contact(text):
     assert not contact_left(text)
 
 
+# Lower-case words the tests below use: a lower-case word no list knows is replaced.
+FILLER_WORDS = {"aiza", "sy", "tsy", "hitako", "fa", "tonga", "omaly", "hariva", "ary", "any", "ilay", "ve", "io"}
+FILLER_WORDS |= {"koa", "no", "nandeha", "tsara", "ihany", "hoy"}
 TINY_LEXICON = {
-    "mg_common": word_list({"eny"}),
+    "mg_common": word_list({"eny", *FILLER_WORDS}),
     "mg_wiki": word_list({"zazakely"}),
     "known_names": word_list({"tana"}),
     "fr": word_list({"bonjour", "tana"}),  # "Tana" counts once, under the first list that knows it
@@ -204,7 +207,7 @@ def test_sentence_initial_word_in_no_list_is_replaced_even_if_seen_in_lower_case
     result = strict_gate(records, fake_names=[], lexicon=TINY_LEXICON)
 
     assert "Vazivazy" not in texts(result)[0]
-    assert result.counts["tokens_replaced"] == 2
+    assert result.counts["tokens_replaced"] == 3  # the lower-case "vazivazy" no list knows too
 
 
 def test_word_capitalised_mid_sentence_is_replaced_even_if_seen_in_lower_case():
@@ -213,7 +216,7 @@ def test_word_capitalised_mid_sentence_is_replaced_even_if_seen_in_lower_case():
     result = strict_gate(records, fake_names=[], lexicon=TINY_LEXICON)
 
     assert "Vazivazy" not in texts(result)[0]
-    assert result.counts["tokens_replaced"] == 1
+    assert result.counts["tokens_replaced"] == 2  # the lower-case "vazivazy" no list knows too
 
 
 def test_gate_counts_never_hold_text():
@@ -341,7 +344,7 @@ def test_lowercase_first_names_are_replaced(text, name):
 
 
 @pytest.mark.parametrize(
-    "text", ["je t'aime trop", "une rose rouge", "tia anao aho", "mila vola aho", "eau claire", "la marine", "une olive"]
+    "text", ["je t'aime trop", "une rose pour toi", "tia anao aho", "mila vola aho", "eau claire", "la marine", "une olive"]
 )
 def test_lowercase_first_names_that_are_everyday_words_stay(text):
     result = strict_gate([record("a", text, "eny tsara ihany koa, eny tsara ihany koa")], fake_names=[])

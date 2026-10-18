@@ -11,7 +11,7 @@ import pytest
 
 from fym1.data import known_words
 from fym1.data.anonymize import Anonymizer
-from fym1.data.gate import has_long_number, pool_names_in, strict_gate
+from fym1.data.gate import contact_left, has_long_number, pool_names_in, strict_gate
 from fym1.data.known_words import KNOWN_WORDS, known_by, word_list
 from fym1.data.messenger import Message, Thread
 from fym1.data.pipeline import build_records
@@ -241,7 +241,6 @@ def test_f7_deny_list_names_are_replaced_at_a_sentence_start(name):
         ("tonga i lalao", "lalao"),
         ("tamin'i fetra", "fetra"),
         ("amin'i noro", "noro"),
-        ("hoy @ rivo", "rivo"),
         ("Ra-hery tonga", "hery"),
     ],
 )
@@ -249,9 +248,8 @@ def test_f7_deny_list_names_after_markers_are_replaced(text, name):
     assert name not in {w.lower() for w in words(gated_text(text))}
 
 
-@pytest.mark.parametrize("text", ["hoy @ Merci", "amin'i Trano"])
-def test_f7_capitalised_word_after_a_marker_is_replaced(text):
-    assert not {"Merci", "Trano"} & words(gated_text(text))
+def test_f7_capitalised_word_after_a_marker_is_replaced():
+    assert "Trano" not in words(gated_text("amin'i Trano"))
 
 
 def test_f7_deny_list_has_the_reviewed_names():
@@ -321,3 +319,95 @@ def test_r3_names_glued_to_digits_underscores_or_angle_brackets_are_replaced(tex
 )
 def test_r3_phones_split_by_any_punctuation_are_long_numbers(text):
     assert has_long_number(text)
+
+
+# Round-4 review list.
+
+
+def pipeline_text(text):
+    """`text` after the anonymiser and the strict gate, or None when its conversation is dropped."""
+    thread = Thread(
+        title="t",
+        participants=["Nirina Rakoto", "Tojo Randria"],
+        messages=[
+            Message(sender="Nirina Rakoto", text=text, ts_ms=0),
+            Message(sender="Tojo Randria", text=FILLER, ts_ms=60_000),
+        ],
+    )
+    result = build_records([thread], owner="Tojo Randria", is_malagasy=lambda _: True)
+    return result.records[0]["messages"][0]["content"] if result.records else None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "njakarabe@ gmail.com",
+        "mailako njakarabe @ gmail . com",
+        "njakab\uff20gmail.com",  # full-width @
+        "\uff20njakarabe tonga",
+        "njakarabe at gmail.com",
+        "mailako: njakab at gmail dot com",
+        "mailako: njakab arobase gmail point com",
+        "mailako: njakab AT yahoo.fr",
+    ],
+)
+def test_r4_email_and_handle_variants_never_leave_the_local_part(text):
+    out = pipeline_text(text)
+    assert out is None or "njaka" not in out.lower()
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["njaka@ <URL>", "hoy @ rivo", "hoy @ Merci", "@ <EMAIL>", "njaka at <URL>", "njaka arobase gmail", "x (at) hotmail"],
+)
+def test_r4_spaced_at_and_spelled_at_are_contacts(text):
+    assert contact_left(text)
+
+
+@pytest.mark.parametrize("text", ["tonga at 3", "<EMAIL> no nalefako", "look at that", "arobase"])
+def test_r4_at_without_a_mail_host_is_not_a_contact(text):
+    assert not contact_left(text)
+
+
+def test_r4_full_width_at_is_a_contact_in_the_gate():
+    result = strict_gate([record("a", "njakab\uff20<URL>", FILLER)], fake_names=[])
+    assert result.counts["dropped_contact"] == 1
+
+
+def test_r4_circled_letters_are_folded_and_checked():
+    assert "rakoto" not in gated_text("salut \u24c7\u24d0\u24da\u24de\u24e3\u24de").lower()
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["tsanta", "miangaly", "tsilavina", "domoina", "nambinina", "dera", "riana", "sandrinerakoto", "kevinandria"],
+)
+def test_r4_lowercase_word_no_list_knows_is_replaced(name):
+    assert name not in words(gated_text(f"salut {name}, {FILLER}"))
+
+
+@pytest.mark.parametrize("text", ["ny fb-ko: sandrinerakoto", "ny insta-ko dia njakarabe", "ny fb-ko: kevinandria"])
+def test_r4_lowercase_username_without_at_is_replaced(text):
+    out = pipeline_text(f"{text}, {FILLER}")
+    assert out is None or not {"sandrinerakoto", "njakarabe", "kevinandria"} & words(out)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "tsara be ny trano",
+        "je suis là ce soir",
+        "thank you my friend",
+        "lol ok mdr haha",
+        "mila vola aho",
+        "soa ve",
+        "une rose",
+        "je t'aime",
+    ],
+)
+def test_r4_ordinary_and_texting_words_stay(text):
+    assert gated_text(text) == text
+
+
+def test_r4_stretched_known_word_stays():
+    assert gated_text("tsaraaa be") == "tsaraaa be"
