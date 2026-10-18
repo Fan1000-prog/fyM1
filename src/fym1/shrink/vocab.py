@@ -57,6 +57,16 @@ def chat_texts(tokenizer, conversations: Iterable[list[dict]], system_prompt: st
                 )
 
 
+def tokens_per_word(tokenizer, lines: Iterable[str]) -> dict:
+    """Aggregate encoding cost of `lines`: counts only, never text. Words are whitespace-separated runs."""
+    lines = list(lines)
+    words = sum(len(line.split()) for line in lines)
+    if not words:
+        raise ValueError("no words to measure")
+    tokens = sum(len(tokenizer.encode(line, add_special_tokens=False)) for line in lines)
+    return {"lines": len(lines), "words": words, "tokens": tokens, "tokens_per_word": round(tokens / words, 4)}
+
+
 def trim_tokenizer(tokenizer, keep_ids: list[int]):
     """Return a new tokenizer holding only `keep_ids`; new id `n` is old id `keep_ids[n]`."""
     tok_json = _tokenizer_json(tokenizer)

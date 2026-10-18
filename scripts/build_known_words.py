@@ -59,6 +59,7 @@ from huggingface_hub import HfFileSystem
 from wordfreq import top_n_list
 
 from fym1.data.anonymize import FALLBACK_NAME, FIRST_NAMES, SURNAMES, fold
+from fym1.data.public_sources import HPLT_DATASET, HPLT_FILES, HPLT_REVISION, WIKIPEDIA_REVISION
 
 DATA = Path(__file__).resolve().parents[1] / "src/fym1/data"
 LETTERS = re.compile(r"[^\W\d_]+")
@@ -66,14 +67,11 @@ MIN_LETTERS = 2
 SENTENCE_END = ".!?…\n:"
 NAME_MIN_CAPITALISED = 3  # as low as the lower-case floor for a word (--min-lower)
 NAME_RATIO = 3
-WIKIPEDIA_REVISION = "b04c8d1ceb2f5cd4588862100d08de323dccfbaa"  # wikimedia/wikipedia, 2024-01-09
 INSEE_URL = "https://www.insee.fr/fr/statistiques/fichier/7633685/nat2022_csv.zip"
 INSEE_SHA256 = "c13b45e770c684b3c8531f28b6e3eae62194dc6dc86205fa17e4c6447b01b81d"
 MG_WORD_MIN_LOWER = 150
 CORPUS_MAX_CAPITALISED = 0.25  # mid-sentence capitalised / lower case, at most, for a web-text word
-HPLT_REPO = "datasets/HPLT/HPLT2.0_cleaned"
-HPLT_REVISION = "d1324a5283f762ee62c2a5c81de08fc6450ea540"
-HPLT_FILES = ("plt_Latn/train-00000-of-00002.parquet", "plt_Latn/train-00001-of-00002.parquet")
+HPLT_REPO = f"datasets/{HPLT_DATASET}"
 # A link, a bare domain, an email or an @handle, as one non-space run: "fb.com/rakoto.jean", "x@y.mg".
 WEB_ADDRESS = re.compile(r"\S*(?:https?://|www\.|@|\.(?:com|net|org|mg|fr|io|me)\b)\S*", re.IGNORECASE)
 SOURCES = {
