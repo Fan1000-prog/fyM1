@@ -320,6 +320,29 @@ def synth_stats(raw: int, kept: int, dropped: Counter | dict, by_generator: dict
             "by_generator": dict(sorted(by_generator.items())), **meta}  # fmt: skip
 
 
+def filter_raw_rows(
+    rows: list[dict], real: list[dict], is_malagasy: Callable[[str], bool], meta: dict
+) -> tuple[list[dict], dict]:
+    """04_synth's raw rows -> (kept `{"id", "messages"}` rows, validated counts-only stats).
+
+    Each row carries the model `output`, `generator`, `dtype`, `gen_seconds` and `new_tokens`; `meta` gives the
+    run settings the rows do not record (seed, few_shot_k, target_raw, gpus, code_sha, data_revision).
+    """
+    kept, dropped = filter_conversations((parse_conversation(r["output"]) for r in rows), real, is_malagasy)
+    generators = sorted({(r["generator"], r["dtype"]) for r in rows})
+    stats = synth_stats(
+        raw=len(rows), kept=len(kept), dropped=dropped, by_generator=Counter(r["generator"] for r in rows),
+        meta={**meta,
+              "generator": ", ".join(g for g, _ in generators),
+              "dtype": ", ".join(sorted({d for _, d in generators})),
+              "generator_licence": ", ".join(sorted({generator_licence(g) for g, _ in generators})),
+              "gen_seconds": round(sum(r["gen_seconds"] for r in rows), 1),
+              "new_tokens": sum(r["new_tokens"] for r in rows)},
+    )  # fmt: skip
+    validate_stats(stats)
+    return kept, stats
+
+
 def _is_count(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 

@@ -322,3 +322,18 @@ def test_sampling_overflow_is_recognised():
                                    RuntimeError("bad input")])
 def test_other_errors_are_not_sampling_overflow(error):
     assert not synth.is_sampling_overflow(error)
+
+
+# --- filter_raw_rows (04_synth's last step, also scripts/filter_synth.py) -------------------------------------
+
+
+def test_filter_raw_rows_keeps_parsed_chats_and_builds_valid_stats():
+    gen = "google/gemma-4-12B-it"
+    rows = [{"output": out, "generator": gen, "dtype": "float32", "gen_seconds": 2.25, "new_tokens": 7}
+            for out in ("A: Manao ahoana?\nB: Tsara be, misaotra", "tsy misy resaka eto")]  # fmt: skip
+    kept, stats = synth.filter_raw_rows(rows, REAL, says_malagasy, meta={"seed": 0, "code_sha": "abc"})
+    assert [r["messages"][1]["content"] for r in kept] == ["Tsara be, misaotra"]
+    assert (stats["raw"], stats["kept"], stats["dropped"]["unparseable"]) == (2, 1, 1)
+    assert (stats["seed"], stats["code_sha"], stats["generator"], stats["dtype"]) == (0, "abc", gen, "float32")
+    assert (stats["generator_licence"], stats["gen_seconds"], stats["new_tokens"]) == ("apache-2.0", 4.5, 14)
+    validate_stats(stats)
