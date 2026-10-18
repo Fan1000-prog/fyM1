@@ -153,6 +153,7 @@ INNER_NAME_ALLOWED: dict[tuple[str, str], str] = {
     ("scripts/build_formal.py", "random"): REASON_RANDOM,
     ("scripts/build_notebooks.py", "random"): REASON_RANDOM,
     ("scripts/build_pairs.py", "random"): REASON_RANDOM,
+    ("scripts/trim_cost.py", "random"): REASON_RANDOM,
     ("spaces/arena/README.md", "random"): REASON_RANDOM,
     ("spaces/arena/app.py", "random"): REASON_RANDOM,
     ("spaces/arena/votes.py", "random"): REASON_RANDOM,
