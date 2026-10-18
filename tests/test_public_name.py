@@ -80,3 +80,17 @@ def test_space_titles_use_public_name(space, texts):
     front_matter = texts[f"spaces/{space}/README.md"].split("---")[1]
     assert f"title: fy-m1 {space}" in front_matter
     assert f'title="fy-m1' in texts[f"spaces/{space}/app.py"]
+
+
+AUTHOR = "Fandresena Raharinaivo"
+
+
+def test_paper_author_line():
+    tex = (REPO_ROOT / "paper/fym1.tex").read_text("utf-8")
+    assert re.findall(r"\\author\{([^}]*)\}", tex) == [f"by {AUTHOR}"]
+
+
+@pytest.mark.parametrize("name", ["README.md", "MODEL_CARD.md"])
+def test_citation_author(name):
+    card = (REPO_ROOT / name).read_text("utf-8")
+    assert re.findall(r"author\s*=\s*\{(.*)\},", card) == [AUTHOR]

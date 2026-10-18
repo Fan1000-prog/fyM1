@@ -77,7 +77,7 @@ def test_text_values_are_latex_escaped(results_dir):
 
 def test_missing_values_render_pending(results_dir):
     tex = numbers.render_tex(resolve(results_dir))
-    assert macro(tex, "data-approved") == r"\textbf{pending}"  # key missing from a present file
+    assert macro(tex, "data-identity") == r"\textbf{pending}"  # key missing from a present file
     assert macro(tex, "ppl-fym1") == r"\textbf{pending}"  # nested key missing
     assert macro(tex, "train-steps") == r"\textbf{pending}"  # whole file missing
 
@@ -210,3 +210,127 @@ def test_cli_strict_fails_on_rejected_leak_run(results_dir, tmp_path):
     run = run_cli("--results", str(results_dir), "--out", str(tmp_path / "n.tex"), "--strict")
     assert run.returncode != 0
     assert "release is blocked" in run.stderr
+
+
+def test_lookup_picks_list_items_and_dotted_names():
+    data = {"candidates": [{"model": "a/x", "v": 1}, {"model": "b/y.z", "v": 2}], "models": {"y.z": {"n": 3}}}
+    assert numbers.lookup(data, ("candidates", numbers.Pick("model", "b/y.z"), "v")) == 2
+    assert numbers.lookup(data, ("models", "y.z", "n")) == 3
+    assert numbers.lookup(data, ("candidates", numbers.Pick("model", "nope"), "v")) is None
+    assert numbers.lookup(data, ("models", numbers.Pick("model", "a/x"))) is None  # a pick on a dict misses
+    assert numbers.key_text(("candidates", numbers.Pick("model", "a/x"), "v")) == "candidates[model=a/x].v"
+
+
+def test_candidate_and_greeting_numbers_come_from_selection_and_gate(tmp_path):
+    (tmp_path / "model_selection.json").write_text(
+        json.dumps({"candidates": [{"model": numbers.QWEN, "chrf_eng_plt": 49.73, "sec_per_step": 83.3}]})
+    )
+    key = numbers.GREETING_KEYS[numbers.GEMMA4]
+    (tmp_path / "greeting_gate.json").write_text(
+        json.dumps({"models": {key: {"judge_mean": 2.8500001, "is_malagasy_rate": 0.9, "n": 20}}})
+    )
+    tex = numbers.render_tex(resolve(tmp_path))
+    assert macro(tex, "sel-qwen-chrf-en-mg") == "49.7"
+    assert macro(tex, "sel-qwen-sec-step") == "83.3"
+    assert macro(tex, "greet-gemma4-mean") == "2.85"
+    assert macro(tex, "greet-gemma4-malagasy") == r"90.0\%"
+    assert macro(tex, "sel-gemma4-chrf-en-mg") == r"\textbf{pending}"
+
+
+def test_comparison_values_do_not_block_strict_but_the_base_does(tmp_path):
+    (tmp_path / "model_selection.json").write_text(
+        json.dumps(
+            {
+                "chosen": "org/base",
+                "candidates": [
+                    {"model": "org/base", "license": "MIT", "tokens_per_word": 2.0},
+                    {"model": "org/other", "license": "MIT", "greeting_gate": "pending"},
+                ],
+            }
+        )
+    )
+    resolved = resolve(tmp_path)
+    assert "model_selection.json: candidates[0].chrf_eng_plt" in resolved.missing
+    assert "model_selection.json: candidates[1].chrf_eng_plt" not in resolved.missing
+    assert "model_selection.json: candidates[1].greeting_gate.judge_mean" in resolved.missing_keys
+    gemma4 = f"model_selection.json: candidates[model={numbers.GEMMA4}].chrf_eng_plt"
+    assert gemma4 not in resolved.missing  # comparison row: may stay pending
+    assert f"model_selection.json: candidates[model={numbers.QWEN}].chrf_eng_plt" in resolved.missing
+    assert resolved.rows[1][-1] is None  # a "pending" string is not a judge mean
+
+
+def test_data_gate_counts_are_cited(tmp_path):
+    (tmp_path / "data_gate.json").write_text(json.dumps({"conversations_before_gate": 260, "kept": 192}))
+    values = resolve(tmp_path).values
+    assert (values["gate-before"], values["gate-kept"], values["gate-dropped"]) == ("260", "192", None)
+
+
+def test_greeting_judge_is_disclosed(tmp_path):
+    (tmp_path / "greeting_gate.json").write_text(json.dumps({"judge": "Judge X, blind"}))
+    assert resolve(tmp_path).values["greet-judge"] == "Judge X, blind"
+
+
+def _set(data: dict, key, value) -> None:
+    """Write value at key (the same key forms lookup() reads), creating dicts and picked list items."""
+    parts = key.split(".") if isinstance(key, str) else list(key)
+    for i, part in enumerate(parts):
+        last = i == len(parts) - 1
+        if isinstance(part, numbers.Pick):
+            item = next((x for x in data if x.get(part.field) == part.value), None)
+            if item is None:
+                item = {part.field: part.value}
+                data.append(item)
+            data = item
+            continue
+        nxt = parts[i + 1] if not last else None
+        if last:
+            data[part] = value
+        else:
+            data = data.setdefault(part, [] if isinstance(nxt, numbers.Pick) else {})
+
+
+def _sample(fmt):
+    """A synthetic value the formatter accepts."""
+    for value in (1, True, "x"):
+        try:
+            fmt(value)
+            return value
+        except (TypeError, ValueError):
+            continue
+    raise AssertionError(f"no sample value for {fmt}")
+
+
+def full_results(root: Path) -> Path:
+    """Every number the scripts cite, filled with synthetic values; the chosen base's table row complete."""
+    files: dict[str, dict] = {}
+    for n in numbers.NUMBERS:
+        _set(files.setdefault(n.file, {}), n.key, _sample(n.fmt))
+    selection = files[numbers.SELECTION_FILE]
+    selection["chosen"] = numbers.QWEN
+    base = next(c for c in selection["candidates"] if c["model"] == numbers.QWEN)
+    for col in numbers.SELECTION_COLUMNS:
+        _set(base, col, 1)
+    files[numbers.LEAK_FILE] = {"matches": 1, "approved_generic": 1, "rejected": 0}
+    for name, data in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(json.dumps(data))
+    return root
+
+
+def test_cli_strict_passes_on_full_results_without_owner_approval_count(tmp_path):
+    # The automatic gate replaced the owner review, so data_stats.json has no "approved" count.
+    results = full_results(tmp_path / "results")
+    assert "approved" not in json.loads((results / "data_stats.json").read_text())
+    out = tmp_path / "numbers.tex"
+    run = run_cli("--results", str(results), "--out", str(out), "--strict")
+    assert run.returncode == 0, run.stderr
+    # Comparison rows of the selection table may stay pending; every cited number must be filled.
+    cited = [line for line in out.read_text().splitlines() if "SelectionRows" not in line]
+    assert not any(r"\textbf{pending}" in line for line in cited)
+
+
+def test_candidate_licence_comes_from_selection(tmp_path):
+    (tmp_path / "model_selection.json").write_text(
+        json.dumps({"candidates": [{"model": numbers.GEMMA3, "license": "Gemma Terms of Use"}]})
+    )
+    assert resolve(tmp_path).values["sel-gemma3-license"] == "Gemma Terms of Use"

@@ -1,26 +1,19 @@
 # fy-m1
 
-An open AI model that chats in everyday Malagasy. The way people really text — not like a government letter.
+An open AI model that chats in everyday Malagasy — the way people really text, not like a government letter.
 
 "fy" means sweet or pleasant in Malagasy. M is for Malagasy. 1 is the first version.
 
-**[Try it](#try-it)** · [Paper](paper/fym1.pdf) · [Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)
+**[Try it](#try-it)** · [Paper](paper/fym1.pdf) · [Model card](MODEL_CARD.md) ·
+[Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)
 
 > **Status: v0.1.** *pending* means not measured yet. Coming in v0.2: the full panel's blind human
 > ratings, each model's answer to each test prompt, and the layer-pruning experiment.
 
-## Goals
-
-1. Start from the open model that is already best at Malagasy, and prove it with numbers.
-2. Fine-tune it on a free Google Colab GPU so it chats in natural, everyday Malagasy.
-3. Make it smaller by removing what Malagasy does not need, without making it worse.
-4. Measure the base model against fy-m1 honestly, and write it up in a short paper.
-5. Share everything: the model, a free demo, the code, the notebooks and the paper.
-
-## What this is
+## What it is
 
 Open models that "speak Malagasy" often sound stiff and formal, or half-translated from French or English.
-Ask "De ahoana?" and you get a speech back.
+Say "Salama e!" and you get a speech back.
 
 Real Malagasy texting is different:
 
@@ -32,54 +25,22 @@ fy-m1 aims for that style. Mixing Malagasy and French is correct here. A reply o
 if it is fully French or English with no Malagasy at all.
 
 fy-m1 is not a frontier model. The goal is simple: clearly and measurably better than its base model at
-everyday Malagasy chat.
+everyday Malagasy chat, trained for $0 and shared under an open licence.
 
-## How the model was chosen
+## Try it
 
-We tested a short list of recent open models with 7 to 12 billion parameters. That size knows some
-Malagasy already and still fits training on a free GPU.
-
-Each one was scored on:
-
-| Test | Why |
-|---|---|
-| Belebele Malagasy reading test | Does it understand Malagasy? |
-| FLORES+ translation, both ways with English (chrF++) | Can it write correct Malagasy? |
-| Tokens per Malagasy word | Fewer tokens = faster and cheaper to run. |
-| 20 short everyday chats, rated by a native speaker | Does it already sound natural? |
-| License | We prefer a permissive license when quality is close. |
-
-The full table and the winner are in [`results/model_selection.md`](results/model_selection.md) and in
-the paper. Winner: <!-- n:base-model -->pending<!-- /n --> (license: <!-- n:base-license -->pending<!-- /n -->).
-
-## How it was trained
-
-Every choice, and why we made it:
-
-| Choice | Why |
-|---|---|
-| **Real chats** from one person's Messenger export (both sides of each conversation) are the main data. | That is where the everyday style lives. |
-| Names, phone numbers, emails, links and handles are removed **on the owner's laptop** before anything leaves it. | Privacy. Raw chats never go to git, Colab or any public place. |
-| The owner checks samples and approves the cleaned data. | A native speaker is the only real check for privacy and style. |
-| Cleaned data lives only in a **private** dataset. It is never released. | It is still people's private conversations. The owner confirmed everyone in the chats agreed to this use. |
-| A **small** slice of formal Malagasy (Wikipedia) is mixed in. | Keeps facts and spelling. Kept small so the style does not turn formal again. |
-| Synthetic chats only if real chats are too few, made by an open model we run ourselves. | No paid APIs, no closed-model outputs, no private data sent to anyone. Budget: $0. |
-| A few "who are you?" answers and polite refusals, written by the owner. | Meant to make it say it was made by Fan's lab and politely refuse harmful requests. Not tested as a safety feature. |
-| **QLoRA**: the model stays frozen in 4-bit, we train small add-on weights (LoRA) on all linear layers. | It lets a 7-12B model train on one free 16 GB T4 GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). |
-| Learn from the assistant's replies only. | We want it to learn how to answer, not to copy the user. |
-| Save a checkpoint to a private repo often, and resume from the latest one. | Free Colab sessions disconnect. No work is lost. |
-| Stop early if the held-out loss gets worse. | Reduces overfitting. The leak check below is what tests memorising. |
-| Test prompts are written fresh, not taken from the chats. | So the test prompts can be public and anyone can run them. The models' answers to them come out in v0.2. |
-| **Leak check** before release: any fy-m1 answer that shares a run of 8 words with the training chats blocks release. The owner sees only the matched 8 words, never the chat, and it ships only if every match is a generic phrase. | Privacy again. |
-| **Vocabulary trimming**: drop tokens Malagasy, French and English never use. Ships only if it passes its checks. | A smaller download. The checks: held-out Malagasy text comes back unchanged, at least 95% of test answers stay identical (greedy decoding), and Belebele stays within 1 point. |
-| No layer pruning yet. | Cutting real layers needs a lot of retraining to heal. Free GPU time cannot pay for that. Planned for v0.2 as an experiment. |
-| Demo runs a 4-bit GGUF file on a free CPU. | Free for everyone. It is slow. |
-
-Exact settings and the training log are in [`results/train_log.json`](results/train_log.json).
+- **Chat with it:** [fy-m1-chat](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-chat) — free, no login.
+  Try "Salama e!" or "Inona no vaovao?".
+- **Download the model:** <!-- n:model-repo -->Fan1000-Prog/fy-m1-9B<!-- /n --> on
+  [Hugging Face](https://huggingface.co/Fan1000-Prog).
+  The GGUF file runs with llama.cpp and Ollama.
+- **Read the paper:** [paper/fym1.pdf](paper/fym1.pdf)
+- **Help us rate (native speakers):** [fy-m1-arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena) —
+  read two answers, pick the more natural one. No login.
 
 ## Results
 
-The numbers below come from files in [`results/`](results/), written by scripts in this repo. Nothing is
+Every number here comes from a file in [`results/`](results/), written by a script in this repo. Nothing is
 typed by hand.
 
 <!-- numbers:start -->
@@ -94,55 +55,76 @@ typed by hand.
 | Blind human votes so far (early votes): fy-m1 win rate | - | pending |
 <!-- numbers:end -->
 
+- The base model is <!-- n:base-model -->McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1<!-- /n -->.
+- Leak check: <!-- n:leak-matches -->pending<!-- /n --> matched 8-word runs,
+  <!-- n:leak-rejected -->pending<!-- /n --> rejected. Release needs zero rejected.
+- Blind human votes are early votes only: <!-- n:arena-votes -->pending<!-- /n --> votes from
+  <!-- n:arena-raters -->pending<!-- /n --> raters at release. The full panel's numbers come in v0.2.
+- The LLM judge is a cheap extra signal. Native speakers are the real judges.
+
 Where each number comes from:
 
-- Automatic scores: [`results/eval/scores.json`](results/eval/) and [`results/eval/judge.json`](results/eval/)
-- Blind human votes: [`results/eval/arena.json`](results/eval/) — early votes only: <!-- n:arena-votes -->pending<!-- /n -->
-  votes from <!-- n:arena-raters -->pending<!-- /n --> raters at release. The full panel's numbers come in v0.2.
-- Model size before and after trimming: [`results/shrink.json`](results/shrink.json)
-- Data counts (counts only, never text): [`results/data_stats.json`](results/data_stats.json)
+| File | What |
+|---|---|
+| [`results/model_selection.json`](results/model_selection.json), [`results/greeting_gate.json`](results/greeting_gate.json) | Base-model comparison |
+| [`results/data_stats.json`](results/data_stats.json), [`results/data_gate.json`](results/data_gate.json) | Data counts (counts only, never text) |
+| `results/train_log.json` | Training settings and loss |
+| `results/eval/` | Automatic scores, judge scores, leak check, arena votes |
+| `results/shrink.json` | Model size before and after trimming |
 
-The answers behind these scores are released in v0.2, after the blind human vote closes, so raters can't
-see which model wrote what.
+## How the base model was chosen
 
-The LLM judge is a cheap extra signal. Native speakers are the real judges.
+We tested open chat models that fit training on one free 16 GB T4 GPU. fy-m1 must ship under a simple open
+licence, so the base needs one too.
 
-## Limits
+| | AfriqueQwen3.5-9B-Instruct | Gemma 4 12B | Gemma 3 12B (baseline only) |
+|---|---|---|---|
+| FLORES+ English to Malagasy (chrF++) | <!-- n:sel-qwen-chrf-en-mg -->49.7<!-- /n --> | <!-- n:sel-gemma4-chrf-en-mg -->pending<!-- /n --> | <!-- n:sel-gemma3-chrf-en-mg -->36.8<!-- /n --> |
+| FLORES+ Malagasy to English (chrF++) | <!-- n:sel-qwen-chrf-mg-en -->56.2<!-- /n --> | <!-- n:sel-gemma4-chrf-mg-en -->pending<!-- /n --> | <!-- n:sel-gemma3-chrf-mg-en -->51.8<!-- /n --> |
+| Belebele reading, chat format | <!-- n:sel-qwen-belebele-chat -->74.2%<!-- /n --> | <!-- n:sel-gemma4-belebele-chat -->75.0%<!-- /n --> | <!-- n:sel-gemma3-belebele-chat -->75.1%<!-- /n --> |
+| Greeting gate, blind judge mean (1-5) | <!-- n:greet-qwen-mean -->2.90<!-- /n --> | <!-- n:greet-gemma4-mean -->2.85<!-- /n --> | <!-- n:greet-gemma3-mean -->1.90<!-- /n --> |
+| Greeting answers in Malagasy | <!-- n:greet-qwen-malagasy -->95.0%<!-- /n --> | <!-- n:greet-gemma4-malagasy -->90.0%<!-- /n --> | <!-- n:greet-gemma3-malagasy -->80.0%<!-- /n --> |
+| Training speed on a T4 (seconds per step) | <!-- n:sel-qwen-sec-step -->83.3<!-- /n --> | <!-- n:sel-gemma4-sec-step -->pending<!-- /n --> | <!-- n:sel-gemma3-sec-step -->122.4<!-- /n --> |
+| Licence | <!-- n:sel-qwen-license -->CC-BY-4.0<!-- /n --> | <!-- n:sel-gemma4-license -->Apache-2.0<!-- /n --> | <!-- n:sel-gemma3-license -->Gemma Terms of Use<!-- /n --> |
 
-- The style comes mostly from one person's chats. It sounds like everyday Antananarivo speech, not
-  every region or dialect.
-- The human comparison has only early votes so far. Until the full panel is in, the main evidence is automatic.
-- It can get facts wrong and make things up. Do not use it for medical, legal or money advice.
-- The free demo is slow. It runs on a free CPU.
-- Text only. No voice, no images.
+Winner: AfriqueQwen3.5-9B-Instruct. Of the models measured so far, it translates English into Malagasy
+best (Gemma 4's score is still pending). It ties Gemma 4 on greetings and reading, and trains in 16-bit on a free GPU (Gemma 4 is expected to need slower 32-bit). Gemma 3 is only a
+comparison: its terms would make fy-m1 a Gemma derivative. Full table: the paper, Table 1.
 
-## Try it
+## How it was made
 
-- **Chat with it:** [fy-m1-chat](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-chat) — free, no login.
-  Try "Sali ahn" or "De ahoana?".
-- **Download the model:** <!-- n:model-repo -->pending<!-- /n --> on [Hugging Face](https://huggingface.co/Fan1000-Prog).
-  The GGUF file runs with llama.cpp and Ollama.
-- **Read the paper:** [paper/fym1.pdf](paper/fym1.pdf)
-- **Help us rate (native speakers):** [fy-m1-arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena) —
-  read two answers, pick the more natural one. No login.
+| Step | What we did | Why |
+|---|---|---|
+| Real chats | One family's Messenger export. Everyone in it agreed. Each person's side is used as the assistant in turn. | That is where the everyday style lives. |
+| Cleaning | Names, nicknames, phone numbers, emails, links and handles are replaced **on the owner's laptop**. Raw chats never go to git, the cloud or any public place. | Privacy. |
+| Strict gate | No one reads the cleaned text. A script drops any conversation with a long number, a contact or too many unknown words, and replaces every word it does not know with a fake name. <!-- n:gate-kept -->192<!-- /n --> of <!-- n:gate-before -->260<!-- /n --> conversations passed. | Losing a word is cheap. Leaking a name is not. |
+| Synthetic chats | An open model with a permissive licence, run by us, writes more everyday chats from cleaned examples. | Real chats are too few. No paid APIs, no closed-model outputs. Budget: $0. |
+| Formal slice | A small set of chats from Malagasy Wikipedia. | Keeps facts and spelling. Small, so the style stays casual. |
+| Identity chats | A few "who are you?" answers and polite refusals, written by the owner. | It says it is fy-m1, made by Fan's lab, and refuses harmful requests. Not a safety feature. |
+| Training | **QLoRA** on a free Kaggle T4 GPU (Colab as backup): the model stays frozen in 4-bit and we train small add-on weights. Loss on the assistant's replies only. | A model this size fits one free GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). |
+| Checkpoints | Saved to a private repo often; a new session resumes from the latest one. | Free sessions disconnect. |
+| Test prompts | Written fresh, never taken from the chats. | So they can be public and anyone can run them. |
+| Leak check | Any fy-m1 answer that shares a run of 8 words with the real chats blocks release, unless it is a generic phrase. | Privacy again. |
+| Trimming | Drop tokens Malagasy, French and English never use. Ships only if it passes its checks. | A smaller download. |
 
-## How to rerun
+## How to reproduce
 
-You need [uv](https://docs.astral.sh/uv/) and a free Google Colab account.
+You need [uv](https://docs.astral.sh/uv/) and a free Kaggle or Google Colab account.
 
 ```bash
 git clone https://github.com/Fan1000-prog/fy-m1 && cd fy-m1
-uv sync
-uv run pytest            # all code tests
+uv sync --all-groups
+uv run pytest -q          # all code tests
 ```
 
 Then, in order:
 
-1. `notebooks/00_baseline.ipynb` on a Colab T4 — scores the candidate models.
-2. `notebooks/01_train.ipynb` — trains fy-m1. Rerun it after a disconnect; it resumes.
-3. `notebooks/02_eval_export.ipynb` — answers the test prompts, scores both models, exports the GGUF.
-4. `notebooks/03_trim.ipynb` — vocabulary trimming and its checks.
-5. Rebuild the numbers and the paper:
+1. `notebooks/00_baseline.ipynb` — scores the candidate models on a T4.
+2. `notebooks/04_synth.ipynb` — writes synthetic chats with an open, permissively licensed model.
+3. `notebooks/01_train.ipynb` — trains fy-m1. Rerun it after a disconnect; it resumes.
+4. Evaluation: answers the test prompts, scores both models (`scripts/score.py`), exports the GGUF.
+5. `notebooks/03_trim.ipynb` — vocabulary trimming and its checks.
+6. Rebuild the numbers and the paper:
 
    ```bash
    uv run python paper/make_numbers.py --markdown README.md MODEL_CARD.md
@@ -150,15 +132,44 @@ Then, in order:
    ```
 
 The training chats are private, so you cannot retrain on the same data. You can rerun everything else,
-and you can train on your own chats with `scripts/build_chats.py`.
+and train on your own chats with `scripts/build_chats.py`. Kaggle and Colab steps are in
+[`docs/kaggle_operator.md`](docs/kaggle_operator.md) and [`docs/colab_operator.md`](docs/colab_operator.md).
 
-v0.1 publishes only the total scores, not each model's answer to each prompt. Those answers come out in
-v0.2, after the arena closes, so raters cannot see which answer came from which model. Until then you can
-make your own answers with `notebooks/02_eval_export.ipynb`.
+## Repo layout
 
-## License
+| Path | What |
+|---|---|
+| `src/fym1/data/` | Chat reader, anonymiser, strict gate, word lists, synthetic and formal chats |
+| `src/fym1/eval/` | Drift metric, baseline scoring, judge rubric |
+| `src/fym1/train/`, `src/fym1/shrink/` | Training helpers, vocabulary trimming |
+| `scripts/` | Command-line tools (build data, score, make the selection table) |
+| `notebooks/` | Kaggle / Colab notebooks (T4) |
+| `eval/prompts.jsonl` | The public test prompts |
+| `spaces/chat`, `spaces/arena` | The demo and the rating app on Hugging Face |
+| `paper/` | The paper; `make_numbers.py` turns `results/` into its numbers |
+| `results/` | Measured outputs only |
+| `docs/` | Anonymisation notes, operator guides |
 
-Code: [Apache-2.0](LICENSE). The model follows the base model's license (see [MODEL_CARD.md](MODEL_CARD.md)).
+## Licence
+
+- **Model:** CC-BY-4.0, the same as the base model,
+  <!-- n:base-model -->McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1<!-- /n -->
+  (<!-- n:base-license -->CC-BY-4.0<!-- /n -->). If you use it, credit fy-m1 and the base model.
+- **Code:** [Apache-2.0](LICENSE).
+- **Wikipedia text:** the formal chats are built from Malagasy Wikipedia text, which is
+  [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). We credit it here. The model stays
+  CC-BY-4.0. Anyone who reuses Malagasy Wikipedia text must follow its ShareAlike terms.
+- Gemma 3 was only a comparison. None of its outputs are in the training data.
+
+## Credits
+
+- Base model:
+  [AfriqueQwen3.5-9B-50Langs-Instruct-v1](https://huggingface.co/McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1)
+  by McGill-NLP, CC-BY-4.0.
+- Tests: [Belebele](https://huggingface.co/datasets/facebook/belebele) and
+  [FLORES+](https://huggingface.co/datasets/openlanguagedata/flores_plus); language ID with
+  [GlotLID](https://huggingface.co/cis-lmu/glotlid). Training with [Unsloth](https://github.com/unslothai/unsloth).
+- Free GPUs: Kaggle and Google Colab.
 
 ### Third-party data
 
@@ -167,12 +178,23 @@ Code: [Apache-2.0](LICENSE). The model follows the base model's license (see [MO
   [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); word lists derived from it keep that licence
   and this attribution.
 - [Wikipedia](https://www.wikipedia.org/) (Malagasy, French, English): the data cleaner's word lists use
-  word case counts from its text, licensed [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+  word case counts from its text, and the formal slice uses Malagasy Wikipedia, licensed
+  [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 - [HPLT 2.0 cleaned](https://huggingface.co/datasets/HPLT/HPLT2.0_cleaned) (Malagasy, `plt_Latn`): the data
-  cleaner's Malagasy web-text word list (`mg_corpus_words.txt`) uses word case counts from it. HPLT licenses the
-  packaging, metadata and annotations under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) and does
-  not own the crawled web text (Internet Archive, Common Crawl); only a word list, never text, is kept here.
+  cleaner's Malagasy web-text word list (`mg_corpus_words.txt`) is built from it. We keep only that word list,
+  never the text.
 - [INSEE fichier des prénoms](https://www.insee.fr/fr/statistiques/7633685): the French first-name list,
   [Licence Ouverte / Etalab 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence/).
 
-Made by Fan's lab.
+## Citation
+
+```bibtex
+@misc{fym1,
+  title  = {fy-m1: Teaching an Open Model to Chat in Everyday Malagasy},
+  author = {Fandresena Raharinaivo},
+  year   = {2026},
+  url    = {https://github.com/Fan1000-prog/fy-m1}
+}
+```
+
+By Fandresena Raharinaivo.
