@@ -144,7 +144,7 @@ Also replaced, the same way:
 - **Lower-case words no list knows** (fail closed; name lists can never hold every name). Anywhere,
   a lower-case word that no known-word list knows is replaced like an unknown capitalised word:
   "salut tsanta", "rakoto", "salut sandrine", usernames such as "sandrinerakoto", and letters with
-  digits inside ("n1r1na"). Person names are never known, so `mg_first_names.txt` ("mialy") and
+  digits inside ("h4nt4"). Person names are never known, so `mg_first_names.txt` ("mialy") and
   `first_names.txt` ("sandrine") names are always replaced. Kept: words a list knows ("trano", "lol",
   "mdr"), and names that are also everyday words (`name_deny_list.txt`, `wordlike_first_names.txt`,
   the fallback "olona": "mila vola", "soa ve", "une rose", "tia"). Lists miss some everyday words too

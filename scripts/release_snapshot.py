@@ -6,7 +6,8 @@
 Copies the commit's tracked files (no git history) into --out, outside every worktree, minus the private paths
 in fym1.release.EXCLUDES, and adds a NOTICE for the third-party word lists. Sender names are read from the
 export at run time, removed from the hand-written name lists and searched for in every file but the lists a
-script rebuilds from public data, whole word, case/accent-insensitive; then a secret scan runs. Writes the counts
+script rebuilds from public data, whole word, case/accent-insensitive, through invisible or combining marks
+and digits typed for letters ("Z4fy"); then a secret scan runs. Writes the counts
 report to --results only (never into --out: the report is a private build record).
 --private-ids names a file outside the repo (one private account id per line); any whole-word,
 case-insensitive match in a snapshot file or path fails the check, counted per file, never shown.

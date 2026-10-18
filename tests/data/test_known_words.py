@@ -4,7 +4,8 @@ import re
 from importlib.resources import files
 from pathlib import Path
 
-from fym1.data.known_words import KNOWN_WORDS, known_by, word_list
+from fym1.data.anonymize import FIRST_NAMES, SURNAMES, fold
+from fym1.data.known_words import KNOWN_WORDS, NAME_DENY_LIST, known_by, word_list
 
 
 def test_stretched_letters_collapse_only_when_the_word_has_them():
@@ -133,3 +134,22 @@ def test_corpus_words_drop_names_web_text_also_types_in_lower_case(build_known_w
 
     assert not build_known_words.looks_like_a_name("riana", cases)  # the Wikipedia rule alone keeps it
     assert "riana" not in words and "trano" in words  # "trano": 1 capitalised in 10 (0.1)
+
+
+WORD_LIST_FILES = (
+    "mg_common_words.txt", "mg_wiki_words.txt", "mg_corpus_words.txt", "mg_known_names.txt", "fr_words.txt",
+    "en_words.txt",
+)  # fmt: skip
+
+
+def test_a_pool_name_a_word_list_holds_is_on_the_name_deny_list():
+    """A fake-pool name is a name everywhere the gate looks, so an everyday word in the pool is masked even in
+    lower case unless the deny list keeps it ("soa ve"). The pool's word-names (Soa, Vola, Mamy) are on that
+    list; any other pool name must be in no word list. Read from the shipped files: build_known_words.py
+    drops pool names from its lists on a rebuild, which would hide the clash."""
+    listed = set()
+    for name in WORD_LIST_FILES:
+        lines = files("fym1.data").joinpath(name).read_text("utf-8").splitlines()
+        listed |= {fold(line.strip()) for line in lines if line.strip() and not line.startswith("#")}
+    clashes = {fold(name) for name in (*FIRST_NAMES, *SURNAMES)} & listed
+    assert clashes <= NAME_DENY_LIST, sorted(clashes - NAME_DENY_LIST)

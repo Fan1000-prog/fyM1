@@ -22,8 +22,9 @@ def test_anonymize_replaces_full_name_once():
     assert anonymize("Hoy i Hanta  Rakoto", NAMES) == "Hoy i Soa Rabe"
 
 
-def test_anonymize_replaces_surname_alone():
-    assert anonymize("ry rakoto", NAMES) == "ry Rabe"
+@pytest.mark.parametrize("written", ["rakoto", "rakot"])  # "rakot": a 5-letter prefix
+def test_anonymize_replaces_surname_alone(written):
+    assert anonymize(f"ry {written}", NAMES) == "ry Rabe"
 
 
 def test_anonymize_keeps_short_prefixes_and_other_words():

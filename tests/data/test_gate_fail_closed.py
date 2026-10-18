@@ -296,7 +296,7 @@ def test_r3_lowercase_name_in_one_conversation_never_clears_it_in_another():
         ("Jean_Pierre tonga", "jean"),
         ("Jean_Pierre tonga", "pierre"),
         ("Rak0to tonga", "rak0to"),
-        ("hoy n1r1na", "n1r1na"),
+        ("hoy h4nt4", "h4nt4"),
         ("Rakoto>>> tonga", "rakoto"),
         ("<<Njaka tonga", "njaka"),
         ("lol<3Njaka", "njaka"),

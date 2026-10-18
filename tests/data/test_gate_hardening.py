@@ -104,11 +104,11 @@ def test_h3_fake_pool_skips_a_real_name_hidden_by_an_invisible_char():
 @pytest.mark.parametrize(
     "text",
     [
-        "Nir\u0903ina tonga",  # spacing mark (Mc) splits a name
+        "Han\u0903ta tonga",  # spacing mark (Mc) splits a name
         "R\u0903a\u0903k\u0903o\u0903t\u0903o\u0903",  # moved from r6: now dropped, not replaced
-        "Nir\u3164ina tonga",  # Hangul filler: a default-ignorable letter
-        "Nir\uffa0ina tonga",
-        "Nir\u115fina tonga",
+        "Han\u3164ta tonga",  # Hangul filler: a default-ignorable letter
+        "Han\uffa0ta tonga",
+        "Han\u115fta tonga",
         "a \u200dHanta",  # format char not after a letter
         "salut \u2066Hanta\u2069",  # bidi isolates
         "a \U0001d173Hanta",  # musical format char not after a letter
@@ -136,7 +136,7 @@ def test_h4_emoji_sequences_and_accents_are_not_hidden_chars(text):
 
 
 def test_h4_gate_drops_and_counts_a_conversation_with_a_hidden_char():
-    result = strict_gate([record("a", "Nir\u0903ina tonga", FILLER), record("b", "tsara \u2764\ufe0f", FILLER)], [])
+    result = strict_gate([record("a", "Han\u0903ta tonga", FILLER), record("b", "tsara \u2764\ufe0f", FILLER)], [])
 
     assert [r["id"] for r in result.kept] == ["b"]
     assert result.counts["dropped_hidden_char"] == 1
