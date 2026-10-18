@@ -80,9 +80,10 @@ tests `tests/data/test_gate.py`). It drops a whole conversation if any turn stil
 
 | Reason | Caught | Kept |
 |---|---|---|
-| `long_number` | 7+ digits in one run across any non-letter characters (every kind of space, `. , / \ - _ ( ) + ; * \| :`, unicode dashes) (`12 34 567`, `(034) 12 345 67`, `15/03/2026`) | a price: clean 3-digit groups or no separator, then `Ar`, `Ariary`, `fmg`, `€`, `euro(s)`, `eur` (`1 500 000 Ar`), and not phone-shaped: no `+` before it, digits not starting `0` or `261`, not `3[2-9]` + 7 digits (`0341234567 Ar`, `341234567 Ar` are long numbers) |
+| `long_number` | 7+ digits in one run across any non-letter characters (every kind of space, `. , / \ - _ ( ) + ; * \| :`, unicode dashes) (`12 34 567`, `(034) 12 345 67`, `15/03/2026`) | a price: clean 3-digit groups or no separator, then `Ar`, `Ariary`, `fmg`, `€`, `euro(s)`, `eur` (`1 500 000 Ar`), and not phone-shaped: no `+` before it, digits not starting `0` or `261`, not `3[2-9]` + 7 digits (`0341234567 Ar`, `341234567 Ar` are long numbers). A run of 9-10 digits is a phone's length (Malagasy landlines `2x`, French mobiles `[67]` without the 0, ...), so it is a price only with grouped thousands ending `000` (`150 000 000 Ar`) or cents (`123 456 789,00 €`); `202 212 345 Ar`, `612 345 678 €`, `150000000 Ar` are long numbers |
 | `contact` | an email, a link with a path or query, an `@` before a word or a placeholder (`@njaka`, `@ njaka`, `njaka@ <URL>`), `at`/`arobase`/`(at)`/`[at]` before a placeholder or a mail host (`njaka at gmail`), a private-use mark from a failed replacement | `<EMAIL>`, `<URL>`, a bare `host.com`, `@ 3 ora` |
 | `too_many_unknown` | more than 30% of the conversation's words would be replaced as names (below) | 30% or less |
+| `hidden_char` | an invisible or combining character still there after normalising (below): a spacing mark (Mc) inside a name, a Hangul filler, a format character not right after a letter (`a \u200dNirina`), bidi marks | emoji variation selectors, ZWJ between emoji, keycap `U+20E3` after a digit, `#` or `*`, subdivision-flag tags after 🏴, accents NFC composes |
 
 The gate fails closed: replacing or dropping too much is fine, a leak is not. The anonymiser and the
 gate both NFKC-normalise text first, so full-width (`＠`, `Ｒ`) and circled (`Ⓡ`) characters are read as
@@ -214,6 +215,10 @@ When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit ref
   ("contactO320 000 000") is kept as an amount.
 - Addresses other than "Lot …" ("Cité 67Ha porte 12", "Villa 23 Ivandry"), and place names.
 - Nicknames used in chat but never set through Messenger.
+
+From the gate-hardening PR on, reviewers judge the gate against real-world family-chat risk. An evasion
+that needs someone to type a name or number in a deliberately obscure way, and that the anonymiser
+cannot meet in a real export, goes in this list; it is not a merge blocker.
 
 These are pinned as `xfail` tests in `tests/data/test_anonymize_probes.py`.
 
