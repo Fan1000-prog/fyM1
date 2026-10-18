@@ -72,7 +72,7 @@ anonymiser limits.
 | 8 Writing | Paper, README, model card skeletons; project updates, spec §8, plan status | #5, #17, #25, #26 |
 | 8 Writing | Project update snapshot, operator notes, licence decisions | #36 |
 | 2 Data | Synthetic chats: permissive generators only (AfriqueQwen3.5-9B-Instruct, Gemma 4) | #37 |
-| 2 Data | `chats.jsonl` rebuilt with the #51 fake-name pool and re-uploaded (`fyM1-chats` a1b58d3): same counts (192 kept, 436 messages); sender-name hits in the file 12 -> 0 | #PR |
+| 2 Data | `chats.jsonl` rebuilt with the #51 fake-name pool and re-uploaded (`fyM1-chats` a1b58d3): same counts (192 kept, 436 messages); sender-name hits in the file 12 -> 0 | #52 |
 | — Name + process | Public name `fy-m1`, open-ended PR loop rules, name guard test | #28 |
 
 ## 3. Decisions made outside the spec and plan
