@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     args.out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     verdict = "passed" if report["gate_passed"] else "FAILED"
     print(f"identity check {verdict}: {report['passed']}/{report['n']} passed "
-          f"(threshold {report['threshold']:.0%}), {report['foreign_identity']} foreign identity claim(s); "
+          f"(threshold {report['threshold']:.0%}), {report['foreign_identity']} foreign self-claim(s) (hard fail); "
           f"wrote {args.out}")
     return 0 if report["gate_passed"] else 1
 
