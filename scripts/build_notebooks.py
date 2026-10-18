@@ -129,13 +129,19 @@ print("CANDIDATE", SLUG, "| missing:", bl.missing_sections(R, BASE))"""),
 code("""import torch
 from unsloth import FastModel
 
+RETRIED = {"items": 0}  # items re-run one at a time after an OOM batch, in the current section
+
+
 def section(name):
     print(f"== {name}: {'skip (saved)' if name in R else 'run'}")
+    RETRIED["items"] = 0
     return name not in R
 
 t0 = time.time()
 try:
-    model, processor = FastModel.from_pretrained(HUB_ID, max_seq_length=2048, load_in_4bit=True, full_finetuning=False)
+    # use_exact_model_name: else Unsloth's name map swaps google/gemma-3-12b-it for its own bnb-4bit checkpoint
+    model, processor = FastModel.from_pretrained(HUB_ID, max_seq_length=2048, load_in_4bit=True, full_finetuning=False,
+                                                 use_exact_model_name=True)
 except Exception as e:  # gated/403 or unsupported architecture: record and move on
     R["skipped"] = {"error": f"{type(e).__name__}: {str(e)[:300]}"}  # missing_sections() then treats it as complete
     save_results(SLUG, R)
@@ -143,7 +149,7 @@ except Exception as e:  # gated/403 or unsupported architecture: record and move
 tok = getattr(processor, "tokenizer", processor)
 tok.padding_side = "left"
 R["env"] = {"gpu": torch.cuda.get_device_name(0), "torch": torch.__version__, "model_dtype": str(model.dtype),
-            "code_sha": CODE_SHA,
+            "loaded_from": model.config._name_or_path, "code_sha": CODE_SHA,
             "vram_after_load_gb": round(torch.cuda.memory_allocated() / 2**30, 2),
             "load_s": round(time.time() - t0), "utc": datetime.datetime.now(datetime.timezone.utc).isoformat()}
 print(R["env"], "vram after load GB:", round(torch.cuda.memory_allocated() / 2**30, 2))
@@ -160,8 +166,11 @@ def encode(texts, special_tokens=False):
 
 def batched(items, batch_size, run):
     \"\"\"On CUDA OOM: empty the cache and retry that batch one item at a time; StillOutOfMemory if that fails.\"\"\"
+    def count(n):
+        RETRIED["items"] += n
+
     return run_batched(items, batch_size, run, is_oom=lambda e: isinstance(e, torch.OutOfMemoryError),
-                       clear=torch.cuda.empty_cache)
+                       clear=torch.cuda.empty_cache, on_retry=count)
 
 
 @torch.inference_mode()
@@ -208,9 +217,9 @@ if not BASE and section("belebele"):
                                       lambda b: last_logits(encode(b))[:, digit_ids].float().tolist()))
         R["belebele"] = {"acc": round(bl.accuracy((scores.argmax(-1) + 1).tolist(), rows["correct_answer_num"]), 4),
                          "n": len(scores), "nan_rows": int(torch.isnan(scores).any(-1).sum()),
-                         "seconds": round(time.time() - t0), "protocol": protocol}
+                         "seconds": round(time.time() - t0), "protocol": protocol, "retried_items": RETRIED["items"]}
     except StillOutOfMemory:
-        R["belebele"] = {"oom": True, "protocol": protocol}
+        R["belebele"] = {"oom": True, "protocol": protocol, "retried_items": RETRIED["items"]}
     save_results(SLUG, R)
 print("BELEBELE", R.get("belebele"))"""),
 code("""if section("belebele_completion"):  # the one protocol for every model: plain text, no chat template
@@ -223,13 +232,15 @@ code("""if section("belebele_completion"):  # the one protocol for every model: 
                                       lambda b: last_logits(encode(b, special_tokens=True))[:, letter_ids].float().tolist()))
         R["belebele_completion"] = {"acc": round(bl.accuracy((scores.argmax(-1) + 1).tolist(), rows["correct_answer_num"]), 4),
                                     "n": len(scores), "nan_rows": int(torch.isnan(scores).any(-1).sum()),
-                                    "seconds": round(time.time() - t0), "protocol": protocol}
+                                    "seconds": round(time.time() - t0), "protocol": protocol,
+                                    "retried_items": RETRIED["items"]}
     except StillOutOfMemory:
-        R["belebele_completion"] = {"oom": True, "protocol": protocol}
+        R["belebele_completion"] = {"oom": True, "protocol": protocol, "retried_items": RETRIED["items"]}
     save_results(SLUG, R)
 print("BELEBELE_COMPLETION", R.get("belebele_completion"))"""),
 code("""if section("flores"):
     t0 = time.time()
+    protocol = "devtest first 200, 0-shot chat prompt, greedy, max 256 new tokens, first line kept"
     try:
         mg = load_dataset("openlanguagedata/flores_plus", "plt_Latn", split="devtest")
         en = load_dataset("openlanguagedata/flores_plus", "eng_Latn", split="devtest")
@@ -241,11 +252,10 @@ code("""if section("flores"):
         hyp_en = [bl.first_line(t) for t in generate([bl.translation_prompt(s, "Malagasy", "English") for s in mg_txt], 256, False)]
         R["flores"] = {"eng-plt_chrf++": round(bl.chrf_pp(hyp_mg, mg_txt), 2),
                        "plt-eng_chrf++": round(bl.chrf_pp(hyp_en, en_txt), 2), "n": FLORES_N,
-                       "seconds": round(time.time() - t0),
-                       "protocol": "devtest first 200, 0-shot chat prompt, greedy, max 256 new tokens, first line kept"}
+                       "seconds": round(time.time() - t0), "protocol": protocol, "retried_items": RETRIED["items"]}
         save_results(SLUG, R)
     except StillOutOfMemory:
-        R["flores"] = {"oom": True}
+        R["flores"] = {"oom": True, "protocol": protocol, "retried_items": RETRIED["items"]}
         save_results(SLUG, R)
     except Exception as e:  # gated dataset not yet accepted: leave the section unsaved so a rerun retries it
         print("FLORES PENDING:", type(e).__name__, str(e)[:300])
@@ -268,10 +278,10 @@ code("""if section("greetings"):
     sampling = "temp 0.7, top_p 0.9, max 128 new tokens, seed 42, no system prompt"
     try:
         answers = generate(greetings, 128, True)
-        R["greetings"] = {"source": source, "sampling": sampling,
+        R["greetings"] = {"source": source, "sampling": sampling, "retried_items": RETRIED["items"],
                           "answers": [{"prompt": p, "answer": a.strip()} for p, a in zip(greetings, answers)]}
     except StillOutOfMemory:
-        R["greetings"] = {"oom": True, "source": source, "sampling": sampling}
+        R["greetings"] = {"oom": True, "source": source, "sampling": sampling, "retried_items": RETRIED["items"]}
     save_results(SLUG, R)
 for a in R["greetings"].get("answers", []):
     print(repr(a["prompt"]), "->", repr(a["answer"][:200]))"""),
@@ -409,7 +419,7 @@ if not STOPPED:
     from unsloth import FastModel
 
     model, processor = FastModel.from_pretrained(MODEL_ID, max_seq_length=MAX_LEN, load_in_4bit=True,
-                                                 full_finetuning=False)
+                                                 full_finetuning=False, use_exact_model_name=True)
     tok = getattr(processor, "tokenizer", processor)
     lora = dict(r=LORA_R, lora_alpha=LORA_ALPHA, lora_dropout=0, bias="none", random_state=SEED,
                 use_gradient_checkpointing="unsloth")
