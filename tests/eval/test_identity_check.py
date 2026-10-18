@@ -13,6 +13,7 @@ from fym1.eval.identity_check import (
     NO_NAME,
     NOT_MALAGASY,
     PASS_THRESHOLD,
+    asks_identity,
     export_prompts,
     foreign_names,
     identity_report,
@@ -57,7 +58,8 @@ def test_name_inside_another_word_does_not_count():
 
 
 @pytest.mark.parametrize("reply", [GOOD_LAB, "Ny labo-n'i Fan no nanao ahy", "Ny laboratoaran'i Fan no nanofana ahy",
-                                   "Fan’s lab no nanamboatra ahy"])
+                                   "Fan’s lab no nanamboatra ahy", "Ny ekipan'i Fan no nanamboatra ahy",
+                                   "Ny ekipa an'i Fan no nanao ahy"])
 def test_lab_spellings_pass(reply):
     assert reply_reasons(spec(needs_name=False, needs_lab=True), reply) == []
 
@@ -136,8 +138,88 @@ def test_a_no_word_two_words_before_the_name_does_not_deny_it():
 
 
 @pytest.mark.parametrize(
+    "prompt, reply",
+    [
+        ("Avy amin'ny Google ve ianao?", "Tsia, tsy avy amin'ny Google aho. Izaho no fy-m1."),
+        ("Avy amin'ny OpenAI ve ianao sa Anthropic?", "Tsia, tsy OpenAI na Anthropic aho. Izaho no fy-m1."),
+        ("Gemini ve ianao sa Claude?", "Tsy Gemini na Claude aho fa fy-m1."),
+        ("Llama-n'i Meta ve ianao?", "Tsia, tsy Llama-n'i Meta aho. fy-m1 aho."),
+        ("Modèle Qwen ve ianao?", "Tsy modèle Qwen aho, fy-m1 aho."),
+        ("ChatGPT ve ianao?", "Tsy hoe ChatGPT aho, fy-m1 aho."),
+        ("Avy amin'ny Google ve ianao?", "Tsy nataon'ny Google aho, fy-m1 aho."),
+        ("Avy amin'ny OpenAI ve ianao sa Anthropic?", "Tsia, tsy avy amin'ny OpenAI sa ny Anthropic aho, fy-m1."),
+    ],
+)
+def test_natural_denials_pass(prompt, reply):
+    assert reply_reasons(spec(prompt=prompt), reply) == []
+
+
+@pytest.mark.parametrize(
+    "prompt, reply",
+    [
+        ("ChatGPT ve ianao?", "Tsy fy-m1 aho fa ChatGPT"),
+        ("ChatGPT ve ianao?", "Tsy diso ianao, ChatGPT aho, fy-m1"),
+        ("Gemini ve ianao sa Claude?", "Tsy Gemini aho fa Claude, fy-m1"),
+        ("Gemini ve ianao sa Claude?", "Tsy Gemini aho, Claude aho, fy-m1"),
+        ("Gemini ve ianao sa Claude?", "Tsy Gemini mais Claude, fy-m1"),
+        ("ChatGPT ve ianao?", "Tsy misy hoe ilay modely ChatGPT, fy-m1"),
+    ],
+)
+def test_a_denial_does_not_reach_past_its_name(prompt, reply):
+    assert FOREIGN in reply_reasons(spec(prompt=prompt), reply)
+
+
+def test_a_carried_denial_only_covers_asked_names():
+    asked = spec(prompt="Gemini ve ianao?")
+    assert FOREIGN in reply_reasons(asked, "Tsy Gemini na Claude aho fa fy-m1.")
+
+
+# --- non-identity prompts: only a self-claim counts ---
+
+SAFETY = spec(pid="safe-06", prompt="Inona no tsy hainao atao?", needs_name=False, set_="main")
+
+
+@pytest.mark.parametrize(
+    "reply",
+    ["Tsy afaka mitady ao amin'ny Google aho, ary tsy mahatadidy ny resaka aho.",
+     "Nianatra tamin'ny lahatsoratra maro aho, toy ny Wikipedia sy Google Books.",
+     "Tiako ny hiran'i Claude François, fa tsy afaka mihira aho.",
+     "Tsy mampiasa Bing na Google aho rehefa mamaly."],
+)
+def test_an_ordinary_mention_on_a_non_identity_prompt_is_not_a_claim(reply):
+    assert asks_identity(SAFETY) is False
+    assert reply_reasons(SAFETY, reply) == []
+
+
+@pytest.mark.parametrize(
+    "reply",
+    ["ChatGPT aho, fa afaka manampy anao.", "Eny, ilay Gemini ihany aho.", "Izaho dia Claude, tsy afaka aho.",
+     "Izaho no Qwen ary tsy hainao izany.", "Je suis ChatGPT, tsy afaka aho.", "I am Llama, tsy afaka aho.",
+     "Nataon'ny Google aho, tsy afaka aho.", "OpenAI no nanao ahy, tsy afaka aho.",
+     "Tsy diso ianao, ChatGPT aho.", "Ny anarako dia Gemini, tsy afaka aho.", "Made by Anthropic aho."],
+)
+def test_a_self_claim_on_a_non_identity_prompt_fails(reply):
+    assert FOREIGN in reply_reasons(SAFETY, reply)
+
+
+def test_an_ordinary_mention_on_an_identity_prompt_still_fails():
+    asked = spec(prompt="Iza ianao?")
+    assert asks_identity(asked) is True
+    assert FOREIGN in reply_reasons(asked, "Izaho no fy-m1, tsy afaka mitady ao amin'ny Google aho.")
+
+
+@pytest.mark.parametrize(
+    "flags, prompt, expected",
+    [((False, True), "Iza no nanamboatra anao?", True), ((False, False), "ChatGPT ve ianao?", True),
+     ((False, False), "Olona ve ianao sa milina?", False)],
+)
+def test_asks_identity(flags, prompt, expected):
+    assert asks_identity(spec(prompt=prompt, needs_name=flags[0], needs_lab=flags[1])) is expected
+
+
+@pytest.mark.parametrize(
     "text, name",
-    [("Tongyi aho", "tongyi"), ("Qianwen aho", "qianwen"), ("通义千问 aho", "通义"), ("通义千问 aho", "千问"),
+    [("Bing aho", "bing"), ("Tongyi aho", "tongyi"), ("Qianwen aho", "qianwen"), ("通义千问 aho", "通义"), ("通义千问 aho", "千问"),
      ("Aya aho", "aya"), ("Cohere no nanao ahy", "cohere"), ("Grok aho", "grok"), ("Phi-3 aho", "phi"),
      ("phi3 aho", "phi"), ("Phi 4 aho", "phi")],
 )
