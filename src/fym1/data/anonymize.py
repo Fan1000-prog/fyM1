@@ -48,16 +48,33 @@ URL = re.compile(
 )
 _SEP = r"\s*[./,_-]?\s*"
 _INTL = r"(?:\+|(?<!\d[ .,])00)"  # "00" not inside a long amount: "1 000 000 000 Ar"
+# A Malagasy number, written once so the spaced and glued rules accept the same forms.
+_MG_COUNTRY = rf"(?:\(\s*{_INTL}?261\s*\)|{_INTL}?261)"  # +261, 00261, 261, (+261)
+_ZERO_TRUNK = rf"(?:\(\s*0\s*\)|0){_SEP}"  # 0 or (0), then any gap
+
+
+def _mg_phone(trunk: str) -> str:
+    """A Malagasy number with the given leading-0 form."""
+    return (
+        rf"(?:{_MG_COUNTRY}{_SEP}(?:{trunk})?\d(?:{_SEP}\d){{8}}"  # +261 34 …, +261 (0)34 …, (+261)34 …
+        rf"|{trunk}[23]\d(?:{_SEP}\d){{7}}"  # 034 12 345 67; "03" kept together so "2h03 50 …" isn't a phone
+        rf"|\(\s*[0Oo]\d\d\s*\)(?:{_SEP}\d){{7}}(?!\w))"  # area code in brackets: (034) 12 345 67, (089) …
+    )
+
+
+# Spaced, a letter O typed for the 0 counts when it touches the digits ("O34…"). Glued to a word it doesn't:
+# the word's own last "o" would be read as the 0 ("numero261 034…", "manao 300…").
+_MG_PHONE_SPACED = _mg_phone(rf"(?:{_ZERO_TRUNK}|[Oo])")
+_MG_PHONE_GLUED = _mg_phone(_ZERO_TRUNK)
 PHONE = re.compile(
     r"(?<![\w+])(?:"
-    rf"(?:\(\s*{_INTL}261\s*\)|{_INTL}?261){_SEP}(?:\(0\){_SEP})?\d(?:{_SEP}\d){{8}}"  # Madagascar, intl
+    rf"{_MG_PHONE_SPACED}"
     rf"|{_INTL}\d{{1,3}}(?:\s*\(\d{{1,4}}\))?(?:{_SEP}\d){{6,13}}"  # other intl: +33 6 …, +1 (555) …
-    rf"|\(\s*[0Oo]\d\d\s*\)(?:{_SEP}\d){{7}}"  # area code in brackets: (034) 12 345 67
     rf"|[0Oo](?:{_SEP}\d){{9}}"  # national, 10 digits however grouped; "O34" typed with a letter O
     rf"|3[2-9]{_SEP}\d\d{_SEP}\d{{3}}{_SEP}\d\d"  # mobile without the 0: 34 12 345 67
     r"|\d{9,15}"  # any other long run of digits
     r")(?!\w)"
-    rf"|(?<![\d+])0[23]\d(?:{_SEP}\d){{7}}(?!\d)"  # glued to a word: "laharana034 12 345 67", "tel034.12…"
+    rf"|(?<![\d+]){_MG_PHONE_GLUED}(?!\d)"  # glued to a word: "laharana034 …", "wa+26134…", "tel(034) …"
 )
 # "01/02/2026 03/04" is dates, not a phone: a year next to / or -.
 _DATE_LIKE = re.compile(r"[/-](?:19|20)\d\d\b|\b(?:19|20)\d\d[/-]")
@@ -74,8 +91,9 @@ LABELLED_HANDLE = re.compile(
 # by Anonymizer._mention; it decides how many belong to the name. Never "@15h".
 MENTION_MAX_WORDS = 3
 _LETTER_START = r"[^\W\d_]"
+_MENTION_GAP = r"[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]"  # any space on the same line
 MENTION = re.compile(
-    rf"(?<![\w.])@({_LETTER_START}(?:[\w.-]*\w)?)((?:[ \t]+{_LETTER_START}(?:[\w-]*\w)?){{0,{MENTION_MAX_WORDS - 1}}})"
+    rf"(?<![\w.])@({_LETTER_START}(?:[\w.-]*\w)?)((?:{_MENTION_GAP}+{_LETTER_START}(?:[\w-]*\w)?){{0,{MENTION_MAX_WORDS - 1}}})"
 )
 _HANDLE_CHARS = re.compile(r"[._\d]")
 WORD = re.compile(r"\w+")
@@ -120,8 +138,27 @@ def _is_free(fake: str, real_keys: set[str]) -> bool:
     return not any(key == w or _shares_prefix(key, w) for w in real_keys)
 
 
+def _letters_only(key: str) -> str:
+    """`key` with every non-letter dropped, so "mia_ly" and "lov_va" read "mialy" and "lovva"."""
+    return re.sub(r"[\W\d_]", "", key)
+
+
+def _is_free_of_mention(name: str, own_keys: set[str]) -> bool:
+    """`name` is free of the mention's words and sits inside none of them ("@itsmialy" -> not "Mialy")."""
+    key = compare_key(name)
+    return _is_free(name, own_keys) and not any(key in w for w in own_keys)
+
+
 def _hashed_fake(text: str, words: int, firsts: list[str], lasts: list[str]) -> str:
-    """A fake name derived from `text`, so the same handle always reads the same."""
+    """A fake name derived from `text`, so the same handle always reads the same.
+
+    Pool names that share a word or 4+ letter start with `text` itself, or sit inside one of
+    its words or its letters joined up, are skipped, so "@Mialy", "@itsmialy" and "@mia_ly"
+    never come out as "Mialy".
+    """
+    own_keys = {compare_key(p) for p in WORD.findall(text)} | {compare_key(_letters_only(fold(text)))}
+    firsts = [f for f in firsts if _is_free_of_mention(f, own_keys)] or [FALLBACK_NAME]
+    lasts = [s for s in lasts if _is_free_of_mention(s, own_keys)] or [FALLBACK_NAME]
     number = int.from_bytes(hashlib.sha256(compare_key(text).encode("utf-8")).digest()[:4], "big")
     first = firsts[number % len(firsts)]
     return first if words == 1 else f"{first} {lasts[number // len(firsts) % len(lasts)]}"

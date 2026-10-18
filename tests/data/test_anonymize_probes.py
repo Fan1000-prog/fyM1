@@ -2,7 +2,7 @@
 
 import pytest
 
-from fym1.data.anonymize import Anonymizer, assign_fake_names, compare_key
+from fym1.data.anonymize import FIRST_NAMES, SURNAMES, Anonymizer, assign_fake_names, compare_key
 
 PEOPLE = ["Nirina Rakotomalala", "Soa Randria", "Haja Andrianasolo", "Fy Rakoto", "Jo Be", "Hélène Rabe"]
 REAL_PARTS = {compare_key(w) for name in PEOPLE for w in name.split()}
@@ -184,6 +184,8 @@ KNOWN_LIMITS = [
     "034 l2 345 67",  # letter l for digit 1
     "Cité 67Ha porte 12",  # addresses other than "Lot …"
     "Villa 23 Ivandry",
+    "tel34 12 345 67",  # glued mobile without the leading 0
+    "telO34 12 345 67",  # glued, letter O typed for the 0
 ]
 
 
@@ -395,3 +397,117 @@ def test_glued_phones_with_gaps(text, expected):
 @pytest.mark.parametrize("text", ["Taona 2020-03-12 io", "ny 2023 12 345 olona"])
 def test_glued_phone_rule_skips_years(text):
     assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+# --- leak fix: mention echo, glued +261 phones --------------------------------------------------------
+
+NOBODY = Anonymizer({})
+
+
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_mention_fake_never_repeats_the_mentioned_first_name(first):
+    out = NOBODY(f"@{first} tonga ve?")
+
+    assert compare_key(out.split()[0]) != compare_key(first)
+    assert out.endswith(" tonga ve?")
+
+
+@pytest.mark.parametrize("first, last", [(f, s) for f in FIRST_NAMES for s in SURNAMES])
+def test_hashed_mention_fake_never_repeats_mentioned_words(first, last):
+    out = NOBODY(f"@{first} {last}")
+
+    assert not {compare_key(first), compare_key(last)} & {compare_key(w) for w in out.split()}
+
+
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_handle_fake_never_repeats_the_handle(first):
+    out = NOBODY(f"@{first.lower()}.rk salama")
+
+    assert compare_key(out.split()[0]) != compare_key(first)
+
+
+def test_exact_mention_of_participant_first_name_with_unknown_surname():
+    out = Anonymizer(FINAL_NAMES)("@Nirina Rabearisoa")
+
+    assert out == fake_first("Nirina Rakotomalala")
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("WhatsApp+261341234567", "WhatsApp<TEL>"),
+        ("wa+261341234567", "wa<TEL>"),
+        ("laharana+261341234567", "laharana<TEL>"),
+        ("laharana261341234567", "laharana<TEL>"),
+        ("laharana261 34 12 345 67", "laharana<TEL>"),
+        ("tel00261341234567", "tel<TEL>"),
+        ("tel+2610341234567", "tel<TEL>"),
+        ("tel2610341234567", "tel<TEL>"),
+        ("tel(034) 12 345 67", "tel<TEL>"),
+        ("tel+261 (0)34 123 45 67", "tel<TEL>"),
+        ("Tel(+261)34 123 45 67", "Tel<TEL>"),
+        ("tel(00261)34 123 45 67", "tel<TEL>"),
+        ("numero261 034 123 45 67", "numero<TEL>"),
+        ("ato261.034.123.45.67", "ato<TEL>"),
+        ("tel+261 3 4 1 2 3 4 5 6 7", "tel<TEL>"),
+        ("tel (089) 123 45 67", "tel <TEL>"),
+        ("tel (069) 1234567", "tel <TEL>"),
+        ("tel(044) 12 345 67", "tel<TEL>"),
+    ],
+)
+def test_glued_international_phones(text, expected):
+    assert Anonymizer(PRIV_NAMES)(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "20:30", "Amin'ny 20:30 isika", "1 000 000 Ar", "261 300 000 Ar", "1 261 340 000 Ar", "solo 34 olona",
+        "Manao 300 000 000 Ar ilay tany", "Mila vola ho 300 000 000 Ar", "valo 320 000 000",
+        "Tonga tao 2 345 678 90", "ho 2025 12 345 olona", "Ar350 000 000", "MGA320 000 000", "Fmg 320 000 000",
+        "Tamin'ny 7h35 1 500 000 Ar", "Nandoa 8h32 2 500 000 Ar", "tamin'ny 14h36 2 400 000 Ar",
+        "ilay320 000 000", "io200000000",
+        ") (010) 2171 2h02 1925 25/01/2019", "valo 20h02 592 10 212 590", "0h03 50,676,597", "(041) 10283 13h38",
+    ],
+)
+def test_times_and_amounts_stay(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+def test_mention_across_a_non_breaking_space():
+    out = NOBODY("@Fara\u00a0Rabe salama")
+
+    assert not {"fara", "rabe"} & {compare_key(w) for w in out.replace("\u00a0", " ").split()}
+    assert out.endswith(" salama")
+
+
+@pytest.mark.parametrize("prefix", ["its", "xx", "i_", "mr", "the", "real"])
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_handle_fake_never_repeats_a_name_inside_the_handle(prefix, first):
+    out = NOBODY(f"@{prefix}{first.lower()} salama")
+
+    assert compare_key(out.split()[0]) != compare_key(first)
+
+
+@pytest.mark.parametrize("gap", ["\u00a0", "\u202f", "\u2002", "\u2009", "\u3000", "\t"])
+def test_mention_across_unicode_spaces(gap):
+    out = NOBODY(f"@Fara{gap}Rabe salama")
+
+    assert "Rabe" not in out
+    assert out.endswith(" salama")
+
+
+@pytest.mark.parametrize("brk", ["\n", "\r\n", "\u2028", "\u2029", "\x85"])
+def test_mention_stops_at_a_line_break(brk):
+    out = NOBODY(f"@Fara{brk}Rabe salama")
+
+    assert out.endswith(f"{brk}Rabe salama")
+
+
+@pytest.mark.parametrize("split", ["{a}_{b}", "{a}.{b}", "its{a}_{b}", "{a}2{b}", "{a}_{a2}"])
+@pytest.mark.parametrize("first", FIRST_NAMES)
+def test_hashed_handle_fake_never_rebuilds_a_split_name(split, first):
+    key = first.lower()
+    out = NOBODY("@" + split.format(a=key[:2], b=key[2:], a2=key[1:]) + " salama")  # {a}_{a2}: "lo_ova"
+
+    assert compare_key(out.split()[0]) != compare_key(first)
