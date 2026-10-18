@@ -105,7 +105,8 @@
         "drift_rate": 0.2,
         "n": 20
       },
-      "status": "candidate"
+      "status": "dropped",
+      "dropped_reason": "licence: Gemma Terms of Use; owner wants a simple open licence"
     },
     {
       "model": "google/gemma-4-12B-it",

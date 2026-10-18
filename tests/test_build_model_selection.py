@@ -81,3 +81,11 @@ def test_no_gate_file_leaves_every_gate_field_pending():
         [fake_result("google/gemma-4-12B-it", "gemma-4-12b-it")], {}, {})
     assert selection["greeting_gate"] == "pending"
     assert selection["candidates"][0]["greeting_gate"] == "pending"
+
+
+def test_gemma_3_is_dropped_for_its_licence_but_keeps_its_numbers():
+    row = build_model_selection.candidate(fake_result("google/gemma-3-12b-it", "gemma-3-12b-it"), {})
+    assert row["status"] == "dropped"
+    assert row["dropped_reason"] == "licence: Gemma Terms of Use; owner wants a simple open licence"
+    assert row["license"] == "Gemma Terms of Use"
+    assert row["belebele_chat_acc"] == 0.5  # measured numbers stay for comparison

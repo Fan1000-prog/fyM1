@@ -36,9 +36,11 @@ INSTRUCT_VERSION = {
         "nearest_note": "different size and architecture (Qwen3.5, 9B); its base lists mg; not measured",
     },
 }
-# Candidates taken out of the pick, with the reason.
+# Candidates taken out of the pick, with the reason. Their measured numbers stay in the table for comparison.
 DROPPED = {
     "McGill-NLP/AfriqueQwen-8B": "base model, no chat; lead decision",
+    # Owner decision 2026-10-18: fy-m1 ships under a simple open licence, so the base must be permissive.
+    "google/gemma-3-12b-it": "licence: Gemma Terms of Use; owner wants a simple open licence",
 }
 
 
@@ -62,9 +64,11 @@ def candidate(result: dict, gate_models: dict) -> dict:
     row = selection_row(result, LICENSES[hub_id], base_model=hub_id in BASE_MODELS)
     row["instruct_version"] = INSTRUCT_VERSION.get(hub_id, {"exists": True, "note": "is the instruct model"})
     row["greeting_gate"] = greeting_scores(gate_models, result["model"]["slug"])
-    row["status"] = "dropped" if hub_id in DROPPED else "candidate"
     if hub_id in DROPPED:
+        row["status"] = "dropped"
         row["dropped_reason"] = DROPPED[hub_id]
+    else:
+        row["status"] = "candidate"
     return row
 
 
