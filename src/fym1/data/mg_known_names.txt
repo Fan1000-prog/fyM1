@@ -1,0 +1,25 @@
+# Places, brands and religious words that are not person names. Keep it short.
+Tana
+Antananarivo
+Toamasina
+Mahajanga
+Fianarantsoa
+Antsirabe
+Toliara
+Antsiranana
+Madagasikara
+Madagascar
+Malagasy
+Gasy
+Mvola
+Jirama
+Telma
+Airtel
+Orange
+Facebook
+Messenger
+WhatsApp
+Andriamanitra
+Jesoa
+Kristy
+Zanahary
