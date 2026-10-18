@@ -8,7 +8,7 @@ This file says where the project stands and how to pick it up; the spec and plan
 
 1. Read this file, then `AGENTS.md`, then spec §7–§8 and the plan's "Changes from the plan".
 2. Read the private operator handoff on the owner's laptop (not in this repo; it names accounts and machines):
-   `~/fyM1-handoff/LEAD-HANDOFF.md` (start at §13 "CURRENT STATE") and `~/fyM1-handoff/TRAINER-HANDOFF.md`.
+   `~/fyM1-handoff/LEAD-HANDOFF.md` (start at §13 "CURRENT STATE", then §14) and `~/fyM1-handoff/TRAINER-HANDOFF.md`.
 3. Set up the team: a **lead** (owns calls, merges, run order; talks to the owner through the main session) and,
    as needed, a **trainer** (the only agent that drives Kaggle/Colab), **data** (cleaner + export), **eval**
    (Task 5), **publish** (Spaces), **shrink** (03_trim), **writer** (paper/README/model card).
