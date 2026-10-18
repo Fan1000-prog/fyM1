@@ -1,6 +1,6 @@
 # fyM1 — agent conventions
 
-Read `docs/superpowers/specs/2026-10-17-resaka-design.md` (§7 overrides earlier sections) and
+Read `docs/superpowers/specs/2026-10-17-resaka-design.md` (§7 and §8 override earlier sections) and
 `docs/superpowers/plans/2026-10-17-fym1-v0.1.md` before working.
 
 ## Hard rules
