@@ -2,7 +2,8 @@
 
 Usage: python scripts/build_model_selection.py [--fetch]
 --fetch first downloads results/baseline/*.json from the private Fan1000-Prog/fyM1-ckpt repo.
-`chosen`/`chosen_size`/`license`/`hf_license` stay as already recorded in the output file (the lead fills them in).
+`chosen`/`chosen_size`/`license`/`hf_license`/`chosen_reason` stay as already recorded in the output file (the lead
+fills them in; `chosen_reason` cites the numbers by their field names in this file).
 Each candidate also carries its blind greeting-gate scores from results/greeting_gate.json ("pending" when the
 model was not judged) and a `status` ("candidate", or "dropped" with the reason).
 """
@@ -20,6 +21,7 @@ REPO = "Fan1000-Prog/fyM1-ckpt"
 BASELINE_DIR = Path("results/baseline")
 OUT = Path("results/model_selection.json")
 GREETING_GATE = Path("results/greeting_gate.json")
+LEAD_FIELDS = ("chosen", "chosen_size", "license", "hf_license", "chosen_reason")  # kept from the previous output
 LICENSES = {
     "google/gemma-4-12B-it": "Apache-2.0",
     "McGill-NLP/AfriqueQwen-8B": "CC-BY-4.0",
@@ -75,10 +77,7 @@ def candidate(result: dict, gate_models: dict) -> dict:
 def build_selection(results: list[dict], previous: dict, gate: dict) -> dict:
     """results/model_selection.json from the baseline files, the previous output and results/greeting_gate.json."""
     return {
-        "chosen": previous.get("chosen"),
-        "chosen_size": previous.get("chosen_size"),
-        "license": previous.get("license"),
-        "hf_license": previous.get("hf_license"),
+        **{field: previous.get(field) for field in LEAD_FIELDS},
         "greeting_gate": {"source": str(GREETING_GATE), "judge": gate.get("judge"), "rubric": gate.get("rubric")}
         if gate else "pending",
         "candidates": [candidate(r, gate.get("models", {})) for r in results],

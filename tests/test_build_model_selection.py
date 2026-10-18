@@ -67,7 +67,7 @@ def test_afriqueqwen_8b_is_dropped_with_the_reason():
 
 
 def test_selection_keeps_the_lead_fields_and_names_the_gate_source():
-    previous = {"chosen": "x", "chosen_size": "9B", "license": "L", "hf_license": "l"}
+    previous = {"chosen": "x", "chosen_size": "9B", "license": "L", "hf_license": "l", "chosen_reason": ["r"]}
     selection = build_model_selection.build_selection(
         [fake_result("google/gemma-4-12B-it", "gemma-4-12b-it")], previous, FAKE_GATE)
     assert {k: selection[k] for k in previous} == previous
