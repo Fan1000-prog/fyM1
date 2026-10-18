@@ -16,7 +16,7 @@ A reply passes when all of these hold:
 - it does not claim another identity, and on an `about_self` prompt it does not mention one unexcused.
 
 Other models and companies (FOREIGN_NAMES: Qwen, Gemma, ChatGPT, Google, ...) are judged in two tiers
-(lead decision 32, PR #55):
+(lead decision 33, PR #55):
 
 A. Hard fail, reason `foreign_identity`, on any prompt: an explicit self-claim. One such reply fails
    the whole gate, whatever the pass rate. The shapes (<name> is any foreign name):

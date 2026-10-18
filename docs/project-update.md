@@ -197,7 +197,7 @@ simple open licence (owner rule). Gemma 4's FLORES+ and smoke were not waited fo
    check (`scripts/identity_check.py`, strict): the 20 identity/safety answers plus the extra identity
    prompts in `eval/identity_check.jsonl`; zero explicit self-claims to be another model (hard fail) and a
    pass rate of at least 90%, where an unexcused foreign mention on an about-self prompt is an ordinary miss
-   (two-tier rule, decision 32: the module docstring of `src/fym1/eval/identity_check.py`).
+   (two-tier rule, decision 33: the module docstring of `src/fym1/eval/identity_check.py`).
 9. **Trim** (Task 7): run `03_trim`; ship trimmed GGUF only if all three gates pass.
 10. **Deploy Spaces** `fy-m1-chat` and `fy-m1-arena` (Task 6); Playwright smoke test.
 11. **Write-up** (Task 8) from `results/` via `paper/make_numbers.py --strict`; licence = the picked base's.
