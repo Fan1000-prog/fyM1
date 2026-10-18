@@ -187,6 +187,7 @@ Then, in order:
 
    ```bash
    uv run python paper/make_numbers.py --markdown README.md MODEL_CARD.md
+   uv run python paper/make_figures.py --readme README.md
    cd paper && tectonic fym1.tex
    ```
 

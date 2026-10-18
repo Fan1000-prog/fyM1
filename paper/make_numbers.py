@@ -15,7 +15,8 @@ Expected files (keys are dotted paths below):
   data_stats.json        threads, conversations, kept_messages, identity, formal, synthetic, train_examples
   data_gate.json         conversations_before_gate, kept, dropped, dropped_{long_number, contact,
                          too_many_unknown, too_many_fakes}, tokens_replaced, fakes_per_kept_{median, max}
-  synth_stats.json       raw, kept, generator, generator_licence
+  synth_stats.json       raw, kept, generator, generator_licence, dropped.{unknown_name, length, not_malagasy,
+                         leak_8gram}
   synth_gate.json        checked, dropped, kept, status (strict automatic sample gate on the filtered chats)
   lora_budget.json       lora_r, lora_alpha, example.{d, k, full_params, lora_params, lora_share}
   shrink/trim_cost.json  vocab_before, vocab_after, held_out.<set>.{untrimmed,trimmed}.tokens_per_word
@@ -225,6 +226,10 @@ NUMBERS: list[Number] = [
     Number("synth-kept", "synth_stats.json", "kept", count),
     Number("synth-generator", "synth_stats.json", "generator", text),
     Number("synth-licence", "synth_stats.json", "generator_licence", text),
+    Number("synth-drop-unknown", "synth_stats.json", "dropped.unknown_name", count),
+    Number("synth-drop-length", "synth_stats.json", "dropped.length", count),
+    Number("synth-drop-not-malagasy", "synth_stats.json", "dropped.not_malagasy", count),
+    Number("synth-drop-leak", "synth_stats.json", "dropped.leak_8gram", count),
     Number("synth-checked", "synth_gate.json", "checked", count),
     Number("synth-gate-dropped", "synth_gate.json", "dropped", count),
     Number("synth-gate-kept", "synth_gate.json", "kept", count),
