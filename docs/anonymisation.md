@@ -1,7 +1,8 @@
 # Anonymisation (scripts/build_chats.py)
 
 Runs on the owner's laptop before anything leaves it. Code: `src/fym1/data/anonymize.py`.
-Tests: `tests/data/test_anonymize.py`, `tests/data/test_anonymize_probes.py`, `tests/data/test_anonymize_dates.py`.
+Tests: `tests/data/test_anonymize.py`, `tests/data/test_anonymize_probes.py`, `tests/data/test_anonymize_dates.py`,
+`tests/data/test_anonymize_marks.py`.
 
 ## What is replaced
 
@@ -13,7 +14,7 @@ Tests: `tests/data/test_anonymize.py`, `tests/data/test_anonymize_probes.py`, `t
 | Nicknames set through Messenger ("set the nickname for … to …", "a défini le surnom de … sur …") | the person's fake first name |
 | `@mention`: "@" plus every capitalised word after it (up to 3 words, hyphens allowed), or an `@handle` | one fake name: a participant's own fake, otherwise a made-up one that never equals or sits inside the mention, its letters joined up ("@mia_ly" never becomes "Mialy"). A capitalised word after the name goes too ("@Nirina Aiza ianao?" -> "Lova ianao?"); the owner chose that over leaking a surname |
 | Labelled handles: `ig:`, `insta`, `snap:`, `tiktok`, `tg`/`telegram`, `twitter`, `fb`, `viber`, `wa`/`whatsapp` (not numbers or everyday words: "fb 2 andro") | `<HANDLE>` |
-| Phone numbers: Malagasy (`034 12 345 67` in any grouping, `(034) 12 …`, `020 …`, `+261 (0)34 …`, `34 12 345 67`, glued to a word: `laharana034 12 345 67`, `wa+261341234567`, `wa00261…`, `tel(034) …`, `tel+261 (0)34 …`), other international; not amounts or dates | `<TEL>` |
+| Phone numbers: Malagasy (`034 12 345 67` in any grouping, `(034) 12 …`, `020 …`, `+261 (0)34 …`, `34 12 345 67`, glued to a word: `laharana034 12 345 67`, `wa+261341234567`, `wa00261…`, `tel(034) …`, `tel+261 (0)34 …`, or with a letter O for the 0: `WhatsAppO328585520`, `numéroo32.78.833.34`), other international, any of these with unicode dashes (`034–12–345–67`) or no-break spaces; not amounts or dates | `<TEL>` |
 | Emails, including `x [at] y . com` | `<EMAIL>` |
 | Links, with or without `http`, any `host.tld/path`; a bare lower-case `host.com` | `<URL>` |
 | Plot addresses `Lot II M 85 Ter` | `<ADDRESS>` |
@@ -53,6 +54,18 @@ Checked by a generated corpus of 5,000 everyday lines (dates, prices, times, qua
 leaks a digit. Two non-date numbers side by side ("08 18 150 000") are still
 one number to the phone rule; that is not a date problem.
 
+## Unicode dashes, no-break spaces, a letter O glued to a word
+
+Phones and dates are matched on a same-length copy where `‐ ‑ ‒ – — ― −` read as `-` and no-break spaces
+(`\u00a0`, `\u202f`) as a space; the masks are then applied to the original text. So `034–12–345–67` and
+`0327—35—17—59` are masked, `15–03–2026` stays a date, and `2\u202f000\u202f000\u202f000 Ar` stays an amount.
+
+A letter O for the 0 right after a word (`contactO345 40 77 66`, `numO3 74 78 29 68`) is masked only before
+`3` + `2-9` or `2` + `0`, with exactly 9 digits after it, and not when those digits read as an amount
+(`manao320 000 000`, `io200000000`). It never wins over a date the way a real `0` can. Checked by a generated
+corpus of 20,000 everyday lines with a word ending in o/O right before a number ("Hono 3 kilao", "photo 2",
+"Toamasina 25", glued amounts): none gets a `<TEL>`.
+
 ## Leftover names: the owner's second pass
 
 After anonymising, `build_chats.py` writes `leftover_names.html` next to the review sheet: every
@@ -72,8 +85,9 @@ When unsure, the rules lean private: "Lot 3" becomes `<ADDRESS>`, a 9+ digit ref
 - Phone numbers written in words ("aotra telo efatra…", "034 douze …") or with letters for digits ("l2").
 - Mobiles written without the 0 when the group after "34" is not a pair ("34 123 45 67",
   "34 1 234 567", "34 123 4567"). A wider rule would turn price pairs ("35 000, 3 500") into phones.
-- Phone numbers glued to a word without the leading 0 ("tel34 12 345 67") or with a letter O for it
-  ("telO34 …"): a word's own last letters can't be told apart from a number's start.
+- Phone numbers glued to a word without the leading 0 ("tel34 12 345 67"): a word's own last letters
+  can't be told apart from a number's start. With a letter O glued to a word, an amount-shaped number
+  ("contactO320 000 000") is kept as an amount.
 - A single digit right before a `03x` phone that runs through a date shape ("5 034 01/02/26 7") reads as
   an amount ("1 034 000 15/03"); the phone stays (`tests/data/test_anonymize_dates.py`).
 - Addresses other than "Lot …" ("Cité 67Ha porte 12", "Villa 23 Ivandry"), and place names.
