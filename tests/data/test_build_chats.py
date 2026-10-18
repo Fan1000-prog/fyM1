@@ -142,6 +142,23 @@ def test_full_run_writes_gated_chats_and_counts_only_gate_json(tmp_path, monkeyp
     assert sorted(p.name for p in private.iterdir()) == ["chats.jsonl", "data_gate.json"]  # sheets are opt-in
 
 
+def test_full_run_writes_role_and_leak_counts_to_stats(tmp_path, monkeypatch, capsys):
+    export = _flat_export(tmp_path / "group.json")
+    stats = tmp_path / "s.json"
+    stats.write_text(json.dumps({"approved": 7}))
+    args = ["--export", str(export), "--owner", "Owner", "--out", str(tmp_path / "private" / "chats.jsonl")]
+
+    counts = _main(monkeypatch, capsys, *args, "--stats", str(stats))
+
+    written = json.loads(stats.read_text())
+    assert written["kept_messages"] == written["kept_messages_user"] + written["kept_messages_assistant"] == 4
+    assert written["kept_messages_user"] == written["kept_messages_assistant"] == 2
+    leaks = {k: v for k, v in written.items() if k.startswith("leak_")}
+    assert len(leaks) == 5 and set(leaks.values()) == {0}
+    assert written["approved"] == 7 and written["conversations"] == counts["kept"]
+    assert all(v is None or isinstance(v, int) for v in written.values())
+
+
 def test_review_and_leftover_sheets_are_opt_in(tmp_path, monkeypatch, capsys):
     export = _flat_export(tmp_path / "group.json")
     private = tmp_path / "private"
