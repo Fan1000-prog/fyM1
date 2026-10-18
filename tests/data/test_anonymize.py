@@ -169,3 +169,14 @@ def test_assign_fake_names_beyond_pool_size_stays_distinct():
     real = [f"Olona{i} X" for i in range(len(FIRST_NAMES) * len(SURNAMES) + 5)]
 
     assert len(set(assign_fake_names(real).values())) == len(real)
+
+
+@pytest.mark.parametrize("text", [("034" + " " * 50) * 190, "0" + " " * 9999], ids=["prefixes-and-gaps", "zero-then-gap"])
+def test_long_digit_and_space_run_is_fast(text):
+    """Security finding #16: an optional separator between two \\s* let the phone regex backtrack for seconds."""
+    import time
+
+    text = text[:10_000]
+    start = time.perf_counter()
+    anonymize(text, NAMES)
+    assert time.perf_counter() - start < 1.0

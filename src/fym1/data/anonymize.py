@@ -47,7 +47,7 @@ URL = re.compile(
     r"|\b(?-i:(?:[\w-]+\.)+(?:com|mg|fr|net|org|ly|io|co|gl))\b",
     re.IGNORECASE,
 )
-_SEP = r"\s*[./,_-]?\s*"
+_SEP = r"\s*(?:[./,_-]\s*)?"
 # "00" not inside a long amount ("1 000 000 000 Ar"), unless it reads "00261": "14h42 00261 34 …"
 _INTL = r"(?:\+|(?<!\d[ .,])00|00(?=261))"
 # A Malagasy number, written once so the spaced and glued rules accept the same forms.
