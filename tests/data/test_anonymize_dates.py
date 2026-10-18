@@ -146,9 +146,77 @@ def test_pair_style_phone_glued_to_a_word_is_masked(text, expected):
     assert ANON(text) == expected
 
 
-@pytest.mark.xfail(strict=True, reason="known limit, see docs/anonymisation.md: a digit before 03x reads as an amount")
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        # a whole phone after a date, with and without its leading 0
+        ("15/03/2026 34 12 345 67", "15/03/2026 <TEL>"),
+        ("15/03/2026 34 123 45 67", "15/03/2026 <TEL>"),
+        ("15/03/2026 34 1234567", "15/03/2026 <TEL>"),
+        ("15/03 0341234567", "15/03 <TEL>"),
+        ("15/03 341234567", "15/03 <TEL>"),
+        ("15/03-20/03/2026 34 123 45 67", "15/03-20/03/2026 <TEL>"),
+        ("15/03/2026 14h30 34 123 45 67", "15/03/2026 14h30 <TEL>"),
+    ],
+)
+def test_phone_after_a_date_is_masked_and_the_date_kept(text, expected):
+    assert ANON(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text, digits",
+    [
+        # a weak start ("03 4", "0 3", no 0) inside a date, the number running on past it
+        ("12/03 41 23 45 67", "45 67"),
+        ("le 12/03 41 23 45 67 ok", "45 67"),
+        ("15/03/26 12 345 67", "345 67"),
+        ("05/03 2 41 23 45 6", "45 6"),
+        ("tel 15/03 412 345 67", "345 67"),
+        ("01/02/26 7 12 34 56", "34 56"),
+        # an amount or a time, then more digits that are not part of it
+        ("15/03/2026 1 500 34 12", "34 12"),
+        ("15/03/2026 14 30 41 23", "41 23"),
+        ("1 261 340 000 19/04 55 66", "55 66"),
+    ],
+)
+def test_number_starting_in_a_date_and_running_past_it_is_masked(text, digits):
+    out = ANON(text)
+
+    assert "<TEL>" in out and digits not in out, f"{text!r} -> {out!r}"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "15/03/2026 1 500 Ar",
+        "15/03/2026 25 000 Ar",
+        "15/03 1 500 000 Ar",
+        "15/03/2026 1500 Ar",
+        "15/03/2026 14 30",
+        "15/03/2026 14h30 1 500 Ar",
+        "15/03-20/03/2026",
+        "du 15/03 au 20/03/2026 25 000 Ar",
+        "15/03/2026 1 500 Ar 20/03/2026",
+        "03 45 15/03/2026",
+        "15/03/2026 2026 150 olona",
+        "02 01 2029-02-02",
+        "1999 2014 350,000,000 15/03/2026",
+    ],
+)
+def test_date_with_a_clear_price_or_time_is_kept(text):
+    assert ANON(text) == text
+
+
+@pytest.mark.parametrize(
+    "text", ["35 000, 3 500", "32 500 000 Ar", "Ar 2 340 000 000", "33 450 000 Ar sy 35 000 Ar", "1 335 000 000 Ar"]
+)
+def test_prices_starting_with_3x_are_not_no_0_phones(text):
+    assert ANON(text) == text
+
+
 def test_stray_digit_before_a_phone_through_a_date():
-    assert ANON("5 034 01/02/26 7") == "<TEL>"
+    # "5 034" reads as an amount, but the digits after the date are not part of one
+    assert ANON("5 034 01/02/26 7") == "5 <TEL>"
 
 
 # --- generated corpora --------------------------------------------------------------------
