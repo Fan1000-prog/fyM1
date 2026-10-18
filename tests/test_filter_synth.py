@@ -163,3 +163,37 @@ def test_every_drop_reason_is_counted(tmp_path, real, hub, capsys):
     out = tmp_path / "out"
     run(["--real", str(real), "--out-dir", str(out)], hub, capsys)
     assert set(json.loads((out / "synth_stats.json").read_text())["dropped"]) == set(DROP_REASONS)
+
+
+def test_upload_without_promote_leaves_the_training_file_alone(tmp_path, real, hub, capsys):
+    run(["--real", str(real), "--upload"], hub, capsys)
+    assert "synth/synth_chats.jsonl" not in hub.commits[0]["files"]
+
+
+def test_promote_uploads_the_training_file_in_the_same_commit_as_04_synth_writes_it(tmp_path, real, hub, capsys):
+    code, printed = run(["--real", str(real), "--upload", "--promote"], hub, capsys)
+    assert code == 0
+    [commit] = hub.commits
+    files = commit["files"]
+    assert set(files) == {"synth/filtered.ndjson", "synth/synth_stats.json", "synth/synth_chats.jsonl"}
+    assert files["synth/synth_chats.jsonl"] == files["synth/filtered.ndjson"]  # 04_synth PROMOTE=True: same bytes
+    rows = [json.loads(line) for line in files["synth/synth_chats.jsonl"].decode().splitlines()]
+    assert [set(r) for r in rows] == [{"id", "messages"}]
+    assert "promoted" in commit["message"] and "synth/synth_chats.jsonl" in printed.out
+
+
+def test_promote_dry_run_writes_the_training_file_locally(tmp_path, real, hub, capsys):
+    out = tmp_path / "out"
+    code, _ = run(["--real", str(real), "--out-dir", str(out), "--promote"], hub, capsys)
+    assert code == 0 and hub.commits == []
+    assert (out / "synth_chats.jsonl").read_bytes() == (out / "filtered.ndjson").read_bytes()
+
+
+def test_promote_matches_the_04_synth_notebook_cell():
+    import importlib.util as iu
+
+    spec = iu.spec_from_file_location("build_notebooks", ROOT / "scripts" / "build_notebooks.py")
+    nb = iu.module_from_spec(spec)
+    spec.loader.exec_module(nb)
+    source = "".join(cell.source for cell in nb.synth_cells())
+    assert f'uploads["{filter_synth.PROMOTED}"] = uploads["{filter_synth.FILTERED}"]' in source
