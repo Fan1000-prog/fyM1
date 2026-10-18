@@ -80,9 +80,22 @@ PHONE = re.compile(
     r")(?!\w)"
     rf"|(?<![\d+]){_MG_PHONE_GLUED}(?!\d)"  # glued to a word: "laharana034 …", "wa+26134…", "tel(034) …"
 )
-# "01/02/2026 03/04" is dates, not a phone: only a full day/month/year counts, so a phone
-# with a year-like group ("038 27 2000/5") is still a phone.
-_FULL_DATE = re.compile(r"\b\d{1,2}[/-]\d{1,2}[/-](?:19|20)\d\d\b|\b(?:19|20)\d\d[/-]\d{1,2}[/-]\d{1,2}\b")
+# "01/02/2026 03/04" is dates, not a phone: the whole match must be one real day/month/year,
+# plus at most one time or number group. A phone with a year-like group ("038 27 2000/5") or
+# one that merely contains a date ("+261 34/12/2019/5") is still a phone; a match starting
+# with a country code can never fit this shape.
+_WHOLE_DATE = re.compile(
+    r"(?:(?P<day>\d{1,2})[/-](?P<month>\d{1,2})[/-](?:19|20)\d\d"
+    r"|(?:19|20)\d\d[/-](?P<month2>\d{1,2})[/-](?P<day2>\d{1,2}))(?:\s+\d{1,4})?"
+)
+
+
+def _is_whole_date(text: str) -> bool:
+    match = _WHOLE_DATE.fullmatch(text.strip())
+    if not match:
+        return False
+    day, month = int(match["day"] or match["day2"]), int(match["month"] or match["month2"])
+    return 1 <= day <= 31 and 1 <= month <= 12
 # Malagasy plot addresses: "Lot II M 85 Ter", "Lot IVG 12 Bis". Kept only if it holds a number.
 _LOT_PART = r"(?:[IVX]+[A-Z]*|\d+[A-Za-z]*|[A-Z]{1,3}|[Bb]is|[Tt]er|[Qq]uater)\b"
 LOT_ADDRESS = re.compile(rf"\b[Ll][Oo][Tt]\.?\s+{_LOT_PART}(?:[\s-]+{_LOT_PART})*")
@@ -170,7 +183,7 @@ def _hashed_fake(text: str, words: int, firsts: list[str], lasts: list[str]) -> 
 
 
 def _phone(match: re.Match) -> str:
-    return match.group() if _FULL_DATE.search(match.group()) else "<TEL>"
+    return match.group() if _is_whole_date(match.group()) else "<TEL>"
 
 
 def _lot_address(match: re.Match) -> str:

@@ -577,3 +577,20 @@ def test_price_pairs_are_kept(text):
 @pytest.mark.parametrize("text", ["3412 345 67", "3412 34567", "3412345 67"])
 def test_glued_mobiles_without_the_zero_are_caught(text):
     assert Anonymizer(PRIV_NAMES)(text) == "<TEL>"
+
+
+@pytest.mark.parametrize("text", ["34/12/2019/5", "+261-34-12-2019-5", "+261 34/12/2019/5"])
+def test_phone_containing_a_date_is_still_a_phone(text):
+    assert Anonymizer(PRIV_NAMES)(text) == "<TEL>"
+
+
+@pytest.mark.parametrize(
+    "text", ["01/02/2026 03/04", "03/04/2026 12 30", "2020-03-12 034", "17/10/2026 1430", "31/12/2025"]
+)
+def test_whole_dates_are_kept(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize("text", ["03/13/2026 12", "032/12/2026 1"])
+def test_impossible_dates_are_not_exempt(text):
+    assert "<TEL>" in Anonymizer(PRIV_NAMES)(text)
