@@ -244,11 +244,12 @@ These are pinned as `xfail` tests in `tests/data/test_anonymize_probes.py`.
 
 The public repo is one fresh commit built by a private release tool (it does not ship). It reads the export's
 sender names at run time, removes them from the three hand lists, and fails if any shipped file or path still
-holds one, a private id or a secret. Words are read as the strict gate reads them (`fym1.data.gate.tokens`: case changes, spaced-out letters),
-after decoding `\x`/`\u`/`\U`, HTML and percent escapes, with hidden characters taken both as a break and as
-nothing. Only known text types are read, and a PDF with its metadata; any other file fails. The public tree holds
-no archives, so any archive (zip, gz, tar, tgz, 7z, rar, whl, jar, bz2, xz and the like) is refused before anything
-is written. A name of 4+ letters is a hit anywhere inside a word that no known-word list has, unless the release
+holds one, a private id or a secret. Words are read as the strict gate reads them (`fym1.data.gate.tokens`: case
+changes, spaced-out letters), after decoding `\x`/`\u`/`\U`, HTML and percent escapes, with hidden characters
+taken both as a break and as nothing. Only known text types are read, and a PDF with its metadata; any other file
+fails. The public tree holds no archives, so any archive (zip, gz, tar, tgz, 7z, rar, whl, jar, bz2, xz and the
+like) is refused before anything is written, found by its name or by its bytes: a file that starts like an
+archive or a compressed stream, a tar, or a file with a zip record anywhere (a zip glued to a PDF or a text file). A name of 4+ letters is a hit anywhere inside a word that no known-word list has, unless the release
 owner clears that exact word in that exact file by hand, with a reason; a path is never cleared. Nothing is
 written to the public folder unless every check passes.
 
@@ -261,7 +262,8 @@ Known limits of the release scan:
 
 - A name typed under 3 letters is not searched (counted as skipped in the report).
 - A name inside a known word ("certainly" for a name "Ertain") passes.
-- In a PDF only the text layer, the document info and the XMP metadata are read; text drawn as an image is not.
+- In a PDF only the text layer, the document info and the XMP metadata are read. Annotations, bookmarks, form
+  fields and objects no page uses are not read, and neither is text drawn as an image.
 - The shipped hand lists are shorter by the entries removed; a doc that quotes a list's size would show how
   many went, not which.
 
