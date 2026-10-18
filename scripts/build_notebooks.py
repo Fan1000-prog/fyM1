@@ -576,15 +576,19 @@ so far and writes `synth/filtered.ndjson` and counts-only `synth/synth_stats.jso
 
 `.ndjson`, not `.jsonl`: `01_train` trains on every `*.jsonl` in the repo, so these files stay out of training until
 the sample check; then `PROMOTE = True` writes `synth/synth_chats.jsonl`.
-Generator: the first entry of `GENERATORS` that loads fully on the GPUs and passes a one-chat smoke check (the stats
-record which). Kaggle: Accelerator **GPU T4 x2**, Internet on, `HF_TOKEN` secret on; the HF account must have
-accepted the Gemma license. Code comes from `fyM1-ckpt` `code/` (`scripts/sync_code_to_hub.py`)."""),
+Generator: the first entry of `GENERATORS` that loads fully on the GPUs and passes a one-chat smoke check; a part
+that hits a float16 inf/nan moves to the next entry and is redone (the stats record which generators ran, with their
+licences). Generators are permissive only (owner decision 2026-10-18: fy-m1 ships under a simple open licence):
+`synth.generator_licence` refuses any other model, or a model card whose licence changed, before anything loads.
+Kaggle: Accelerator **GPU T4 x2**, Internet on, `HF_TOKEN` secret on (no gated-model licence to accept). Code comes from `fyM1-ckpt` `code/` (`scripts/sync_code_to_hub.py`)."""),
 code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
 !pip install -q -U transformers accelerate bitsandbytes fasttext-numpy2-wheel"""),
-code("""GENERATORS = [  # (hub id, dtype), tried in order; float16 is ~2x faster on a T4, float32 avoids fp16 overflow
-    ("google/gemma-3-27b-it", "float16"),
-    ("google/gemma-3-12b-it", "float16"),
-    ("google/gemma-3-12b-it", "float32"),
+code("""GENERATORS = [  # (hub id, dtype), tried in order; permissive licences only (synth.GENERATOR_LICENCES)
+    # float16 is ~2x faster on a T4 (no bfloat16) and ran the 9B's baseline; float32 avoids float16 inf/nan.
+    # Gemma 4 runs float32: on a T4 Unsloth keeps gemma4 in float32 (00_baseline, 01_train).
+    ("McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1", "float16"),
+    ("McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1", "float32"),
+    ("google/gemma-4-12B-it", "float32"),
 ]
 TARGET_RAW = 2500         # raw chats to generate; the goal is >= 2,000 kept after filtering
 FEW_SHOT_K, SEED = 3, 0   # real examples per prompt; SEED fixes the seed grid, example picks and sampling
@@ -609,6 +613,7 @@ CODE_SHA = open(f"{code_dir}/code/SHA").read().strip()
 from fym1.data import synth
 from fym1.eval.batching import run_batched
 from fym1.runtime import output_dir, scratch_dir
+from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS
 
 OUTPUT, SCRATCH = output_dir(), scratch_dir()
 DATA_REVISION = api.dataset_info(DATA_REPO).sha
@@ -628,7 +633,12 @@ def raw_rows():
     return [json.loads(l) for f in sorted(files) for l in open(f"{local}/{f}") if l.strip()]
 
 
-done = {row["index"] for row in raw_rows()}
+LICENCES = {g: synth.generator_licence(g, card_licence=getattr(api.model_info(g).card_data, "license", None))
+            for g, _ in GENERATORS}  # refuses a non-permissive generator before anything runs
+existing = raw_rows()
+for g in sorted({row["generator"] for row in existing}):  # parts from an earlier, refused generator
+    synth.generator_licence(g)  # raises: delete synth/raw/ in fyM1-chats and rerun
+done = {row["index"] for row in existing}
 todo = [i for i in range(TARGET_RAW) if i not in done]
 print("real chats:", len(real), "| raw done:", len(done), "| to do:", len(todo), "| code", CODE_SHA)"""),
 code("""import gc
@@ -656,7 +666,8 @@ def load(hub_id, dtype):
 def prompt_text(i):
     examples = [r["messages"] for r in synth.examples_for(i, real, FEW_SHOT_K, SEED)]
     chat = [{"role": "user", "content": synth.build_prompt(seeds[i], examples)}]
-    return tok.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+    return tok.apply_chat_template(chat, tokenize=False, add_generation_prompt=True,
+                                   **CHAT_TEMPLATE_KWARGS)  # thinking off: Qwen3.5 and Gemma 4 can think
 
 
 @torch.inference_mode()
@@ -675,44 +686,68 @@ def generate(indices):
                        clear=torch.cuda.empty_cache)
 
 
-model = tok = None
-LOAD_LOG = []  # counts-only reasons a generator was skipped
-if todo:
-    for GEN_ID, DTYPE in GENERATORS:
+def free_model():
+    global model, tok
+    model = tok = None
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
+def load_next_generator():
+    \"\"\"Load the next GENERATORS entry that fits on the GPUs and passes a smoke check; raise when none is left.\"\"\"
+    global model, tok, GEN_ID, DTYPE, NEXT_GENERATOR
+    while NEXT_GENERATOR < len(GENERATORS):
+        GEN_ID, DTYPE = GENERATORS[NEXT_GENERATOR]
+        NEXT_GENERATOR += 1
         try:
             model, tok = load(GEN_ID, DTYPE)
             torch.manual_seed(SEED)
             smoke = generate(todo[:2])  # two chats, so one unlucky sample does not skip a good model
-            smoke_ok = any(synth.parse_conversation(text) for text, _ in smoke)  # outputs never printed
-            if smoke_ok:
-                break
+            if any(synth.parse_conversation(text) for text, _ in smoke):  # outputs never printed
+                print("GENERATOR", GEN_ID, DTYPE, LICENCES[GEN_ID], "| skipped:", LOAD_LOG,
+                      "| VRAM GB", [round(torch.cuda.memory_allocated(i) / 2**30, 1) for i in range(GPUS)])
+                return
             LOAD_LOG.append(f"{GEN_ID} {DTYPE}: smoke output did not parse")
-        except Exception as e:  # does not fit, gated, fp16 overflow (inf/nan in sampling), ...
+        except Exception as e:  # does not fit, float16 overflow (inf/nan in sampling), ...
             LOAD_LOG.append(f"{GEN_ID} {DTYPE}: {type(e).__name__}: {str(e)[:200]}")
-        model = tok = None
-        gc.collect()
-        torch.cuda.empty_cache()
-    assert model is not None, f"no generator loaded: {LOAD_LOG}"
-    GPU_NAMES = f"{GPUS}x {torch.cuda.get_device_name(0)}"
-    print("GENERATOR", GEN_ID, DTYPE, "| GPUs", GPU_NAMES, "| skipped:", LOAD_LOG,
-          "| VRAM GB", [round(torch.cuda.memory_allocated(i) / 2**30, 1) for i in range(GPUS)])"""),
-code("""for start in range(0, len(todo), UPLOAD_EVERY):
+        free_model()
+    raise RuntimeError(f"no generator left: {LOAD_LOG}")
+
+
+model = tok = None
+LOAD_LOG = []  # counts-only reasons a generator was skipped
+NEXT_GENERATOR = 0  # index of the next GENERATORS entry to try
+GPU_NAMES = f"{GPUS}x {torch.cuda.get_device_name(0)}"
+if todo:
+    load_next_generator()"""),
+code("""start = 0
+while start < len(todo):
     if time.time() - SESSION_START > MAX_HOURS * 3600:
         print("time budget reached; filtering what exists")
         break
     part = todo[start:start + UPLOAD_EVERY]
     torch.manual_seed(SEED * 1_000_003 + part[0])  # same part, same sampling on a rerun
     t0 = time.time()
-    results = generate(part)
+    try:
+        results = generate(part)
+    except RuntimeError as e:
+        if not synth.is_sampling_overflow(e):
+            raise
+        LOAD_LOG.append(f"{GEN_ID} {DTYPE}: inf/nan in sampling at part {part[0]:05d}")
+        free_model()
+        load_next_generator()  # then redo this part
+        continue
     seconds = (time.time() - t0) / len(part)
-    rows = [{"index": i, "seed": seeds[i].as_dict(), "generator": GEN_ID, "dtype": DTYPE, "code_sha": CODE_SHA,
-             "data_revision": DATA_REVISION, "output": text, "new_tokens": n, "gen_seconds": round(seconds, 2)}
+    rows = [{"index": i, "seed": seeds[i].as_dict(), "generator": GEN_ID, "dtype": DTYPE,
+             "licence": LICENCES[GEN_ID], "code_sha": CODE_SHA, "data_revision": DATA_REVISION, "output": text,
+             "new_tokens": n, "gen_seconds": round(seconds, 2)}
             for i, (text, n) in zip(part, results)]
     body = "".join(json.dumps(r, ensure_ascii=False) + "\\n" for r in rows).encode()
     api.upload_file(path_or_fileobj=body, path_in_repo=f"{RAW_PREFIX}part-{part[0]:05d}.ndjson", repo_id=DATA_REPO,
                     repo_type="dataset", commit_message=f"synth raw {part[0]}-{part[-1]}")
     print(f"part {part[0]:05d}: {len(rows)} chats, {sum(r['new_tokens'] for r in rows)} new tokens, "
-          f"{seconds:.1f} s/chat | {len(done) + start + len(part)}/{TARGET_RAW}")"""),
+          f"{seconds:.1f} s/chat | {len(done) + start + len(part)}/{TARGET_RAW}")
+    start += UPLOAD_EVERY"""),
 code("""from collections import Counter
 from fym1.eval.lang import is_malagasy
 
@@ -724,6 +759,7 @@ stats = synth.synth_stats(
     raw=len(rows), kept=len(kept), dropped=dropped, by_generator=Counter(r["generator"] for r in rows),
     meta={"seed": SEED, "few_shot_k": FEW_SHOT_K, "target_raw": TARGET_RAW,
           "generator": ", ".join(g for g, _ in generators), "dtype": ", ".join(sorted({d for _, d in generators})),
+          "generator_licence": ", ".join(sorted({synth.generator_licence(g) for g, _ in generators})),
           "gpus": GPU_NAMES if todo else None, "code_sha": CODE_SHA, "data_revision": DATA_REVISION,
           "gen_seconds": round(sum(r["gen_seconds"] for r in rows), 1),
           "new_tokens": sum(r["new_tokens"] for r in rows)})
