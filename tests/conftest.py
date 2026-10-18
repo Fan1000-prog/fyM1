@@ -1,8 +1,8 @@
 """In the public snapshot only: skip test modules that need the word lists it does not ship.
 
-The snapshot (scripts/release_snapshot.py) leaves out the lists scripts/build_known_words.py writes, and adds a
-NOTICE file the private repo never tracks. There, a test module whose import needs one of those lists is skipped
-with the command that builds it. In the private repo a missing list still fails the run.
+The public snapshot leaves out the lists scripts/build_known_words.py writes, and adds a NOTICE file the private
+repo never tracks. There, a test module whose import needs one of those lists is skipped with the command that
+builds it. In the private repo a missing list still fails the run.
 """
 
 from pathlib import Path

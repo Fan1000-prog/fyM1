@@ -261,9 +261,9 @@ def test_secret_hits_env_files_and_email_allow_list():
 
 
 def test_email_probe_files_allow_only_their_listed_addresses():
-    probes = "tests/data/test_anonymize_probes.py"
-    assert secret_hits(probes, "PROBE" + "@GMAIL.COM") == {"email": 1}
-    assert secret_hits(probes, "HANTA" + "@GMAIL.COM") == {}  # listed, any case
+    probes = "tests/data/test_known_words.py"
+    assert secret_hits(probes, "PROBE" + "@MAIL.MG") == {"email": 1}
+    assert secret_hits(probes, "FANJA" + "@MAIL.MG") == {}  # listed, any case
     assert secret_hits(probes, "olona" + "@example.mg") == {"email": 1}  # listed for another file only
     assert secret_hits("tests/data/test_gate.py", "olona" + "@example.mg") == {}
 
@@ -462,6 +462,43 @@ def test_no_shipped_file_imports_an_excluded_script():
             text = (REPO_ROOT / path).read_text("utf-8")
             assert not any(f'"{m}"' in text or f"/ \"{m}.py\"" in text for m in excluded_modules), path
 
+
+
+def test_release_tooling_never_ships(tmp_path):
+    # Lead decision 32: the tooling and its exact (file, word) allow-lists are a private build record.
+    assert set(release.RELEASE_TOOLING) <= set(tracked())
+    assert all(release.exclusion_reason(path) for path in release.RELEASE_TOOLING)
+    repo = make_repo(tmp_path, {**CLEAN_FILES, **{path: "# tool\n" for path in release.RELEASE_TOOLING}})
+    out = tmp_path / "public"
+    report = snap(repo, out, make_export(tmp_path, ["Zafy Bodo"]))  # FAKE_SENDERS' "Test" would redact a path
+    assert report.ok
+    assert not any((out / path).exists() for path in release.RELEASE_TOOLING)
+    assert set(release.RELEASE_TOOLING) <= {e["path"] for e in report.excluded}
+
+
+def _imports_release(source: str) -> bool:
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import) and any(a.name.startswith("fym1.release") for a in node.names):
+            return True
+        if isinstance(node, ast.ImportFrom) and (
+                (node.module or "").startswith("fym1.release")
+                or (node.module == "fym1" and any(a.name == "release" for a in node.names))):
+            return True
+    return False
+
+
+def test_nothing_shipped_imports_or_describes_the_release_tooling():
+    shipped = {p: release.read_text(REPO_ROOT / p) for p in tracked() if not release.exclusion_reason(p)}
+    assert shipped
+    for path, text in shipped.items():
+        assert text is not None, path
+        assert "fym1.release" not in text and "INNER_NAME_ALLOWED" not in text, path
+        if path.endswith(".py"):
+            assert not _imports_release(text), path
+
+
+def test_no_inner_name_allow_list_entry_names_an_unshipped_file():
+    assert not any(release.exclusion_reason(path) for path, _ in release.INNER_NAME_ALLOWED)
 
 # ---- private ids ----------------------------------------------------------------------------------------------
 

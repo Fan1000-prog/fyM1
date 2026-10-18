@@ -240,17 +240,17 @@ cannot meet in a real export, goes in this list; it is not a merge blocker.
 
 These are pinned as `xfail` tests in `tests/data/test_anonymize_probes.py`.
 
-## Public release snapshot (scripts/release_snapshot.py)
+## Public release snapshot
 
-The public repo is one fresh commit built by `fym1.release`. It reads the export's sender names at run time,
-removes them from the three hand lists, and fails if any shipped file or path still holds one, a private id or a
-secret. Words are read as the strict gate reads them (`fym1.data.gate.tokens`: case changes, spaced-out letters),
+The public repo is one fresh commit built by a private release tool (it does not ship). It reads the export's
+sender names at run time, removes them from the three hand lists, and fails if any shipped file or path still
+holds one, a private id or a secret. Words are read as the strict gate reads them (`fym1.data.gate.tokens`: case changes, spaced-out letters),
 after decoding `\x`/`\u`/`\U`, HTML and percent escapes, with hidden characters taken both as a break and as
 nothing. Only known text types are read, and a PDF with its metadata; any other file fails. The public tree holds
 no archives, so any archive (zip, gz, tar, tgz, 7z, rar, whl, jar, bz2, xz and the like) is refused before anything
-is written. A name of 4+ letters is a hit anywhere inside a word that no known-word list has, except for the exact
-(file, word) pairs in `INNER_NAME_ALLOWED`, each with its reason; that list never applies to paths. Nothing is
-written to `--out` unless every check passes.
+is written. A name of 4+ letters is a hit anywhere inside a word that no known-word list has, unless the release
+owner clears that exact word in that exact file by hand, with a reason; a path is never cleared. Nothing is
+written to the public folder unless every check passes.
 
 The lists `scripts/build_known_words.py` writes do not ship: it builds them minus the hand lists' names, so
 rebuilding them from the shipped (stripped) hand lists and diffing would show the removed names. Build them

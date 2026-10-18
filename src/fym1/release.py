@@ -50,6 +50,11 @@ REBUILT_LISTS: tuple[str, ...] = tuple(f"src/fym1/data/{name}" for name in (
     "mg_corpus_words.txt",
 ))
 
+# The release tooling itself: private build tooling, and its exact (file, word) allow-lists are a private build
+# record (lead decision 32). Nothing that ships imports it (tests/test_release.py checks this).
+RELEASE_TOOLING: tuple[str, ...] = ("src/fym1/release.py", "scripts/release_snapshot.py", "tests/test_release.py")
+_RELEASE_TOOLING = "private release tooling: builds and checks this snapshot; its allow-lists are a private build record"
+
 EXCLUDES: tuple[Exclude, ...] = (
     Exclude("AGENTS.md", "agent-team rules for the private build; points at the owner's private notes"),
     Exclude("CLAUDE.md", "same agent-team rules as AGENTS.md, for one tool"),
@@ -65,6 +70,7 @@ EXCLUDES: tuple[Exclude, ...] = (
     Exclude("tests/test_serve_hf_token_once.py", "tests the excluded scripts/serve_hf_token_once.py"),
     Exclude("results/release_check.json", "this tool's own counts report: a private build record of what the "
                                           "snapshot checked"),
+    *(Exclude(path, _RELEASE_TOOLING) for path in RELEASE_TOOLING),
     *(Exclude(path, _NOT_SHIPPED) for path in REBUILT_LISTS),
 )
 
@@ -116,11 +122,11 @@ _TWO_WORDS = re.compile(r"(?<![^\W\d_])[^\W\d_]+ [^\W\d_]+(?![^\W\d_])")
 
 MIN_NAME_TOKEN = 3  # shorter tokens ("ny", initials) are everyday words or letters; counted as skipped
 # A MIN_NAME_PREFIX+ letter name is a hit anywhere inside a word no known-word list has ("xbodozafyx"). The only
-# exceptions are these exact (file, word) pairs, each with its reason: a real sender name sits inside them by chance.
-# A pair covers that word (as compare_key reads it) in that file's text only, never in a path or another file.
+# exceptions are these exact (file, word) pairs of everyday words the inner rule would otherwise flag, each with its
+# reason. A pair covers that word (as compare_key reads it) in that file's text only, never in a path or another
+# file. This module does not ship (RELEASE_TOOLING), so no entry here names a file of the release tooling.
 REASON_RANDOM = "the everyday English word 'random' (random seeds, random.Random); no person is named"
 INNER_NAME_ALLOWED: dict[tuple[str, str], str] = {
-    ("src/fym1/release.py", "random"): "this allow-list itself writes the word 'random'; no person is named",
     ("docs/anonymisation.md", "random"): REASON_RANDOM,
     ("notebooks/00_baseline.ipynb", "random"): REASON_RANDOM,
     ("notebooks/01_train.ipynb", "random"): REASON_RANDOM,
@@ -169,20 +175,21 @@ SECRET_PATTERNS: dict[str, re.Pattern[str]] = {
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
 # An address on a reserved test domain (RFC 2606/6761) is never a person's, anywhere in the snapshot.
 RESERVED_EMAIL_TLDS = (".example", ".invalid", ".test")
-# Every other address must be listed here, exactly, for the one file that holds it: a placeholder in a script or a
-# synthetic probe that needs a real provider's shape (plus-tags, upper case) to test email masking. Any other
+# Every other address must be listed here, exactly, for the one file that holds it, with its reason. Any other
 # address in any file is a secret hit. Stored as (local part, domain), case-folded, so this file holds no address.
 EMAIL_PROBE_FILES: dict[str, frozenset[tuple[str, str]]] = {
-    "scripts/build_known_words.py": frozenset({("x", "y.mg")}),  # placeholder in a comment
+    # "x@y.mg": a placeholder in a comment showing the shape of one non-space run; one-letter host, no person.
+    "scripts/build_known_words.py": frozenset({("x", "y.mg")}),
+    # the same placeholder as a synthetic chat line that the synth filter must drop.
     "tests/data/test_synth.py": frozenset({("x", "y.mg")}),
+    # synthetic address in a synthetic chat line the anonymiser must mask; host "example.mg".
     "tests/data/test_anonymize.py": frozenset({("hanta.r", "example.mg")}),
+    # synthetic address the kept-checks leak scan must flag; host "example.mg".
     "tests/data/test_kept_checks.py": frozenset({("rabe.sample", "example.mg")}),
+    # "olona" is the Malagasy word for "person": a synthetic address the gate must refuse; host "example.mg".
     "tests/data/test_gate.py": frozenset({("olona", "example.mg")}),
+    # synthetic address in a link-and-handle line that known_words must not read as words.
     "tests/data/test_known_words.py": frozenset({("fanja", "mail.mg")}),
-    "tests/data/test_anonymize_probes.py": frozenset({
-        ("hanta+tag", "gmail.com"), ("hanta.rk+fy", "yahoo.fr"), ("hanta", "gmail.com"),
-        ("marie-claire.rasoanaivo", "gmail.com"),
-    }),
 }
 SECRET_FILE_NAMES = frozenset({".env", "kaggle.json", "access_token", "id_rsa", "id_ed25519", ".netrc"})
 SECRET_FILE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
