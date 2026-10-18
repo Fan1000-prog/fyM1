@@ -30,6 +30,11 @@ def test_paper_speaks_in_first_person_singular():
     assert PLURAL_OR_THIRD_PERSON.findall(prose()) == []
 
 
+def test_paper_has_one_author_with_the_byline():
+    authors = re.findall(r"\\author\{([^}]*)\}", prose())
+    assert authors == ["by Fandresena Raharinaivo"]
+
+
 def test_paper_has_the_standard_sections_in_order():
     tex = prose()
     assert "\\begin{abstract}" in tex
