@@ -3,6 +3,9 @@
 How notebooks in `notebooks/` are run on a free Colab T4, driven by Playwright. Verified 2026-10-17 with
 `notebooks/smoke.ipynb` (T4, `HF_TOKEN` secret, read + write to private `Fan1000-Prog/fyM1-ckpt`).
 
+Since 2026-10-18 Colab also runs the Gemma 4 baseline (plain-text Belebele, FLORES+, smoke), so Kaggle stays
+free for synthetic chats and training. Same click path as below; the result JSON goes to `fyM1-ckpt` as usual.
+
 ## Rules
 - Use the owner's **personal** Google account: every Colab URL carries `?authuser=1`. Check the account
   button reads `...@gmail.com`, never the work account.
