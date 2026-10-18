@@ -25,7 +25,7 @@ import tempfile
 import unicodedata
 import urllib.parse
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
@@ -221,7 +221,7 @@ _LETTERS = re.compile(r"[^\W\d_]+")
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]")
 # Text a reader decodes before it can be read (review finding 14 nits): a base64 `data:` URI hides bytes the scan
 # never sees, and Unicode tag characters (U+E0000-E007F) spell invisible ASCII. A text file holding either is refused.
-_DATA_URI = re.compile(r"(?i)\bdata:[^,\s]*;\s*base64\s*,")
+_DATA_URI = re.compile(r"(?i)\bdata\s*:[^,\n]{0,200}?;\s*base64\s*,")  # spaces allowed around : ; ,
 _TAG_CHARS = re.compile("[\U000E0000-\U000E007F]")
 _LETTERS_AND_DIGITS = re.compile(r"[^\W_]+")
 # Digits typed for the letters they look like ("H4nt4", "Rak0to"): the name scan also reads them as letters.
@@ -243,6 +243,8 @@ class Report:
     name_tokens: int = 0
     short_tokens_skipped: int = 0
     placeholder_senders_skipped: int = 0
+    export_schema_keys: int = 0
+    label_words_common: int = 0
     author_strings_allowed: int = 0
     inner_name_words_allowed: int = 0
     list_entries_removed: dict[str, int] = field(default_factory=dict)
@@ -252,6 +254,7 @@ class Report:
     chat_messages: int = 0
     chat_turns: int = 0
     chat_short_messages: int = 0
+    chat_free_texts: int = 0
     chat_text_hits: list[str] = field(default_factory=list)
     secret_hits: dict[str, dict[str, int]] = field(default_factory=dict)
     emails_allowed: int = 0
@@ -273,6 +276,8 @@ class Report:
                 "name_tokens": self.name_tokens,
                 "short_tokens_skipped": self.short_tokens_skipped,
                 "placeholder_senders_skipped": self.placeholder_senders_skipped,
+                "export_schema_keys": self.export_schema_keys,
+                "label_words_left_out_as_common": self.label_words_common,
                 "author_strings_allowed": self.author_strings_allowed,
                 "inner_name_words_allowed": self.inner_name_words_allowed,
                 "list_entries_removed": self.list_entries_removed,
@@ -289,6 +294,7 @@ class Report:
                 "messages_indexed": self.chat_messages,
                 "anonymised_turns_indexed": self.chat_turns,
                 "short_messages_indexed": self.chat_short_messages,
+                "export_free_text_fields_indexed": self.chat_free_texts,
                 "short_message_distinctive_words": SHORT_MESSAGE_DISTINCTIVE,
                 "ngram_words": CHAT_TEXT_NGRAM,
                 "files_with_hits": self.chat_text_hits,
@@ -376,13 +382,50 @@ def name_tokens(senders: Iterable[str]) -> tuple[frozenset[str], int, int]:
 
 
 # Every file under --export must be read by one of these, or the export is refused (review finding 14): a file no
-# reader consumes ("message_1.html", a one-file export renamed or nested) would hold names nobody checks.
+# reader consumes ("message_1.html", a one-file export renamed or nested, a hidden ".DS_Store") would hold names
+# nobody checks.
 DYI_PAGE = "message_*.json"  # a "Download your information" thread page, in any folder at any depth
 FLAT_SUFFIX = ".json"  # any other JSON file, at any depth: must be a one-file export
-# Keys whose text value is a person's name, anywhere in a thread page (participants, senders, reaction actors, the
-# users of an add/remove-member event, ...), plus any key ending in NAME_KEY_SUFFIX.
-NAME_KEYS = frozenset({"name", "sender_name", "actor", "sender"})
-NAME_KEY_SUFFIX = "_name"
+
+# What each key of an export file holds (review finding 14, round 2). Every key of every export file must be in its
+# format's schema, or the export is refused: a name under a key nobody expected ("nickname", a mention's "username",
+# a name used as a key) would never reach the name list. A schema is an object (`{key: schema}`), a list of one
+# schema (`[schema]`, every item matches it) or one of these leaves:
+NAME = "name"  # a person's name (text): joins the name list
+LABEL = "label"  # free text that may name someone (a title, notes): the chat-text check reads it, and its
+# distinctive words (`label_words`) join the name list
+TEXT = "text"  # free text someone typed (a message): the chat-text check reads it
+DATA = "data"  # ids, timestamps, counts, flags, links, emoji: a number, true/false, null or text; no object or list
+Schema = str | dict[str, "Schema"] | list["Schema"]
+
+_MEDIA: Schema = [{"uri": DATA, "creation_timestamp": DATA, "backup_uri": DATA, "thumbnail": {"uri": DATA}}]
+# A "Download your information" thread page (`message_*.json`), as Meta writes it.
+DYI_SCHEMA: Schema = {
+    "participants": [{"name": NAME}],
+    "messages": [{
+        "sender_name": NAME, "timestamp_ms": DATA, "content": TEXT, "type": DATA, "is_unsent": DATA,
+        "is_taken_down": DATA, "is_geoblocked_for_viewer": DATA, "is_unsent_image_by_messenger_kid_parent": DATA,
+        "photos": _MEDIA, "videos": _MEDIA, "audio_files": _MEDIA, "gifs": _MEDIA, "files": _MEDIA,
+        "sticker": {"uri": DATA}, "share": {"link": DATA, "share_text": TEXT, "original_content_owner_name": NAME},
+        "reactions": [{"reaction": DATA, "actor": NAME, "timestamp": DATA}], "users": [{"name": NAME}],
+        "call_duration": DATA, "missed": DATA, "ip": DATA,
+        "bumped_message_metadata": {"bumped_message": TEXT, "is_bumped": DATA},
+    }],
+    "title": LABEL, "is_still_participant": DATA, "thread_type": DATA, "thread_path": DATA,
+    "image": {"uri": DATA, "creation_timestamp": DATA}, "joinable_mode": {"mode": DATA, "link": DATA},
+    "magic_words": [{"magic_word": TEXT, "creation_timestamp_ms": DATA, "animation_emoji": DATA}],
+}
+# A one-file export (`fym1.data.messenger.load_flat_threads`).
+FLAT_SCHEMA: Schema = {
+    "conversation": {
+        "title": LABEL, "participants": [NAME], "owner_name": NAME, "timezone": DATA, "platform": LABEL,
+        "notes": LABEL, "date_range": {"start": DATA, "end": DATA}, "message_count": DATA,
+    },
+    "messages": [{
+        "id": DATA, "sender": NAME, "text": TEXT, "timestamp": DATA,
+        "reactions": [{"reaction": DATA, "actor": NAME}], "users": [{"name": NAME}],
+    }],
+}
 
 
 @dataclass(frozen=True)
@@ -404,8 +447,13 @@ def export_files(export: Path) -> ExportFiles:
     unread = len(files) - len(pages) - len(flat)
     if unread:
         raise RefusedError(f"export holds {unread} files no reader consumes (want only thread pages "
-                           f"`{DYI_PAGE}` and one-file `*{FLAT_SUFFIX}` exports)")
+                           f"`{DYI_PAGE}` and one-file `*{FLAT_SUFFIX}` exports; hidden files such as .DS_Store "
+                           f"count too)")
     return ExportFiles(pages, flat)
+
+
+# Errors a malformed export raises while it is read; RecursionError is JSON nested too deep to parse.
+_READ_ERRORS = (ValueError, OSError, KeyError, TypeError, IndexError, AttributeError, RecursionError)
 
 
 def read_export(export: Path) -> list[Thread]:
@@ -415,63 +463,99 @@ def read_export(export: Path) -> list[Thread]:
     try:
         threads = [*(load_dyi_threads(export, folders=None) if found.pages else []),
                    *(t for path in found.flat for t in load_flat_threads(path))]
-    except (ValueError, OSError, KeyError, TypeError, IndexError, AttributeError) as error:
+    except _READ_ERRORS as error:
         raise RefusedError(f"export could not be read ({type(error).__name__})") from None
     if not threads:
         raise RefusedError("export holds no conversations")
     return threads
 
 
-def export_senders(export: Path) -> list[str]:
-    """Every person name the export lists, read from its raw files rather than the loaded conversations (which drop
-    unsent, call and event messages): in every thread page (`message_*.json`) anywhere under `export`, whatever its
-    folder (inbox, archived_threads, e2ee_cutover, message_requests, filtered_threads, ...), every `_page_names`
-    value; in every one-file export, the listed participants and every sender; in both, the distinctive words of the
-    conversation title (`title_words`). A page of any other shape is refused. Errors never carry the export's paths
-    or text."""
-    found = export_files(export)
+@dataclass
+class _Fields:
+    """What the schema walk read, by leaf kind, plus the distinct schema keys seen and the unknown keys counted."""
+    values: dict[str, list[str]] = field(default_factory=lambda: {NAME: [], LABEL: [], TEXT: []})
+    keys: set[str] = field(default_factory=set)
+    unknown_keys: int = 0
+
+
+def _walk(node: object, schema: Schema, found: _Fields, fix: Callable[[str], str]) -> None:
+    """Read `node` against `schema` into `found`; a key not in the schema is counted (and not read). A node of the
+    wrong shape, a name that is not text or free text that is neither text nor null raises TypeError."""
+    if isinstance(schema, dict):
+        if not isinstance(node, dict):
+            raise TypeError("an export field is not an object")
+        for key, value in node.items():
+            if key not in schema:
+                found.unknown_keys += 1
+                continue
+            found.keys.add(key)
+            _walk(value, schema[key], found, fix)
+    elif isinstance(schema, list):
+        if not isinstance(node, list):
+            raise TypeError("an export field is not a list")
+        for item in node:
+            _walk(item, schema[0], found, fix)
+    elif schema == DATA:
+        if isinstance(node, (dict, list)):
+            raise TypeError("an export data field holds an object or a list")
+    elif node is None and schema != NAME:
+        return
+    elif not isinstance(node, str):
+        raise TypeError("an export name or text field is not text")
+    else:
+        found.values[schema].append(fix(node))
+
+
+@dataclass(frozen=True)
+class ExportScan:
+    threads: list[Thread]  # `read_export`
+    names: list[str]  # every NAME field, nickname and distinctive LABEL word
+    free_texts: list[str]  # every LABEL and TEXT field, for the chat-text check
+    label_words_common: int  # LABEL words left out of the names as common (`label_words`)
+    keys: int  # distinct schema keys the export uses
+
+
+def scan_export(export: Path) -> ExportScan:
+    """Every person name and free text the export holds, read from its raw files against the format's schema
+    (DYI_SCHEMA for thread pages in any folder, FLAT_SCHEMA for one-file exports) rather than from the loaded
+    conversations (which drop unsent, call and event messages), plus every nickname the loaders read from nickname
+    events. A key outside the schema refuses the export, counted, never named; so does a page of any other shape.
+    Errors never carry the export's paths or text."""
+    threads = read_export(export)
+    found_files, found = export_files(export), _Fields()
     try:
-        names = []
-        for path in found.pages:
+        for path in found_files.pages:
             page = json.loads(path.read_text(encoding="utf-8"))
-            names += [*_page_names(page), *title_words(fix_meta_text(page.get("title") or ""))]
-        for path in found.flat:
-            for thread in load_flat_threads(path):
-                names += [*thread.participants, *title_words(thread.title)]
-    except (ValueError, OSError, KeyError, TypeError, AttributeError) as error:
+            if not isinstance(page.get("participants"), list) or not isinstance(page.get("messages"), list):
+                raise TypeError("a thread page needs participant and message lists")
+            _walk(page, DYI_SCHEMA, found, fix_meta_text)
+        for path in found_files.flat:
+            _walk(json.loads(path.read_text(encoding="utf-8")), FLAT_SCHEMA, found, str)
+    except _READ_ERRORS as error:
         raise RefusedError(f"export could not be read ({type(error).__name__})") from None
-    return names
+    if found.unknown_keys:
+        raise RefusedError(f"export holds {found.unknown_keys} keys outside its format's schema "
+                           f"(fym1.release.DYI_SCHEMA / FLAT_SCHEMA)")
+    labels = [label_words(label) for label in found.values[LABEL]]
+    nicknames = [nickname for thread in threads for nickname in thread.nicknames]
+    return ExportScan(
+        threads=threads,
+        names=[*found.values[NAME], *nicknames, *(word for kept, _ in labels for word in kept)],
+        free_texts=[*found.values[LABEL], *found.values[TEXT]],
+        label_words_common=sum(common for _, common in labels),
+        keys=len(found.keys),
+    )
 
 
-def title_words(title: str) -> list[str]:
-    """The `is_distinctive` words of a conversation title: a group title may hold a person's name ("Hanta's 30th"),
-    while its everyday words ("famille", "tsara") name nobody and would fail every file that uses them."""
-    if not isinstance(title, str):
-        raise TypeError("a title is not text")
+def label_words(label: str) -> tuple[list[str], int]:
+    """The `is_distinctive` words of a LABEL (a conversation title, notes), and how many words were left out as
+    common: a group title may hold a person's name ("Hanta's 30th"), while its everyday words ("famille", "tsara")
+    name nobody and would fail every file that uses them."""
     # Checked as typed (case and accents folded), before `compare_key` collapses letters: "famille" is a common
     # French word, "famile" is not.
-    typed = _LETTERS_AND_DIGITS.findall(fold(title.translate(ASCII_PUNCTUATION)))
-    return [word for word in typed if is_distinctive(word.translate(DIGIT_LETTERS))]
-
-
-def _page_names(page: dict) -> list[str]:
-    """Every name in one thread page, as Meta-encoded text fixed: the text value of every NAME_KEYS key or
-    `*_name` key at any depth (participants, senders, reaction actors, `users` of a member event, ...). The page
-    must have participants and messages."""
-    if not isinstance(page["participants"], list) or not isinstance(page["messages"], list):
-        raise TypeError("a thread page needs participant and message lists")
-    raw: list[object] = []
-    stack: list[object] = [page]
-    while stack:
-        node = stack.pop()
-        if isinstance(node, dict):
-            raw += [value for key, value in node.items() if key in NAME_KEYS or key.endswith(NAME_KEY_SUFFIX)]
-            stack += node.values()
-        elif isinstance(node, list):
-            stack += node
-    if not all(isinstance(name, str) for name in raw):
-        raise TypeError("a name is not text")
-    return [fix_meta_text(name) for name in raw]
+    typed = _LETTERS_AND_DIGITS.findall(fold(label.translate(ASCII_PUNCTUATION)))
+    kept = [word for word in typed if is_distinctive(word.translate(DIGIT_LETTERS))]
+    return kept, len(typed) - len(kept)
 
 
 # ---- chat text ------------------------------------------------------------------------------------------------
@@ -878,12 +962,13 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
     trees = worktrees(root)
     ids, id_count = load_private_ids(private_ids, trees)
     turns = read_chats(chats, trees)
-    threads = read_export(export)
-    names, short, placeholders = name_tokens(export_senders(export))
+    scan = scan_export(export)
+    names, short, placeholders = name_tokens(scan.names)
     if not names:
         raise RefusedError("export gave no sender name tokens")
-    messages = export_conversations(threads)
-    chat = (ChatIndex(messages, "export"), ChatIndex(turns, "chats file"))
+    messages = export_conversations(scan.threads)
+    # Every free-text field of the raw files (titles, notes, unsent and event messages too) is indexed on its own.
+    chat = (ChatIndex([*messages, *([text] for text in scan.free_texts)], "export"), ChatIndex(turns, "chats file"))
     files, texts, excluded = tracked_files(root, sha)
     out.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{out.name}.partial-", dir=out.parent))
@@ -896,6 +981,8 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
     report.chat_messages, report.chat_turns = sum(map(len, messages)), sum(map(len, turns))
     report.chat_short_messages = sum(index.short_messages for index in chat)
     report.short_tokens_skipped, report.placeholder_senders_skipped = short, placeholders
+    report.export_schema_keys, report.label_words_common = scan.keys, scan.label_words_common
+    report.chat_free_texts = len(scan.free_texts)
     if not report.ok:
         shutil.rmtree(staging)
         return report

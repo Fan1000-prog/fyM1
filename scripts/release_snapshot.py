@@ -16,7 +16,11 @@ compares them); then a secret scan runs. The release ships text files only (know
 no control characters, base64 data: URIs or Unicode tag characters): any other file (image, PDF, binary data hidden
 after a text file) and any archive (zip, gz, tar, whl, ...) is refused before anything is written. The paper ships
 as paper/fym1.tex; its PDF is built from it. Every file under --export must be a thread page (message_*.json) or a
-one-file JSON export, at any depth; any other file is refused (counted, never named). Writes the counts report to
+one-file JSON export, at any depth; any other file (hidden ones such as .DS_Store too) is refused (counted, never
+named). Every key of every export file must be in its format's schema (fym1.release.DYI_SCHEMA / FLAT_SCHEMA:
+each key a name, free text, or data such as ids and timestamps); any other key refuses the export (counted, never
+named). Names, nicknames and the distinctive words of titles and notes join the name list; every free-text field
+is checked as chat text too. Writes the counts report to
 --results only (never into --out: the report is a private build record).
 --private-ids names a file outside the repo (one private account id per line); any whole-word,
 case-insensitive match in a snapshot file or path fails the check, counted per file, never shown.
@@ -62,10 +66,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"name tokens {summary['names']['name_tokens']}, list entries removed "
           f"{summary['names']['list_entries_removed_total']}, name hits {summary['names']['hits_total']} "
           f"in {len(report.name_hits)} files")
+    print(f"export schema keys {report.export_schema_keys}, title/notes words left out as common "
+          f"{report.label_words_common}")
     print(f"private ids {report.private_ids}, hits {summary['private_ids']['hits_total']} "
           f"in {len(report.private_id_hits)} files")
     print(f"chat messages {report.chat_messages}, anonymised turns {report.chat_turns}, short messages "
-          f"{report.chat_short_messages}, files with copied chat text {summary['chat_text']['files_total']}")
+          f"{report.chat_short_messages}, free-text fields {report.chat_free_texts}, files with copied chat text {summary['chat_text']['files_total']}")
     print(f"secret hits {summary['secrets']['hits_total']} in {len(report.secret_hits)} files")
     print(f"report: {results}")
     print("OK" if report.ok else "FAILED: see the report's per-file counts; nothing was written to --out")
