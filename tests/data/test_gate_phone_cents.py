@@ -23,6 +23,11 @@ from fym1.data.gate import has_long_number
         "123 456 789,00 €",  # 9 digits not ending 000: cents never make a price
         "6123456,78 €",  # 7 digits + cents = 9 digits in the run
         "61234567,8 €",  # 8 digits + cents = 9
+        "320 000 000,00 Ar",  # 3[2-9] mobile shape once the cents are removed, even ending 000
+        "350.000.000,50 Ariary",
+        "341 234 000,00 Ar",
+        "341 200 000,5 €",
+        "341.234.000,00 Ar",
     ],
 )
 def test_phone_with_cents_is_a_long_number(text):
@@ -32,8 +37,7 @@ def test_phone_with_cents_is_a_long_number(text):
 @pytest.mark.parametrize(
     "text",
     [
-        "320 000 000,00 Ar",  # starts 3[2-9] but grouped thousands ending 000
-        "350.000.000,50 Ariary",
+        "150 000 000,00 Ar",  # 9 digits grouped ending 000, not a phone shape
         "1 250 000,50 €",  # 7 digits: unchanged
         "12 345 000,50 €",  # 10 digits with cents, grouped ending 000
     ],

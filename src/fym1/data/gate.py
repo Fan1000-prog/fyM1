@@ -7,10 +7,11 @@ fine, letting a name or number through is not. A whole conversation is dropped i
   space, `. , / \\ - _ ( ) + ; * | :`, unicode dashes). A price is kept only when it
   is plain digits or clean 3-digit groups, is followed by a currency word (`1 500 000 Ar`,
   `2500000 ariary`, `1 250 000,50 €`), and does not look like a phone: no `+` before it and its
-  digits do not start with `0`, `261` or read `3[2-9]` + 7 digits. A run of 9-10 digits is a phone's
-  length, counted with or without its cents, so it is a price only with grouped thousands ending
-  `000` before any cents ("150 000 000 Ar", "320 000 000,00 Ar", "1 250 000,50 €"); cents alone
-  never make a price ("123 456 789,00 €", "6123456,78 €" are dropped). A full date (8 digits)
+  digits, with or without the cents, do not start with `0`, `261` or read `3[2-9]` + 7 digits
+  ("320 000 000,00 Ar" is dropped). A run of 9-10 digits is a phone's length, counted with or
+  without its cents, so it is a price only with grouped thousands ending `000` before any cents
+  ("150 000 000 Ar", "1 250 000,50 €"); cents alone never make a price ("123 456 789,00 €",
+  "6123456,78 €" are dropped). A full date (8 digits)
   counts too.
 - `contact`: an email, a link with a path or query, an `@` before a word or a placeholder (spaces
   allowed: "@ njaka", "njaka@ <URL>"), an `at`/`arobase`/`(at)`/`[at]` before a placeholder or a
@@ -111,7 +112,8 @@ PRICE = re.compile(r"\d{1,3}(?:([ \u00a0\u202f.,])\d{3})?(?:\1\d{3})*(?:[.,]\d{1
 PHONE_DIGITS = re.compile(r"(?:0|261|3[2-9]\d{7}$)")
 # A phone's length without its trunk 0 or with it (Malagasy mobiles 3x and landlines 2x, French mobiles
 # [67] without the 0, ...). Too many shapes to list, so a run this long, with or without its cents, fails
-# closed: it is a price only with grouped thousands ending 000 before any cents ("150 000 000", "1 250 000,50").
+# closed: it is a price only with grouped thousands ending 000 before any cents ("150 000 000", "1 250 000,50")
+# and no phone shape with or without the cents ("320 000 000,00" fails: 320000000 is a mobile).
 PHONE_LENGTHS = (9, 10)
 CENTS = re.compile(r"[.,]\d{1,2}$")
 
@@ -183,9 +185,11 @@ def tokens(text: str) -> Iterator[Token]:
 
 
 def _looks_like_a_phone(text: str, run: re.Match) -> bool:
-    digits = re.sub(r"\D", "", run.group())
+    """A "+" before the run, or its digits start like a phone with or without the cents."""
     after_plus = text[: run.start()].rstrip().rstrip("(").rstrip().endswith("+")
-    return after_plus or bool(PHONE_DIGITS.match(digits))
+    digits = re.sub(r"\D", "", run.group())
+    whole_digits = re.sub(r"\D", "", CENTS.sub("", run.group()))
+    return after_plus or any(PHONE_DIGITS.match(d) for d in (digits, whole_digits))
 
 
 def _is_price(text: str, run: re.Match) -> bool:
@@ -206,7 +210,7 @@ def _digit_count(text: str) -> int:
 def has_long_number(text: str) -> bool:
     """`text` holds 7+ digits in one run that is not a clean price followed by a currency word."""
     for run in DIGIT_RUN.finditer(text):
-        if sum(c.isdigit() for c in run.group()) >= MIN_NUMBER_DIGITS and not _is_price(text, run):
+        if _digit_count(run.group()) >= MIN_NUMBER_DIGITS and not _is_price(text, run):
             return True
     return False
 
