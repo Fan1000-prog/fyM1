@@ -1,3 +1,4 @@
+# wordfreq top French words (code Apache-2.0, data CC BY-SA 4.0)
 aaa
 aaaah
 aaah
@@ -27,15 +28,12 @@ abbayes
 abbe
 abbes
 abbesse
-abby
 abc
 abces
-abdelkader
 abdication
 abdomen
 abdominale
 abdos
-abdoulaye
 abeilles
 aberration
 abime
@@ -336,7 +334,6 @@ actuels
 actus
 acuite
 ad
-ada
 adage
 adaptant
 adaptateur
@@ -357,8 +354,6 @@ additionnel
 additionnelle
 additionnelles
 additionnels
-adele
-adeline
 ademe
 adepte
 adeptes
@@ -419,7 +414,6 @@ adolescent
 adolescente
 adolescentes
 adolescents
-adonis
 adonner
 adoptant
 adopte
@@ -453,7 +447,6 @@ adressent
 adresser
 adresses
 adressez
-adriana
 adriatique
 adsl
 adulte
@@ -645,7 +638,6 @@ ahh
 ahhh
 ai
 aid
-aida
 aidait
 aidant
 aide
@@ -676,14 +668,12 @@ aillent
 ailles
 ailleur
 ailleurs
-aimable
 aimables
 aimaient
 aimais
 aimait
 aimant
 aimants
-aimee
 aiment
 aimer
 aimera
@@ -739,13 +729,10 @@ aka
 akira
 al
 ala
-alan
 alarmant
 alarme
 alarmes
-alba
 albanais
-albanie
 albion
 album
 albums
@@ -758,12 +745,10 @@ alcooliques
 alcoolisees
 alcoolisme
 alcools
-aldo
 ale
 aleas
 aleatoire
 aleatoires
-alec
 alejandro
 alentour
 alentours
@@ -771,8 +756,6 @@ alep
 alerte
 alerter
 alertes
-alessandro
-alexa
 alfa
 algebre
 algerie
@@ -785,7 +768,6 @@ algorithmes
 algues
 alias
 alibi
-alicia
 alien
 alienation
 aliens
@@ -805,7 +787,6 @@ alimenter
 alimentes
 aliments
 alinea
-alison
 all
 alla
 allaient
@@ -902,10 +883,8 @@ am
 ama
 amalgame
 amalgames
-amanda
 amande
 amandes
-amandine
 amant
 amante
 amants
@@ -913,7 +892,6 @@ amas
 amasser
 amateur
 amateurs
-amaury
 amazing
 amazone
 amazonie
@@ -939,7 +917,6 @@ ambulances
 ambulant
 amd
 ame
-amelia
 ameliorant
 amelioration
 ameliorations
@@ -996,7 +973,6 @@ amidon
 amie
 amies
 amin
-amine
 amines
 amiral
 amitie
@@ -1038,10 +1014,7 @@ amusement
 amusent
 amuser
 amusez
-amy
 an
-ana
-anais
 anal
 anale
 analogie
@@ -1063,7 +1036,6 @@ anarchie
 anarchisme
 anarchiste
 anarchistes
-anastasia
 anatomie
 anatomy
 anc
@@ -1084,7 +1056,6 @@ andalousie
 anderlecht
 andorre
 andrei
-andy
 ane
 aneanti
 aneantie
@@ -1093,11 +1064,8 @@ anecdote
 anecdotes
 anecdotique
 anemie
-anes
 anesthesie
 ang
-angele
-angelina
 angels
 anges
 anglais
@@ -1129,10 +1097,7 @@ animent
 animer
 animes
 animosite
-anis
-anita
 ankara
-annabelle
 annales
 anneau
 anneaux
@@ -1220,7 +1185,6 @@ antisemite
 antisemites
 antisemitisme
 antiterroriste
-anton
 antony
 antre
 anus
@@ -1443,7 +1407,6 @@ apr
 apre
 aprem
 apres
-april
 aps
 apte
 aptes
@@ -1536,11 +1499,8 @@ argumente
 argumenter
 arguments
 ari
-aria
-ariane
 aride
 arides
-aristide
 aristocrate
 aristocrates
 aristocratie
@@ -1571,11 +1531,9 @@ army
 arnaque
 arnaquer
 arnaques
-arnault
 aromatique
 aromatiques
 aromes
-aron
 arr
 arrache
 arrachee
@@ -1640,7 +1598,6 @@ arrosee
 arroser
 arrow
 arsenal
-arsene
 arsenic
 art
 arte
@@ -1791,7 +1748,6 @@ astral
 astre
 astreinte
 astres
-astrid
 astrologie
 astrologiques
 astronaute
@@ -1812,7 +1768,6 @@ ateliers
 athee
 athees
 atheisme
-athena
 athlete
 athletes
 athletique
@@ -1971,7 +1926,6 @@ audition
 auditions
 auditoire
 auditorium
-audrey
 auf
 augmentait
 augmentant
@@ -1998,15 +1952,12 @@ auraient
 aurais
 aurait
 auras
-aurelie
-aurelien
 aurez
 auriez
 aurions
 aurons
 auront
 aurora
-aurore
 aurores
 aus
 auschwitz
@@ -2189,13 +2140,10 @@ awards
 away
 axa
 axee
-axelle
 axes
-aya
 ayant
 ayants
 ayez
-aymeric
 ayons
 ayrault
 az
@@ -2498,7 +2446,6 @@ belges
 belgium
 belier
 believe
-belkacem
 belligerants
 belvedere
 bemol
@@ -2548,7 +2495,6 @@ berner
 bernie
 berri
 bert
-berthe
 besogne
 besoin
 besoins
@@ -2565,7 +2511,6 @@ beton
 better
 betterave
 betteraves
-betty
 between
 beuh
 beurette
@@ -2581,7 +2526,6 @@ bha
 bhl
 bi
 biais
-bianca
 biarritz
 biathlon
 biberon
@@ -2638,7 +2582,6 @@ billes
 billet
 billets
 billetterie
-billie
 bim
 bin
 binaire
@@ -2962,7 +2905,6 @@ bracelet
 bracelets
 braconnage
 brad
-brahim
 braille
 branche
 branchee
@@ -2994,8 +2936,6 @@ bref
 brefs
 brel
 breme
-brenda
-brendan
 brent
 bresilien
 bresilienne
@@ -3017,7 +2957,6 @@ bribes
 brick
 bricolage
 bride
-brieuc
 brievement
 brigade
 brigades
@@ -3084,7 +3023,6 @@ brulure
 brulures
 brume
 brunch
-brune
 brunes
 bruns
 brusque
@@ -3104,7 +3042,6 @@ bruxelloise
 bruyant
 bruyante
 bruyants
-bryan
 bs
 bt
 btp
@@ -3330,15 +3267,12 @@ candidates
 candidats
 candidature
 candidatures
-candide
-candy
 canet
 canette
 canettes
 canicule
 cannabis
 canne
-cannelle
 canoe
 canon
 canonique
@@ -3444,13 +3378,11 @@ caricature
 caricatures
 caritative
 caritatives
-carla
 carnage
 carnaval
 carnet
 carnets
 carnivores
-carol
 carotte
 carottes
 carpe
@@ -3497,8 +3429,6 @@ casques
 casquette
 casquettes
 cass
-cassandra
-cassandre
 cassant
 cassation
 casse
@@ -3543,7 +3473,6 @@ catho
 catholicisme
 catholique
 catholiques
-cathy
 cats
 caucase
 cauchemar
@@ -3595,7 +3524,6 @@ ceder
 cedex
 cedh
 cedre
-cedric
 cee
 cegep
 ceinture
@@ -3611,9 +3539,7 @@ celebrer
 celebres
 celebrite
 celebrites
-celeste
 celestes
-celia
 celibat
 celibataire
 celibataires
@@ -3681,7 +3607,6 @@ ceremonie
 ceremonies
 cerfs
 cergy
-cerise
 cerises
 cerne
 cerner
@@ -3779,7 +3704,6 @@ chanceux
 chandail
 chandelle
 chandelles
-chanel
 change
 changea
 changeait
@@ -3858,7 +3782,6 @@ charitable
 charite
 charleroi
 charlevoix
-charlie
 charlot
 charmant
 charmante
@@ -3920,7 +3843,6 @@ chefferie
 chefs
 chelem
 chelou
-chelsea
 cheminee
 cheminees
 cheminement
@@ -4027,7 +3949,6 @@ chirurgicales
 chirurgie
 chirurgien
 chirurgiens
-chloe
 chlore
 chlorure
 cho
@@ -4080,7 +4001,6 @@ chretienne
 chretiennes
 chretiens
 chretiente
-christelle
 christianisme
 christmas
 chrome
@@ -4131,7 +4051,6 @@ cils
 ciment
 cimetiere
 cimetieres
-cindy
 cine
 cineaste
 cineastes
@@ -4226,10 +4145,8 @@ claque
 claquement
 claquer
 claques
-clarence
 clarification
 clarifier
-clarisse
 clarte
 clash
 class
@@ -4245,7 +4162,6 @@ classification
 classique
 classiques
 claudel
-claudia
 clause
 clauses
 clavicule
@@ -4255,9 +4171,7 @@ cle
 clean
 clef
 clefs
-clemence
 clemenceau
-clementine
 cleopatre
 clercs
 clerge
@@ -4314,7 +4228,6 @@ close
 closer
 closes
 clot
-clotilde
 cloture
 cloturer
 clotures
@@ -5513,7 +5426,6 @@ coreen
 coreenne
 coreennes
 coreens
-corentin
 corey
 coriace
 corn
@@ -5852,7 +5764,6 @@ cris
 crise
 crises
 cristaux
-cristiano
 critere
 criteres
 critiquant
@@ -5937,7 +5848,6 @@ crustaces
 cry
 crypte
 crypto
-crystal
 csa
 csc
 csg
@@ -6042,9 +5952,7 @@ cylindres
 cylindrique
 cynique
 cynisme
-cynthia
 cyrano
-cyrille
 cyrus
 cœurs
 da
@@ -6055,7 +5963,6 @@ daesh
 daft
 daily
 dailymotion
-daisy
 dal
 dalai
 dalle
@@ -6073,7 +5980,6 @@ dangereux
 dangerosite
 dangers
 dani
-danny
 danois
 danoise
 danone
@@ -6087,14 +5993,10 @@ danseur
 danseurs
 danseuse
 danseuses
-daphne
 dard
-darius
 dark
 darling
-darren
 darty
-daryl
 das
 dash
 dassault
@@ -6111,7 +6013,6 @@ dating
 daube
 dauphins
 davantage
-dave
 davos
 day
 days
@@ -6146,7 +6047,6 @@ debits
 debloque
 debloquer
 deboires
-deborah
 deborde
 debordement
 debordements
@@ -6509,7 +6409,6 @@ delle
 delocalisation
 deloger
 deloyale
-delphine
 deluge
 deluxe
 dem
@@ -6859,7 +6758,6 @@ desir
 desirable
 desirait
 desirant
-desiree
 desirent
 desirer
 desireux
@@ -7201,14 +7099,12 @@ diminuee
 diminuent
 diminuer
 diminution
-dimitri
 dinde
 diner
 diners
 ding
 dingue
 dingues
-dino
 dinosaure
 dinosaures
 diocese
@@ -7441,7 +7337,6 @@ divertissements
 dividende
 dividendes
 divin
-divine
 divines
 divinite
 divinites
@@ -7576,15 +7471,11 @@ door
 dopage
 dope
 dor
-dora
 dore
 doree
 dorees
 dorenavant
 dores
-doria
-dorian
-doris
 dormais
 dormait
 dormant
@@ -7592,7 +7483,6 @@ dorment
 dormez
 dormi
 dormir
-dorothee
 dorothy
 dors
 dorsale
@@ -7773,7 +7663,6 @@ dut
 dutch
 duty
 duvet
-dylan
 dynamique
 dynamiques
 dynamiser
@@ -7945,7 +7834,6 @@ ecuries
 ecusson
 ecuyer
 ed
-eddie
 edf
 edge
 edifiant
@@ -8112,7 +8000,6 @@ element
 elementaire
 elementaires
 elements
-elena
 elephant
 elephants
 elevage
@@ -8130,7 +8017,6 @@ eleveur
 eleveurs
 elfe
 elfes
-eli
 eligibilite
 eligible
 eligibles
@@ -8142,17 +8028,13 @@ eliminee
 eliminer
 elimines
 elire
-elise
 elit
 elite
 elites
-ella
 elle
 elles
-ellie
 ellipse
 elliptique
-elodie
 eloge
 eloges
 eloignant
@@ -8165,14 +8047,11 @@ eloigner
 eloignes
 eloquence
 eloquent
-elsa
-else
 elu
 elucider
 elue
 elues
 elus
-elvis
 elysee
 elysees
 em
@@ -8241,13 +8120,10 @@ emigration
 emigre
 emigrer
 emigres
-emilie
-emily
 eminem
 eminemment
 eminent
 eminents
-emir
 emirats
 emis
 emise
@@ -8256,7 +8132,6 @@ emissaire
 emissaires
 emission
 emissions
-emmanuelle
 emmenager
 emmene
 emmenee
@@ -8266,7 +8141,6 @@ emmenes
 emmerde
 emmerder
 emmerdes
-emmy
 emoi
 emotif
 emotion
@@ -8716,7 +8590,6 @@ envoyees
 envoyer
 envoyes
 envoyez
-enzo
 enzyme
 enzymes
 eolien
@@ -8841,8 +8714,6 @@ ergonomie
 erige
 erigee
 eriger
-erika
-erin
 ermitage
 ermite
 erosion
@@ -8864,7 +8735,6 @@ erudition
 erudits
 eruption
 eruptions
-erwan
 es
 esa
 escadre
@@ -8903,7 +8773,6 @@ especes
 esperaient
 esperais
 esperait
-esperance
 esperances
 esperant
 espere
@@ -8956,7 +8825,6 @@ essuie
 essuye
 essuyer
 estampes
-estelle
 esthetique
 esthetiques
 estimait
@@ -9038,7 +8906,6 @@ eternellement
 eternels
 eternite
 etes
-ethan
 ether
 ethique
 ethiques
@@ -9128,7 +8995,6 @@ eus
 eut
 euthanasie
 eux
-eva
 evacuation
 evacue
 evacuee
@@ -9144,7 +9010,6 @@ evaluee
 evaluees
 evaluer
 evalues
-evan
 evangeliques
 evangelisation
 evangile
@@ -9152,12 +9017,10 @@ evangiles
 evanouir
 evaporation
 evasion
-eve
 eveche
 eveil
 eveille
 eveiller
-even
 evenement
 evenements
 event
@@ -9504,8 +9367,6 @@ eye
 eyes
 fa
 fab
-fabienne
-fabio
 fabius
 fable
 fables
@@ -9626,7 +9487,6 @@ fanatiques
 fanatisme
 fanfare
 fang
-fanny
 fans
 fantaisie
 fantaisies
@@ -9645,7 +9505,6 @@ far
 farce
 fardeau
 fargo
-farid
 farine
 farm
 farmer
@@ -9738,7 +9597,6 @@ fees
 feinte
 felicitation
 felicitations
-felicite
 feliciter
 felin
 felins
@@ -9973,7 +9831,6 @@ finlande
 finn
 fins
 fion
-fiona
 fioul
 fire
 firefox
@@ -10036,7 +9893,6 @@ flaubert
 fleau
 fleches
 flemme
-fleur
 fleuri
 fleurie
 fleurir
@@ -10066,9 +9922,7 @@ fln
 flo
 flocons
 flop
-flora
 floraison
-flore
 floride
 florissante
 flot
@@ -10342,7 +10196,6 @@ fraises
 framboise
 framework
 fran
-franc
 francais
 francaise
 francaises
@@ -10385,8 +10238,6 @@ frauduleux
 frayer
 frayeur
 freddie
-freddy
-frederique
 freebox
 freedom
 freelance
@@ -10543,15 +10394,12 @@ ga
 gabarit
 gabon
 gabonais
-gaby
 gache
 gacher
 gachis
 gad
 gadget
 gadgets
-gael
-gaelle
 gaffe
 gag
 gaga
@@ -10794,7 +10642,6 @@ gentils
 gentiment
 gentleman
 geo
-geoffrey
 geographe
 geographie
 geographique
@@ -10809,7 +10656,6 @@ geometrique
 geometriques
 geopolitique
 geopolitiques
-geraldine
 gerant
 gerants
 gerbe
@@ -10826,7 +10672,6 @@ germe
 germes
 germinal
 gerry
-gertrude
 ges
 gestapo
 gestation
@@ -10888,7 +10733,6 @@ glasgow
 glass
 glauque
 glee
-glenn
 glissant
 glissante
 glisse
@@ -10905,7 +10749,6 @@ globaux
 globes
 globules
 gloire
-gloria
 glorieuse
 glorieux
 glossaire
@@ -11258,7 +11101,6 @@ hait
 haitien
 haitienne
 haitiens
-hakim
 hal
 halal
 haleine
@@ -11282,7 +11124,6 @@ hameaux
 hamlet
 hammam
 hamster
-hamza
 hanche
 hanches
 hand
@@ -11313,14 +11154,12 @@ haricot
 haricots
 harlem
 harley
-harmonie
 harmonies
 harmonieuse
 harmonieux
 harmonique
 harmonisation
 harmoniser
-harmony
 harnais
 harpe
 harriet
@@ -11365,7 +11204,6 @@ hegel
 hegemonie
 hehe
 heidegger
-heidi
 hein
 helas
 helen
@@ -11569,7 +11407,6 @@ horribles
 horror
 hors
 horse
-hortense
 horticulture
 hospice
 hospital
@@ -11766,7 +11603,6 @@ ignorer
 ignores
 ignorez
 ignorons
-igor
 iie
 iiie
 ikea
@@ -12331,7 +12167,6 @@ ingestion
 ingrat
 ingredient
 ingredients
-ingrid
 inhabituel
 inhabituelle
 inherente
@@ -12834,14 +12669,11 @@ iraniens
 iraq
 iras
 irez
-irina
-iris
 irl
 irlandais
 irlandaise
 irlande
 irm
-irma
 ironie
 ironique
 ironiquement
@@ -12870,7 +12702,6 @@ irruption
 is
 isa
 isf
-isis
 islamique
 islamiques
 islamisme
@@ -12895,7 +12726,6 @@ israeliennes
 israeliens
 israelo
 iss
-issa
 issu
 issue
 issues
@@ -12926,7 +12756,6 @@ ivre
 ivres
 ivresse
 ivry
-ivy
 ixe
 ja
 jacent
@@ -12934,7 +12763,6 @@ jacente
 jackpot
 jacobins
 jacuzzi
-jade
 jadis
 jaguar
 jai
@@ -12946,13 +12774,10 @@ jaloux
 jam
 jamaique
 jamais
-jamal
 jambe
 jambes
 jambon
-jamel
 jamie
-janine
 jantes
 janv
 janvier
@@ -12970,7 +12795,6 @@ jargon
 jarre
 jaser
 jasmin
-jasmine
 jasper
 jauge
 jaune
@@ -12984,18 +12808,8 @@ je
 jeans
 jedi
 jeep
-jeff
-jeffrey
-jehan
 jen
-jenna
-jenny
-jeremie
-jerry
 jess
-jesse
-jessica
-jessie
 jesuite
 jesuites
 jet
@@ -13029,16 +12843,10 @@ jj
 jlm
 jme
 jo
-joanna
-joanne
 jobs
-jocelyn
 jockey
 joconde
-joey
 jogging
-johanna
-johnny
 joie
 joies
 joignant
@@ -13111,13 +12919,11 @@ jubile
 juda
 judaisme
 judas
-jude
 judee
 judeo
 judiciaire
 judiciaires
 judicieux
-judith
 judo
 judy
 juge
@@ -13140,7 +12946,6 @@ juin
 juive
 juives
 jul
-julio
 jumeau
 jumeaux
 jumelle
@@ -13148,7 +12953,6 @@ jumelles
 jument
 jump
 juncker
-june
 jungle
 juniors
 junte
@@ -13187,7 +12991,6 @@ justifiee
 justifiees
 justifient
 justifier
-justine
 juteux
 juve
 juvenile
@@ -13197,7 +13000,6 @@ kaboul
 kabyle
 kabyles
 kabylie
-kader
 kadhafi
 kafka
 kai
@@ -13210,37 +13012,25 @@ kara
 karaoke
 karate
 kardashian
-karen
-karine
 karma
 kart
 karting
 kat
 kate
-katherine
-kathleen
-kathy
-katia
-katie
-katy
 kayak
 ke
 kebab
 keep
 kei
-ken
 kendall
 kendrick
 kenneth
-kenny
 kerry
 ketchup
 kev
-kevin
 keys
 kg
 kgb
-khaled
 khalifa
 ki
 kia
@@ -13289,7 +13079,6 @@ koweit
 kremlin
 kris
 kristen
-kristina
 ku
 kun
 kung
@@ -13297,7 +13086,6 @@ kurde
 kurdes
 kw
 kwh
-kyle
 kylie
 la
 lab
@@ -13327,7 +13115,6 @@ lactee
 lacunes
 ladies
 ladite
-laetitia
 lafarge
 lagardere
 lagon
@@ -13375,7 +13162,6 @@ lampadaire
 lampe
 lampes
 lan
-lana
 lanca
 lancait
 lancant
@@ -13448,7 +13234,6 @@ laureat
 laureate
 laureats
 laurel
-lauren
 laurentides
 lauriers
 lausanne
@@ -13533,13 +13318,10 @@ legume
 legumes
 legumineuses
 leicester
-leila
 len
-lena
 lendemain
 lendemains
 lenine
-lenny
 lenovo
 lent
 lente
@@ -13596,10 +13378,8 @@ lg
 lgbt
 lgv
 li
-lia
 liaison
 liaisons
-liam
 liant
 lib
 liban
@@ -13675,13 +13455,7 @@ ligues
 like
 likes
 lil
-lila
-lilas
-lili
-lilian
 lillois
-lilly
-lily
 lime
 limitant
 limitation
@@ -13696,10 +13470,6 @@ limitrophes
 limonade
 limousine
 limpide
-lina
-linda
-lindsey
-line
 lineaire
 lineaires
 liner
@@ -13712,7 +13482,6 @@ linguistique
 linguistiques
 link
 linkedin
-lino
 lionne
 lions
 lip
@@ -13731,7 +13500,6 @@ lisais
 lisait
 lisant
 lisbonne
-lise
 lisee
 lisent
 lisez
@@ -13764,7 +13532,6 @@ littoral
 lituanie
 liturgie
 liturgique
-liv
 live
 liverpool
 lives
@@ -13781,7 +13548,6 @@ livres
 livret
 livrets
 livreur
-liz
 ll
 lloris
 lls
@@ -13841,12 +13607,9 @@ lointain
 lointaine
 lointaines
 lointains
-lois
 loisir
 loisirs
 lol
-lola
-lolita
 lombardie
 lome
 lon
@@ -13865,7 +13628,6 @@ longueurs
 look
 looks
 lords
-lorette
 lorient
 lorrains
 lors
@@ -13881,7 +13643,6 @@ loto
 lots
 lotto
 lotus
-lou
 louable
 louange
 louanges
@@ -13891,8 +13652,6 @@ louee
 louent
 louer
 loues
-louisa
-louisiane
 loulou
 loupe
 louper
@@ -13933,8 +13692,6 @@ lues
 lueur
 luge
 lui
-luka
-luke
 lula
 lulu
 lumieres
@@ -13973,8 +13730,6 @@ lyceen
 lyceenne
 lyceens
 lycees
-lydia
-lydie
 lynchage
 lynx
 lyonnaise
@@ -14007,12 +13762,10 @@ mademoiselle
 madone
 madonna
 maduro
-mae
 maestro
 mafia
 mafieux
 mag
-magali
 magasin
 magasins
 magazine
@@ -14045,7 +13798,6 @@ magnitude
 magnum
 magouilles
 mahomet
-mai
 maigre
 maigres
 maigrir
@@ -14151,7 +13903,6 @@ malte
 maltraitance
 maltraite
 malus
-mamadou
 maman
 mamans
 mamie
@@ -14217,7 +13968,6 @@ mano
 manoeuvre
 manoeuvres
 manoir
-manon
 manquaient
 manquait
 manquant
@@ -14238,7 +13988,6 @@ manteau
 manteaux
 manu
 manucure
-manuelle
 manuellement
 manuels
 manufacture
@@ -14259,7 +14008,6 @@ maquettes
 maquillage
 maquiller
 maquis
-mara
 marabout
 marathon
 marbre
@@ -14285,36 +14033,28 @@ mardis
 maree
 marees
 margarita
-margaux
 marge
 marges
 marginal
 marginale
 marginaux
-margot
 mari
 mariage
 mariages
-marianne
 mariee
 mariees
 marient
 marier
 maries
 marijuana
-marilyn
-marin
 marina
-marine
 marines
 marins
 marionnette
 marionnettes
 marisol
-marjorie
 market
 marketing
-marlene
 marmite
 marocain
 marocaine
@@ -14355,7 +14095,6 @@ martien
 martyr
 martyre
 martyrs
-marvin
 marxisme
 marxiste
 marxistes
@@ -14380,7 +14119,6 @@ massages
 masser
 masses
 massifs
-massimo
 massive
 massivement
 massives
@@ -14413,7 +14151,6 @@ mathematiciens
 mathematique
 mathematiquement
 mathematiques
-mathilde
 maths
 matiere
 matieres
@@ -14423,24 +14160,19 @@ matinal
 matinale
 matinee
 matins
-matisse
 matraque
 matrice
 matrices
 matricule
 matrix
 mats
-matt
 matte
-matteo
 matter
-matthieu
 matuidi
 maturation
 mature
 matures
 maturite
-maude
 maudit
 maudite
 maudits
@@ -14454,17 +14186,13 @@ mauvaise
 mauvaises
 mauve
 maux
-maxence
 maxi
 maxima
 maximal
 maximale
 maximales
-maximin
 maximiser
 maximum
-may
-maya
 maybe
 mayence
 mayonnaise
@@ -14544,7 +14272,6 @@ medico
 medieval
 medievale
 medievales
-medine
 mediocre
 mediocres
 mediocrite
@@ -14566,8 +14293,6 @@ mefier
 mefiez
 meg
 mega
-megan
-mehdi
 mei
 meilleur
 meilleure
@@ -14583,7 +14308,6 @@ melangee
 melangent
 melanger
 melanges
-melanie
 melant
 melbourne
 mele
@@ -14592,8 +14316,6 @@ melenchon
 melent
 meler
 meles
-melissa
-melodie
 melodies
 melon
 membrane
@@ -14687,7 +14409,6 @@ meprise
 mepriser
 merah
 mercato
-mercedes
 mercenaire
 mercenaires
 merci
@@ -14826,11 +14547,9 @@ mg
 mh
 mhz
 mi
-mia
 miam
 michelet
 mick
-mickael
 mickey
 micro
 microbes
@@ -14896,11 +14615,9 @@ million
 millionnaire
 millionnaires
 millions
-milo
 mime
 mimi
 min
-mina
 minable
 minables
 mince
@@ -14958,7 +14675,6 @@ minutieuse
 minutieusement
 minutieux
 miquelon
-mira
 mirabeau
 miracle
 miracles
@@ -15053,7 +14769,6 @@ moderniser
 modernisme
 modernite
 modes
-modeste
 modestement
 modestes
 modestie
@@ -15094,7 +14809,6 @@ molles
 mollet
 mollets
 mollusques
-molly
 molotov
 mom
 mome
@@ -15105,7 +14819,6 @@ momes
 momie
 momo
 mon
-mona
 monarchie
 monarchies
 monarque
@@ -15217,7 +14930,6 @@ mordre
 mordu
 more
 moretti
-morgane
 morgue
 morne
 morning
@@ -15291,7 +15003,6 @@ moule
 moules
 moulineaux
 moult
-mourad
 mourant
 mourinho
 mourir
@@ -15402,7 +15113,6 @@ musiques
 musk
 must
 mustang
-mustapha
 musulman
 musulmane
 musulmanes
@@ -15424,8 +15134,6 @@ mv
 mvp
 mw
 my
-mylene
-myriam
 mystere
 mysteres
 mysterieuse
@@ -15441,12 +15149,9 @@ mythiques
 mythologie
 mœurs
 na
-nabil
 nabilla
 nacelle
-nada
 nadeau
-nadia
 nage
 nager
 nageur
@@ -15468,7 +15173,6 @@ naitre
 naive
 naivement
 naivete
-najat
 nam
 name
 namibie
@@ -15479,12 +15183,10 @@ nano
 nantais
 nantaise
 nantis
-naomi
 napoli
 nappe
 nappes
 naquit
-narcisse
 narcissique
 narines
 narrateur
@@ -15495,10 +15197,7 @@ naruto
 nas
 nasa
 nat
-natacha
 natale
-natalia
-natalie
 natalite
 natasha
 natation
@@ -15609,7 +15308,6 @@ neige
 neiges
 nel
 nemo
-neo
 neolithique
 neptune
 nerf
@@ -15623,7 +15321,6 @@ nervures
 nes
 nest
 nestle
-nestor
 net
 netflix
 nets
@@ -15675,7 +15372,6 @@ nicki
 nicky
 nico
 nicois
-nicola
 nicotine
 nid
 nids
@@ -15690,14 +15386,10 @@ nigerian
 night
 nike
 niki
-nikita
 nikki
 nikon
-nil
-nina
 nine
 ninja
-nino
 nintendo
 nippon
 niqab
@@ -15712,7 +15404,6 @@ nkm
 nm
 nn
 no
-noah
 nobles
 noblesse
 noce
@@ -15721,7 +15412,6 @@ nocif
 nocifs
 nocturne
 nocturnes
-noemie
 noeud
 noeuds
 noie
@@ -15765,7 +15455,6 @@ nonce
 nonobstant
 nope
 nor
-nora
 nordique
 nordiques
 norma
@@ -16103,11 +15792,8 @@ olaf
 oleg
 oleoduc
 oligarchie
-olive
 olives
-olivia
 oliviers
-olympe
 olympia
 olympique
 olympiques
@@ -16170,7 +15856,6 @@ operee
 operent
 operer
 operes
-ophelie
 opinion
 opinions
 opium
@@ -16385,7 +16070,6 @@ ouragan
 ouragans
 ours
 ourson
-oussama
 out
 outaouais
 outil
@@ -16441,7 +16125,6 @@ pacifiste
 pack
 package
 packs
-paco
 pacs
 pacte
 pad
@@ -16496,7 +16179,6 @@ palmiers
 palpable
 paludisme
 pam
-pamela
 pamphlet
 pan
 panache
@@ -16891,7 +16573,6 @@ pattes
 paturage
 paturages
 pature
-pauline
 paume
 paupieres
 pause
@@ -16962,7 +16643,6 @@ pedophiles
 pedophilie
 pee
 peer
-peggy
 peigne
 peignoir
 peillon
@@ -17016,7 +16696,6 @@ pendu
 pendule
 pendules
 pendus
-penelope
 penetrant
 penetration
 penetre
@@ -17146,7 +16825,6 @@ peripherique
 peripheriques
 periple
 perir
-perle
 perles
 permanence
 permanent
@@ -17351,7 +17029,6 @@ physique
 physiquement
 physiques
 pi
-pia
 piaf
 pianiste
 piano
@@ -18726,10 +18403,8 @@ provoquer
 provoques
 proximite
 prudemment
-prudence
 prudent
 prudents
-prune
 prunes
 prussien
 prussienne
@@ -19005,11 +18680,9 @@ raccrocher
 race
 races
 rachat
-rachel
 rachete
 rachetee
 racheter
-rachid
 raciale
 raciales
 racines
@@ -19118,7 +18791,6 @@ ramener
 ramenes
 ramenez
 rames
-rami
 rampant
 rampe
 rampes
@@ -19130,7 +18802,6 @@ random
 randonnee
 randonnees
 randonneurs
-randy
 rang
 range
 rangee
@@ -19310,7 +18981,6 @@ really
 reamenagement
 reanimation
 rebaptise
-rebecca
 rebelle
 rebelles
 rebellion
@@ -19687,7 +19357,6 @@ regime
 regiment
 regiments
 regimes
-regina
 regional
 regionale
 regionales
@@ -19754,7 +19423,6 @@ rehabilitation
 rehabiliter
 rein
 reincarnation
-reine
 reines
 reins
 reinsertion
@@ -20666,7 +20334,6 @@ rigoureuse
 rigoureusement
 rigoureux
 rigueur
-rihanna
 rimbaud
 rime
 rimes
@@ -20707,7 +20374,6 @@ rivaux
 riverains
 riviera
 rixe
-riyad
 riz
 rmc
 ro
@@ -20734,7 +20400,6 @@ rocket
 rocky
 rod
 rodin
-rodrigue
 rogue
 roh
 roi
@@ -20747,14 +20412,12 @@ roll
 roller
 rolling
 rolls
-romaine
 romaines
 romains
 romance
 romancier
 romanciere
 romande
-romane
 romanesque
 romantique
 romantiques
@@ -20779,13 +20442,10 @@ root
 roquette
 roquettes
 rory
-rosaire
-rosalie
 rosberg
 rosee
 rosemont
 roses
-rosie
 rosiers
 rotation
 rotations
@@ -20853,13 +20513,11 @@ rubans
 rubis
 rubrique
 rubriques
-ruby
 ruche
 ruches
 rude
 rudes
 rudi
-rudy
 ruee
 ruelle
 ruelles
@@ -20906,10 +20564,8 @@ saboter
 sabots
 sabre
 sabres
-sabrina
 sac
 sacerdoce
-sacha
 sachant
 sache
 sachent
@@ -21005,16 +20661,10 @@ saluer
 salut
 salutaire
 salutations
-salvatore
 salve
-samantha
-samba
 same
 samedi
 samedis
-sami
-samir
-sammy
 samourai
 samsung
 samu
@@ -21027,10 +20677,8 @@ sanctions
 sanctuaire
 sanctuaires
 sandales
-sandrine
 sandwich
 sandwichs
-sandy
 sanglant
 sanglante
 sanglantes
@@ -21063,7 +20711,6 @@ sapiens
 sapin
 sapins
 saq
-sara
 sarajevo
 sarcasme
 sarcastique
@@ -21076,7 +20723,6 @@ sarkozy
 sarl
 sarrasin
 sas
-sasha
 saskatchewan
 sat
 satan
@@ -21140,7 +20786,6 @@ savais
 savait
 savamment
 savane
-savannah
 savant
 savante
 savantes
@@ -21172,7 +20817,6 @@ scandinave
 scandinaves
 scandinavie
 scanner
-scarlett
 sceau
 sceaux
 scelle
@@ -21245,7 +20889,6 @@ sculptures
 sd
 sdf
 se
-sean
 seance
 seances
 search
@@ -21310,7 +20953,6 @@ seduit
 seduite
 segment
 segments
-segolene
 segregation
 seigle
 seigneur
@@ -21337,7 +20979,6 @@ selectionnes
 selectionneur
 selections
 selective
-selena
 self
 selfie
 selfies
@@ -21454,7 +21095,6 @@ serbie
 serein
 sereine
 sereinement
-serena
 serenite
 serez
 serguei
@@ -21554,7 +21194,6 @@ shampooing
 shane
 sharks
 shaun
-shawn
 she
 sheila
 sheldon
@@ -21565,7 +21204,6 @@ sherlock
 shield
 shin
 ship
-shirley
 shirt
 shirts
 shit
@@ -21661,7 +21299,6 @@ silicon
 silicone
 sillage
 silver
-silvio
 sim
 similaire
 similaires
@@ -21821,7 +21458,6 @@ sodium
 sodomie
 soeur
 soeurs
-sofiane
 soft
 software
 soi
@@ -21849,7 +21485,6 @@ soja
 sol
 solaire
 solaires
-solange
 solar
 soldat
 soldats
@@ -21910,7 +21545,6 @@ sondes
 songe
 songer
 songes
-sonia
 sonic
 sonnait
 sonne
@@ -21918,7 +21552,6 @@ sonnent
 sonner
 sonnerie
 sonnette
-sonny
 sono
 sonore
 sonores
@@ -22235,7 +21868,6 @@ stabiliser
 stabilite
 stable
 stables
-stacy
 stade
 stades
 stadium
@@ -22247,7 +21879,6 @@ stagiaires
 stagnation
 stagne
 staline
-stan
 stand
 standard
 standards
@@ -22296,7 +21927,6 @@ sterile
 steriles
 sterilisation
 sterling
-steven
 stevie
 stick
 stickers
@@ -22688,7 +22318,6 @@ sut
 suture
 suv
 sv
-sven
 svp
 svt
 sweat
@@ -22699,7 +22328,6 @@ switch
 sy
 syllabe
 syllabes
-sylvia
 symbiose
 symbole
 symboles
@@ -22800,7 +22428,6 @@ tailles
 tailleur
 tain
 taire
-tais
 taisez
 tait
 take
@@ -22815,7 +22442,6 @@ talk
 talons
 talus
 tam
-tamara
 tambour
 tambours
 tamise
@@ -22829,8 +22455,6 @@ tanger
 tangible
 tangibles
 tango
-tanguy
-tania
 tank
 tanks
 tante
@@ -22853,7 +22477,6 @@ tapis
 tapisserie
 tapisseries
 taquiner
-tara
 tarantino
 tarbes
 tard
@@ -22885,7 +22508,6 @@ taser
 tasse
 tasses
 tata
-tatiana
 tatouage
 tatouages
 tatoue
@@ -22909,7 +22531,6 @@ tcheque
 tcheques
 tchernobyl
 te
-tea
 team
 tease
 teaser
@@ -22927,7 +22548,6 @@ technologique
 technologiques
 technology
 ted
-teddy
 tee
 teen
 teint
@@ -23100,8 +22720,6 @@ terroriste
 terroristes
 tertiaire
 tesla
-tess
-tessa
 test
 teste
 testee
@@ -23148,7 +22766,6 @@ thematiques
 theme
 themes
 then
-theo
 theologien
 theologiens
 theologique
@@ -23177,8 +22794,6 @@ thermometre
 these
 theses
 they
-thiago
-thibaut
 thing
 things
 think
@@ -23219,7 +22834,6 @@ tient
 tier
 tierce
 tiers
-tiffany
 tige
 tiger
 tiges
@@ -23234,9 +22848,7 @@ timidement
 timides
 timidite
 timing
-timothy
 tin
-tina
 tinder
 tint
 tintin
@@ -23323,11 +22935,9 @@ tombera
 tombes
 tombez
 tomes
-tommy
 ton
 tonalite
 tondeuse
-toni
 tonight
 tonique
 tonne
@@ -23336,7 +22946,6 @@ tonneaux
 tonnes
 tons
 tonton
-tony
 too
 top
 topic
@@ -23915,7 +23524,6 @@ ultime
 ultimes
 ultra
 ultras
-ulysse
 ump
 un
 una
@@ -24110,8 +23718,6 @@ vampire
 vampires
 van
 vandalisme
-vanessa
-vanille
 vanite
 vanne
 vannes
@@ -24275,7 +23881,6 @@ vermine
 vernis
 vernissage
 verone
-veronica
 verra
 verrai
 verrais
@@ -24377,7 +23982,6 @@ vice
 vices
 vicieuse
 vicieux
-vicky
 vicomte
 victime
 victimes
@@ -24484,7 +24088,6 @@ violents
 violer
 violet
 violets
-violette
 violettes
 violeur
 violeurs
@@ -24502,8 +24105,6 @@ viree
 virement
 virent
 virer
-virgile
-virginie
 virginite
 virgule
 viril
@@ -24590,8 +24191,6 @@ vivement
 vivendi
 vivent
 vivez
-vivian
-viviane
 vivons
 vivra
 vivre
@@ -24781,7 +24380,6 @@ wagons
 wah
 wait
 wake
-walid
 walk
 walking
 wallon
@@ -24790,7 +24388,6 @@ wallonne
 wallons
 walmart
 wan
-wanda
 want
 wanted
 waouh
@@ -24819,7 +24416,6 @@ weinstein
 welcome
 well
 wellington
-wendy
 wenger
 were
 wes
@@ -24872,7 +24468,6 @@ wtf
 wu
 wwe
 wwf
-wyatt
 xbox
 xenophobe
 xenophobie
@@ -24900,10 +24495,8 @@ xxx
 ya
 yacht
 yamaha
-yan
 yankee
 yankees
-yann
 yaounde
 yaourt
 yaourts
@@ -24922,7 +24515,6 @@ yep
 yes
 yeux
 yin
-yoann
 yoga
 yoko
 yonne
@@ -24932,22 +24524,17 @@ you
 yougoslavie
 youpi
 your
-youri
 yourself
-youssef
 youth
 ypres
 yt
 yu
 yukon
 yuri
-yvonne
 zac
 zach
-zack
 zambie
 zappe
-zara
 ze
 zelandais
 zelande
@@ -24966,7 +24553,6 @@ zizi
 zlatan
 zodiac
 zodiaque
-zoe
 zombie
 zombies
 zonage

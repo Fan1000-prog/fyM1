@@ -1,4 +1,4 @@
-# Places, brands and religious words that are not person names. Keep it short.
+# Hand list (this repo): places, brands, religious and family words that are not person names. Keep it short.
 Tana
 Antananarivo
 Toamasina
@@ -23,3 +23,16 @@ Andriamanitra
 Jesoa
 Kristy
 Zanahary
+Neny
+Dada
+Mama
+Dadabe
+Nenibe
+Dadatoa
+Nenitoa
+Tantine
+Tonton
+Tata
+Ranabavy
+Zoky
+Zandry

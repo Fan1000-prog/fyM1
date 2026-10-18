@@ -10,7 +10,11 @@ Lists, checked in this order (the first that knows a word gets the credit in the
 - `fr`, `en`: the 30,000 most frequent French and English words from `wordfreq` (data CC BY-SA 4.0).
 
 `mg_wiki`, `fr` and `en` are built by scripts/build_known_words.py, which drops words Wikipedia
-mostly capitalises mid-sentence ("Marie", "David"), so a common first name never clears.
+mostly capitalises mid-sentence ("Marie", "David") and every word in `first_names.txt`.
+
+`first_names.txt` (French first names given 1,000+ times since 1900, INSEE, Licence Ouverte)
+is checked before every list: a first name never clears, whatever list has it ("Sandrine",
+"Kevin", "Tony"). First names that are everyday Malagasy words ("tia", "mila") are left out of it.
 
 A word matches folded (lower case, no accents). Stretched letters are collapsed only when the
 word has some ("Bonjouuur" -> "bonjour"): collapsing always would let "Marie" match "mariée".
@@ -45,6 +49,7 @@ def _words(name: str) -> list[str]:
     return [line.strip() for line in lines if line.strip() and not line.startswith("#")]
 
 
+FIRST_NAME_WORDS = frozenset(fold(w) for w in _words("first_names.txt"))
 _MG_WIKI = word_list(_words("mg_wiki_words.txt"))
 KNOWN_WORDS: Lexicon = {
     "mg_common": word_list({fold(w) for w in COMMON_WORDS} & _MG_WIKI.folded | TEXTING_WORDS),
@@ -56,5 +61,7 @@ KNOWN_WORDS: Lexicon = {
 
 
 def known_by(word: str, lexicon: Lexicon) -> str | None:
-    """Name of the first list in `lexicon` that has `word`, else None."""
+    """Name of the first list in `lexicon` that has `word`, else None (always None for a first name)."""
+    if fold(word) in FIRST_NAME_WORDS:
+        return None
     return next((name for name, words in lexicon.items() if words.has(word)), None)
