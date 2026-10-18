@@ -1,8 +1,17 @@
 {
-  "chosen": null,
-  "chosen_size": null,
-  "license": null,
-  "hf_license": null,
+  "chosen": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
+  "chosen_size": "9B",
+  "license": "CC-BY-4.0",
+  "hf_license": "cc-by-4.0",
+  "chosen_reason": [
+    "chrf_eng_plt 49.73 vs google/gemma-3-12b-it 36.84; google/gemma-4-12B-it flores \"pending\"",
+    "greeting_gate.judge_mean 2.9 vs google/gemma-4-12B-it 2.85 (a tie)",
+    "belebele_chat_acc 0.7422 vs google/gemma-4-12B-it 0.75 (equal within noise)",
+    "sec_per_step 83.3 on a T4 in float16 (results/baseline/afriqueqwen3.5-9b-instruct.json qlora_smoke.compute_dtype); google/gemma-4-12B-it sec_per_step null (smoke pending, float32 on a T4 under Unsloth)",
+    "license CC-BY-4.0: simple open licence (owner rule)",
+    "Gemma 4's FLORES+ and smoke were not waited for; it stays a comparison row",
+    "known risk: one Hausa reply and some prompt echoes in its greeting-gate answers"
+  ],
   "greeting_gate": {
     "source": "results/greeting_gate.json",
     "judge": "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code",
