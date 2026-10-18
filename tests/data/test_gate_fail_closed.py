@@ -9,7 +9,7 @@ import pytest
 
 from fym1.data import known_words
 from fym1.data.anonymize import Anonymizer, normalise
-from fym1.data.gate import contact_left, has_long_number, pool_names_in, strict_gate
+from fym1.data.gate import _clear_or_replace, contact_left, has_long_number, pool_names_in, strict_gate
 from fym1.data.known_words import KNOWN_WORDS, known_by, word_list
 from fym1.data.messenger import Message, Thread
 from fym1.data.pipeline import build_records
@@ -565,3 +565,43 @@ def test_r6_normalise_drops_format_and_enclosing_marks_after_a_letter(c):
 )
 def test_r6_normalise_keeps_emoji_sequences(text):
     assert normalise(text) == text
+
+
+# 8. A word only mg_corpus knows never clears a name position (lead decision: corpus-only name slots).
+
+CORPUS_ONLY = "zokitra"  # synthetic: no real list has it; added to mg_corpus alone below
+
+
+def corpus_lexicon():
+    return {**KNOWN_WORDS, "mg_corpus": word_list(KNOWN_WORDS["mg_corpus"].folded | {CORPUS_ONLY})}
+
+
+def test_f8_synthetic_word_is_known_by_mg_corpus_only():
+    lexicon = corpus_lexicon()
+    assert known_by(CORPUS_ONLY, lexicon) == "mg_corpus"
+    assert known_by(CORPUS_ONLY, KNOWN_WORDS) is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [f"tonga i {CORPUS_ONLY} omaly", f"ry {CORPUS_ONLY}, aiza?", f"miaraka amin'i {CORPUS_ONLY}",
+     f"tonga ny {CORPUS_ONLY.capitalize()} omaly", f"hoy i {CORPUS_ONLY.capitalize()}"],
+)  # fmt: skip
+def test_f8_corpus_only_word_in_a_name_position_is_replaced(text):
+    assert CORPUS_ONLY not in {w.lower() for w in words(gated_text(text, lexicon=corpus_lexicon()))}
+
+
+def test_f8_corpus_only_word_after_at_is_replaced():
+    names = _clear_or_replace([f"salama @{CORPUS_ONLY}", f"salama @ {CORPUS_ONLY}"], set(), corpus_lexicon(), set())
+    assert names.replaced == 2
+    assert not any(CORPUS_ONLY in text for text in names.texts)
+
+
+@pytest.mark.parametrize("text", [f"misy {CORPUS_ONLY} ve", f"{CORPUS_ONLY} io", f"eny. {CORPUS_ONLY.capitalize()} io"])
+def test_f8_corpus_only_word_in_running_text_or_at_a_sentence_start_stays(text):
+    assert gated_text(text, lexicon=corpus_lexicon()) == text
+
+
+@pytest.mark.parametrize("text", ["tonga i dada omaly", "ry namana", "ho an'i neny"])
+def test_f8_word_another_list_knows_still_clears_after_a_marker(text):
+    assert gated_text(text, lexicon=corpus_lexicon()) == text
