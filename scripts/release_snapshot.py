@@ -66,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"name tokens {summary['names']['name_tokens']}, list entries removed "
           f"{summary['names']['list_entries_removed_total']}, name hits {summary['names']['hits_total']} "
           f"in {len(report.name_hits)} files")
-    print(f"export schema keys {report.export_schema_keys}, title/notes words left out as common "
+    print(f"export schema keys {report.export_schema_keys}, title words left out as common "
           f"{report.label_words_common}")
     print(f"private ids {report.private_ids}, hits {summary['private_ids']['hits_total']} "
           f"in {len(report.private_id_hits)} files")
