@@ -9,9 +9,10 @@ in fym1.release.EXCLUDES (including the word lists scripts/build_known_words.py 
 the third-party word lists. Sender names are read from the export at run time, removed from the hand-written
 name lists and searched for in every file but the lists a script builds from public data alone, as the strict
 gate reads words (case changes, spaced-out letters, digits typed for letters, hidden characters, escapes). Any
-file sharing an 8-word run with the export's message texts or with the turns of the anonymised chats file
-(--chats: fake names, joined messages) fails (copied chat text, counted per file, never shown); then a secret
-scan runs. The release ships text files only (known text types, decoded in full, no control characters): any
+file or path sharing an 8-word run with the export's messages or the turns of the anonymised chats file (--chats:
+fake names, joined messages), runs across message boundaries included, or holding a whole shorter message with 4+
+distinctive words, fails (copied chat text, counted per file, never shown; words compared as the name scan
+compares them); then a secret scan runs. The release ships text files only (known text types, decoded in full, no control characters): any
 other file (image, PDF, binary data hidden after a text file) and any archive (zip, gz, tar, whl, ...) is refused
 before anything is written. The paper ships as paper/fym1.tex; its PDF is built from it. Writes the counts report to --results
 only (never into --out: the report is a private build record).
@@ -61,8 +62,8 @@ def main(argv: list[str] | None = None) -> int:
           f"in {len(report.name_hits)} files")
     print(f"private ids {report.private_ids}, hits {summary['private_ids']['hits_total']} "
           f"in {len(report.private_id_hits)} files")
-    print(f"chat messages {report.chat_messages}, anonymised turns {report.chat_turns}, files sharing an "
-          f"{summary['chat_text']['ngram_words']}-word run {summary['chat_text']['files_total']}")
+    print(f"chat messages {report.chat_messages}, anonymised turns {report.chat_turns}, short messages "
+          f"{report.chat_short_messages}, files with copied chat text {summary['chat_text']['files_total']}")
     print(f"secret hits {summary['secrets']['hits_total']} in {len(report.secret_hits)} files")
     print(f"report: {results}")
     print("OK" if report.ok else "FAILED: see the report's per-file counts; nothing was written to --out")

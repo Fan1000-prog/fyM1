@@ -12,6 +12,7 @@ import pytest
 
 from fym1 import release
 from fym1.data.messenger import load_threads
+from fym1.eval.metrics import NgramIndex
 from fym1.release import RefusedError, build_snapshot, count_name_hits, name_tokens, secret_hits, strip_list
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -665,9 +666,9 @@ def _run(words: list[str]) -> str:
     (f"{_run(FAKE_CHAT_WORDS[:4])} sy {_run(FAKE_CHAT_WORDS[4:8])}", False),  # a word between the halves
 ])
 def test_has_chat_text_needs_an_8_word_run(tmp_path, text, hit):
-    messages = release.export_texts(release.read_export(make_export(tmp_path)))
+    [messages] = release.export_conversations(release.read_export(make_export(tmp_path)))
     assert len(messages) == len(FAKE_SENDERS) + 1
-    assert release.has_chat_text(text, [release.chat_text_index(messages, "export")]) == hit
+    assert release.has_chat_text(text, [release.ChatIndex([messages], "export")]) == hit
 
 
 @pytest.mark.parametrize("letters", [
@@ -677,19 +678,20 @@ def test_has_chat_text_needs_an_8_word_run(tmp_path, text, hit):
 def test_export_in_styled_letters_matches_plain_shipped_text_through_normalise(tmp_path, letters):
     styled = "".join(letters(c) if "a" <= c <= "z" else c for c in FAKE_CHAT)
     plain = f"Example reply: {_run(FAKE_CHAT_WORDS[1:9])}."
-    as_written = release.NgramIndex([styled, FAKE_TURN], n=8)  # FAKE_TURN: circled letters alone give no 8-gram
+    as_written = NgramIndex([styled, FAKE_TURN], n=8)  # FAKE_TURN: circled letters alone give no 8-gram
     assert not as_written.shares_with(plain)  # read as written, the export misses it
-    messages = release.export_texts(release.read_export(make_export(tmp_path, chat=styled)))
-    assert release.has_chat_text(plain, [release.chat_text_index(messages, "export")])
+    messages = release.export_conversations(release.read_export(make_export(tmp_path, chat=styled)))
+    assert release.has_chat_text(plain, [release.ChatIndex(messages, "export")])
     repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/copied.md": plain})
     report = snap(repo, tmp_path / "public", tmp_path / "raw")
     assert report.chat_text_hits == ["docs/copied.md"] and not report.ok
 
 
-def test_export_without_an_8_word_message_is_refused_before_anything_is_written(tmp_path):
+def test_export_without_an_8_word_run_is_refused_before_anything_is_written(tmp_path):
     repo = make_repo(tmp_path, CLEAN_FILES)
-    with pytest.raises(RefusedError, match="8-word message"):
-        snap(repo, tmp_path / "public", make_export(tmp_path, chat=_run(FAKE_CHAT_WORDS[:7])))
+    export = make_export(tmp_path, senders=FAKE_SENDERS[:1], chat=_run(FAKE_CHAT_WORDS[:6]))  # 1 + 6 words
+    with pytest.raises(RefusedError, match="export has no 8-word run"):
+        snap(repo, tmp_path / "public", export)
     assert not (tmp_path / "public").exists() and not _leftovers(tmp_path)
 
 
@@ -704,12 +706,13 @@ def test_copied_chat_text_fails_with_counts_and_paths_only(tmp_path, capsys):
     report = json.loads(results.read_text())
     assert report["ok"] is False
     assert report["chat_text"] == {"messages_indexed": 3, "anonymised_turns_indexed": 2, "ngram_words": 8,
+                                   "short_messages_indexed": 0, "short_message_distinctive_words": 4,
                                    "files_total": 2,
                                    "files_with_hits": ["<redacted path 1>", "paper/examples.tex"]}
     printed = capsys.readouterr()
     for blob in (results.read_text(), printed.out + printed.err):
         assert copied not in blob and not any(word in blob for word in FAKE_CHAT_WORDS if len(word) > 5)
-    assert "files sharing an 8-word run 2" in printed.out
+    assert "files with copied chat text 2" in printed.out
 
 
 @pytest.mark.parametrize("copied", [
@@ -719,8 +722,8 @@ def test_copied_chat_text_fails_with_counts_and_paths_only(tmp_path, capsys):
 ])
 def test_an_anonymised_chat_turn_copied_into_a_shipped_file_fails(tmp_path, capsys, copied):
     export = make_export(tmp_path)
-    assert not release.has_chat_text(copied, [release.chat_text_index(
-        release.export_texts(release.read_export(export)), "export")])  # the raw export alone misses it
+    assert not release.has_chat_text(copied, [release.ChatIndex(
+        release.export_conversations(release.read_export(export)), "export")])  # the raw export alone misses it
     repo = make_repo(tmp_path, {**CLEAN_FILES, "spaces/chat/examples.md": f"Example:\n{copied}\n"})
     out, results = tmp_path / "public", tmp_path / "results.json"
     args = ["--repo", str(repo), "--export", str(export), "--private-ids", str(make_ids(tmp_path)),
@@ -738,7 +741,7 @@ def test_an_anonymised_chat_turn_copied_into_a_shipped_file_fails(tmp_path, caps
 
 def test_the_system_turn_is_not_indexed(tmp_path):
     repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/prompt.md": "system prompt\n"})
-    assert release.read_chats(make_chats(tmp_path), []) == [FAKE_TURN, "eny"]
+    assert release.read_chats(make_chats(tmp_path), []) == [[FAKE_TURN, "eny"]]
     assert snap(repo, tmp_path / "public", make_export(tmp_path)).ok
 
 
@@ -750,7 +753,7 @@ def test_the_system_turn_is_not_indexed(tmp_path):
     ('{"id": "c1"}\n', "could not be read"),
     ('{"id": "c1", "messages": [{"role": "user", "content": 7}]}\n', "could not be read"),
     (json.dumps({"id": "c1", "messages": [{"role": "user", "content": _run(FAKE_TURN_WORDS[:7])}]}) + "\n",
-     "chats file has no 8-word message"),
+     "chats file has no 8-word run"),
 ])
 def test_chats_file_missing_empty_or_malformed_is_refused_with_exit_2(tmp_path, capsys, text, match):
     repo = make_repo(tmp_path, CLEAN_FILES)
@@ -782,6 +785,95 @@ def test_a_7_word_overlap_passes_end_to_end(tmp_path):
     report = snap(repo, tmp_path / "public", make_export(tmp_path))
     assert report.ok and report.chat_text_hits == []
     assert (tmp_path / "public/docs/near.md").exists()
+
+
+# ---- chat text read as the name scan reads words (review findings 17/18) ----------------------------------------
+
+
+def _export_index(tmp_path: Path, **export) -> release.ChatIndex:
+    return release.ChatIndex(release.export_conversations(release.read_export(make_export(tmp_path, **export))),
+                             "export")
+
+
+ACCENTED = str.maketrans("aeio", "\u00e0\u00e9\u00ef\u00f4")
+COPIES = {
+    "accented": _run(FAKE_CHAT_WORDS[:8]).translate(ACCENTED),
+    "combining accents": _run(FAKE_CHAT_WORDS[:8]).replace("a", "a\u0301"),
+    "digits for letters": _run(FAKE_CHAT_WORDS[:8]).translate(str.maketrans("aoeis", "40315")),
+    "stretched letters": _run(FAKE_CHAT_WORDS[:8]).replace("a", "aaa"),
+    "typographic apostrophe": "maraina dia handeha hiantsena izahay miaraka amin\u2019ny namanay",
+    "modifier-letter apostrophe": "maraina dia handeha hiantsena izahay miaraka amin\u02bcny namanay",
+    "non-breaking hyphen": "izahay miaraka amin'ny namanay any an\u2011tan\u00e0na",
+    "en dash": "izahay miaraka amin'ny namanay any an\u2013tanana",
+}
+
+
+@pytest.mark.parametrize("kind", sorted(COPIES))
+def test_copied_chat_text_is_found_however_its_letters_are_typed(tmp_path, kind):
+    assert release.has_chat_text(COPIES[kind], [_export_index(tmp_path)])
+
+
+def test_export_typed_with_accents_and_digits_matches_plain_shipped_text(tmp_path):
+    typed = FAKE_CHAT.translate(ACCENTED).replace("'", "\u2019").replace("maraina", "m4r41na")
+    assert release.has_chat_text(_run(FAKE_CHAT_WORDS[:8]), [_export_index(tmp_path, chat=typed)])
+
+
+def test_chat_words_key_words_as_the_name_scan_does():
+    assert release.chat_words("AMIN\u2019NY H4nt4  Mar\u00efiiina") == ["amin", "ny", "hanta", "marina"]
+
+
+@pytest.mark.parametrize(("text", "hit"), [
+    (_run(["salama", *FAKE_CHAT_WORDS[:7]]), True),  # last message's word + 7 of the next: across the boundary
+    (_run(["salama", "salama", *FAKE_CHAT_WORDS[:6]]), True),  # across two boundaries
+    (_run(["salama", *FAKE_CHAT_WORDS[:6]]), False),  # 7 words
+])
+def test_a_run_across_message_boundaries_is_found(tmp_path, text, hit):
+    assert release.has_chat_text(f"Example: {text}.", [_export_index(tmp_path)]) == hit
+
+
+def test_a_run_across_anonymised_turns_fails_end_to_end(tmp_path):
+    copied = _run([*FAKE_TURN_WORDS[-5:], "eny", "tsara", "izany"])  # end of one turn, the next turn
+    chats = make_chats(tmp_path, turns=[FAKE_TURN, "eny tsara izany"])
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/copied.md": f"{copied}\n"})
+    report = build_snapshot(repo, "HEAD", tmp_path / "public", make_export(tmp_path), make_ids(tmp_path), chats)
+    assert report.chat_text_hits == ["docs/copied.md"] and not report.ok
+
+
+SHORT = "Tsimbolofaka ravinalafy kotroazafa lanitrafy"  # synthetic: four made-up words, one short message
+SHORT_COMMON = "ok merci tsara izany"  # four everyday words
+
+
+def test_short_message_distinctive_words():
+    assert all(release.is_distinctive(word) for word in release.chat_words(SHORT))
+    assert not any(release.is_distinctive(word) for word in release.chat_words(SHORT_COMMON))
+    assert not release.is_distinctive("h4")  # too short
+
+
+@pytest.mark.parametrize(("text", "hit"), [
+    (f"Reply: {SHORT}!", True),  # the whole short message, in a longer text
+    (f"Reply: {SHORT.upper().replace('a', '4')}", True),  # any case, digits for letters
+    (_run(SHORT.split()[:3]), False),  # three of its four words
+    (_run(SHORT.split()[::-1]), False),  # its words out of order
+    (SHORT_COMMON, False),  # a short message of everyday words is not indexed
+])
+def test_a_short_distinctive_message_is_found_whole(tmp_path, text, hit):
+    raw = make_export(tmp_path)
+    data = json.loads((raw / "export.json").read_text())
+    for i, extra in enumerate((SHORT, SHORT_COMMON), len(data["messages"])):
+        data["messages"].append({"id": str(i), "sender": FAKE_SENDERS[1], "text": extra,
+                                 "timestamp": f"2026-01-01T11:0{i}:00"})
+    (raw / "export.json").write_text(json.dumps(data))
+    index = release.ChatIndex(release.export_conversations(release.read_export(raw)), "export")
+    assert index.short_messages == 1
+    assert release.has_chat_text(text, [index]) == hit
+
+
+def test_a_path_holding_copied_chat_text_fails_and_is_redacted(tmp_path):
+    path = f"docs/{'-'.join(FAKE_CHAT_WORDS[:8])}.md"
+    repo = make_repo(tmp_path, {**CLEAN_FILES, path: "nothing copied in here\n"})
+    report = snap(repo, tmp_path / "public", make_export(tmp_path))
+    assert report.chat_text_hits == ["<redacted path 1>"] and not report.ok
+    assert FAKE_CHAT_WORDS[4] not in json.dumps(report.as_dict())
 
 
 # ---- NOTICE ------------------------------------------------------------------------------------------------

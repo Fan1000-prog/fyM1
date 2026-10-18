@@ -4,8 +4,10 @@ The public repo is a fresh single-commit repo built from this snapshot, so priva
 Release blocker (lead decision 21): the export's sender names are read at run time, removed from the hand-written
 name lists, and searched for in every file except the lists a script rebuilds from public data alone. The lists
 scripts/build_known_words.py builds from public data minus the hand lists do not ship (REBUILT_LISTS). Release
-blocker (lead decision 34): any shipped file sharing a CHAT_TEXT_NGRAM-word run with the export's message texts
-or the anonymised chats' turn texts (fake names, joined messages) fails the release. Everything this module
+blocker (lead decision 34): any shipped file or path sharing a CHAT_TEXT_NGRAM-word run with the export's messages
+or the anonymised chats' turns (fake names, joined messages; runs may cross from one message into the next), or
+holding a whole short message with distinctive words, fails the release; words are compared as the name scan
+compares them. The release ships text files only (lead decision 36). Everything this module
 reports is a count or a repo path; it never returns a sender name, a message text, a private id or a matched
 secret value.
 """
@@ -32,7 +34,6 @@ from fym1.data.gate import PERSON_MARKER_WORDS, is_hidden_char
 from fym1.data.gate import tokens as gate_tokens
 from fym1.data.known_words import KNOWN_WORDS, known_by
 from fym1.data.messenger import Thread, fix_meta_text, load_dyi_threads, load_flat_threads
-from fym1.eval.metrics import NgramIndex
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,15 @@ INNER_NAME_ALLOWED: dict[tuple[str, str], str] = {
 PLACEHOLDER_SENDERS = frozenset({"facebook user", "utilisateur de facebook", "instagram user", "meta user"})
 # Word-run length that counts as copied chat text: the same n as the training-data leak gate (fym1.eval.metrics).
 CHAT_TEXT_NGRAM = 8
+# A shorter message is copied chat text when a shipped text holds all its words in a row and it has this many
+# different distinctive words (`is_distinctive`): "ok merci tsara" is everyday, four rare words are a fingerprint.
+SHORT_MESSAGE_DISTINCTIVE = 4
+# The known-word lists whose words are common enough to say nothing about a message's author.
+COMMON_LISTS = ("mg_common", "fr", "en")
+# Typographic apostrophes, quotes and hyphens, read as their ASCII forms by the chat-text check.
+ASCII_PUNCTUATION = str.maketrans({**dict.fromkeys("\u2018\u2019\u201a\u201b\u2032\u02bc\u02b9\u0060\u00b4", "'"),
+                                   **dict.fromkeys("\u201c\u201d\u201e\u201f\u2033\u00ab\u00bb", '"'),
+                                   **dict.fromkeys("\u2010\u2011\u2012\u2013\u2014\u2015\u2212\ufe63\uff0d", "-")})
 PRIVATE_HF_ID = "Fan1000-Prog/" + "fyM1-"  # split so test_public_name does not see a Hub id
 
 SECRET_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -237,6 +247,7 @@ class Report:
     private_id_hits: dict[str, int] = field(default_factory=dict)
     chat_messages: int = 0
     chat_turns: int = 0
+    chat_short_messages: int = 0
     chat_text_hits: list[str] = field(default_factory=list)
     secret_hits: dict[str, dict[str, int]] = field(default_factory=dict)
     emails_allowed: int = 0
@@ -273,6 +284,8 @@ class Report:
             "chat_text": {
                 "messages_indexed": self.chat_messages,
                 "anonymised_turns_indexed": self.chat_turns,
+                "short_messages_indexed": self.chat_short_messages,
+                "short_message_distinctive_words": SHORT_MESSAGE_DISTINCTIVE,
                 "ngram_words": CHAT_TEXT_NGRAM,
                 "files_with_hits": self.chat_text_hits,
                 "files_total": len(self.chat_text_hits),
@@ -398,46 +411,101 @@ def _page_names(page: dict) -> list[str]:
 # ---- chat text ------------------------------------------------------------------------------------------------
 
 
-def export_texts(threads: list[Thread]) -> list[str]:
-    """Every non-empty message text in the export."""
-    return [m.text for thread in threads for m in thread.messages if m.text]
+def export_conversations(threads: list[Thread]) -> list[list[str]]:
+    """Each thread's non-empty message texts, in order."""
+    return [texts for thread in threads if (texts := [m.text for m in thread.messages if m.text])]
 
 
-def read_chats(path: Path, trees: Iterable[Path]) -> list[str]:
-    """Turn texts of the anonymised chats file at `path` (JSON lines, `{"messages": [{"role", "content"}]}`), system
-    turns left out (the system prompt is ours, not chat text). The file must sit outside the repo and its worktrees.
-    Refused when unreadable, malformed or holding no turns; errors never carry the file's path or contents."""
+def read_chats(path: Path, trees: Iterable[Path]) -> list[list[str]]:
+    """Each conversation's turn texts, in order, from the anonymised chats file at `path` (JSON lines,
+    `{"messages": [{"role", "content"}]}`), system turns left out (the system prompt is ours, not chat text). The file
+    must sit outside the repo and its worktrees. Refused when unreadable, malformed or holding no turns; errors never
+    carry the file's path or contents."""
     target = path.expanduser().resolve()
     _require_outside(target, trees, "chats file")
     try:
         with target.open(encoding="utf-8") as lines:
             records = [json.loads(line) for line in lines if line.strip()]
-        texts = [turn["content"] for record in records for turn in record["messages"] if turn["role"] != "system"]
+        conversations = [[turn["content"] for turn in record["messages"] if turn["role"] != "system"]
+                         for record in records]
     except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError) as error:
         raise RefusedError(f"chats file could not be read ({type(error).__name__})") from None
-    if not all(isinstance(text, str) for text in texts):
+    if not all(isinstance(text, str) for texts in conversations for text in texts):
         raise RefusedError("chats file could not be read (a turn's content is not text)")
-    texts = [text for text in texts if text]
-    if not texts:
+    conversations = [texts for c in conversations if (texts := [text for text in c if text])]
+    if not conversations:
         raise RefusedError("chats file holds no turns")
-    return texts
+    return conversations
 
 
-def chat_text_index(texts: list[str], source: str) -> NgramIndex:
-    """CHAT_TEXT_NGRAM-word runs of `texts`, as written and as the anonymiser `normalise`s them. Refused when no
-    text from `source` is that long: an empty index would pass every file unchecked."""
-    try:
-        return NgramIndex([*texts, *map(normalise, texts)], n=CHAT_TEXT_NGRAM)
-    except ValueError:
-        raise RefusedError(f"{source} has no {CHAT_TEXT_NGRAM}-word message to check copied chat text against") \
-            from None
+def chat_words(text: str) -> list[str]:
+    """The words the chat-text check compares, keyed as the name scan keys a word: typographic quotes and hyphens
+    read as ASCII, split into runs of letters and digits, digits typed for letters read as letters (DIGIT_LETTERS),
+    then `compare_key` (case and accents folded, stretched letters collapsed). "Amin’ny", "AMIN'NY" and "4min'nyyy"
+    all read "amin ny"."""
+    return [compare_key(word.translate(DIGIT_LETTERS))
+            for word in _LETTERS_AND_DIGITS.findall(fold(text.translate(ASCII_PUNCTUATION)))]
 
 
-def has_chat_text(text: str, indexes: Iterable[NgramIndex]) -> bool:
-    """`text` shares a word run with any of `indexes`, read as written and in both name-scan `readings`
-    (escapes decoded, hidden characters as a break and taken out)."""
-    forms = (text, *readings(text))
-    return any(index.shares_with(form) for index in indexes for form in forms)
+def _chat_forms(text: str) -> tuple[str, ...]:
+    """`text` as written and in both name-scan `readings` (escapes decoded, hidden characters as a break and taken
+    out)."""
+    return (text, *readings(text))
+
+
+def is_distinctive(word: str) -> bool:
+    """A `chat_words` word that says something about who typed it: letters only, MIN_NAME_TOKEN+ long, and not an
+    everyday Malagasy word nor one of wordfreq's most frequent French or English words."""
+    return (word.isalpha() and len(word) >= MIN_NAME_TOKEN and not is_everyday_word(word)
+            and not any(KNOWN_WORDS[common].has(word) for common in COMMON_LISTS))
+
+
+class ChatIndex:
+    """Copied chat text in one source (lead decision 34, review findings 17/18). Each conversation's messages are
+    joined in order, so a CHAT_TEXT_NGRAM-word run that crosses from one message into the next is indexed too. A
+    message shorter than that with SHORT_MESSAGE_DISTINCTIVE+ different `is_distinctive` words is indexed whole: a
+    shipped text holding all its words in a row matches. Every text is read in its `_chat_forms`, as `chat_words`."""
+
+    def __init__(self, conversations: Iterable[list[str]], source: str):
+        self.runs: set[tuple[str, ...]] = set()
+        self.short: dict[int, set[tuple[str, ...]]] = {}
+        for texts in conversations:
+            joined: list[list[str]] = [[] for _ in range(3)]
+            for text in texts:
+                for form, words in zip(_chat_forms(text), joined):
+                    message = chat_words(form)
+                    words += message
+                    if len(message) < CHAT_TEXT_NGRAM and len({w for w in message if is_distinctive(w)}) \
+                            >= SHORT_MESSAGE_DISTINCTIVE:
+                        self.short.setdefault(len(message), set()).add(tuple(message))
+            for words in joined:
+                self.runs.update(_runs(words, CHAT_TEXT_NGRAM))
+        if not self.runs:  # an empty index would pass every file unchecked
+            raise RefusedError(f"{source} has no {CHAT_TEXT_NGRAM}-word run of messages to check copied chat text "
+                               f"against")
+
+    @property
+    def short_messages(self) -> int:
+        return sum(map(len, self.short.values()))
+
+    def shares_with(self, text: str) -> bool:
+        """`text`, in any of its `_chat_forms`, holds an indexed run or a whole indexed short message."""
+        for form in _chat_forms(text):
+            words = chat_words(form)
+            if not self.runs.isdisjoint(_runs(words, CHAT_TEXT_NGRAM)):
+                return True
+            if any(not messages.isdisjoint(_runs(words, n)) for n, messages in self.short.items()):
+                return True
+        return False
+
+
+def _runs(words: list[str], n: int) -> set[tuple[str, ...]]:
+    return {tuple(words[i:i + n]) for i in range(len(words) - n + 1)}
+
+
+def has_chat_text(text: str, indexes: Iterable[ChatIndex]) -> bool:
+    """`text` holds copied chat text from any of `indexes`."""
+    return any(index.shares_with(text) for index in indexes)
 
 
 def count_name_hits(text: str, names: frozenset[str], allowed: frozenset[str] = frozenset()) -> int:
@@ -745,8 +813,8 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
     names, short, placeholders = name_tokens(export_senders(export))
     if not names:
         raise RefusedError("export gave no sender name tokens")
-    messages = export_texts(threads)
-    chat = (chat_text_index(messages, "export"), chat_text_index(turns, "chats file"))
+    messages = export_conversations(threads)
+    chat = (ChatIndex(messages, "export"), ChatIndex(turns, "chats file"))
     files, texts, excluded = tracked_files(root, sha)
     out.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{out.name}.partial-", dir=out.parent))
@@ -756,7 +824,8 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
         shutil.rmtree(staging, ignore_errors=True)
         raise
     report.ref, report.name_tokens, report.private_ids = sha, len(names), id_count
-    report.chat_messages, report.chat_turns = len(messages), len(turns)
+    report.chat_messages, report.chat_turns = sum(map(len, messages)), sum(map(len, turns))
+    report.chat_short_messages = sum(index.short_messages for index in chat)
     report.short_tokens_skipped, report.placeholder_senders_skipped = short, placeholders
     if not report.ok:
         shutil.rmtree(staging)
@@ -768,7 +837,7 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
 
 
 def _write_and_check(files: dict[str, tuple[bytes, int]], texts: dict[str, str], excluded: list[dict], out: Path,
-                     names: frozenset[str], ids: re.Pattern[str], chat: tuple[NgramIndex, ...]) -> Report:
+                     names: frozenset[str], ids: re.Pattern[str], chat: tuple[ChatIndex, ...]) -> Report:
     kept = write_files(files, out)
     report = Report(ref="", files_copied=len(kept), excluded=excluded)
     matched = {exclusion_entry(e["path"]) for e in excluded}
@@ -796,7 +865,7 @@ def _write_and_check(files: dict[str, tuple[bytes, int]], texts: dict[str, str],
             report.name_hits[path] = hits
         if id_hits := count_private_ids(text, ids) + count_private_ids(path, ids):
             report.private_id_hits[path] = id_hits
-        if has_chat_text(text, chat):
+        if has_chat_text(text, chat) or has_chat_text(path, chat):
             report.chat_text_hits.append(path)
         if secrets := secret_hits(path, text):
             report.secret_hits[path] = dict(sorted(secrets.items()))
@@ -806,19 +875,21 @@ def _write_and_check(files: dict[str, tuple[bytes, int]], texts: dict[str, str],
         for ref_path in excluded_refs:
             if ref_path in text:
                 report.references_to_excluded[ref_path] = report.references_to_excluded.get(ref_path, 0) + 1
-    _redact_named_paths(report, names, ids)
+    _redact_named_paths(report, names, ids, chat)
     return report
 
 
-def _redact_named_paths(report: Report, names: frozenset[str], ids: re.Pattern[str]) -> None:
-    """A repo path that itself holds a name token or a private id is reported as `<redacted path N>`."""
+def _redact_named_paths(report: Report, names: frozenset[str], ids: re.Pattern[str],
+                        chat: tuple[ChatIndex, ...]) -> None:
+    """A repo path that itself holds a name token, a private id or copied chat text is reported as
+    `<redacted path N>`."""
     aliases: dict[str, str] = {}
 
     def alias(path: str) -> str:
         # Read through the same escapes and readings as the scan. Redaction is cheap, so a name anywhere inside
         # a path word counts here, known word or not ("bodozafy").
         if (any(name in word for word in words(path) for name in names) or count_name_hits(path, names)
-                or count_private_ids(path, ids)):
+                or count_private_ids(path, ids) or has_chat_text(path, chat)):
             return aliases.setdefault(path, f"<redacted path {len(aliases) + 1}>")
         return path
 
