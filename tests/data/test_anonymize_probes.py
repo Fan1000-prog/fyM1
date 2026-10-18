@@ -556,3 +556,24 @@ def test_local_phone_with_a_year_like_group_is_a_phone(text, expected):
 @pytest.mark.parametrize("text", ["01/02/2026 03/04", "03/04/2026 12 30", "2020-03-12 034", "17/10/2026 1430"])
 def test_full_dates_next_to_numbers_are_kept(text):
     assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "35 000, 3 500",
+        "35 000 - 3 500 = 31 500",
+        "38 500, 2 500 Ar",
+        "Vidiny 35 000, 5 000 ny livraison",
+        "35 000 / 5 000",
+        "35 000 3 500",
+        "35 000 000 / 2",
+    ],
+)
+def test_price_pairs_are_kept(text):
+    assert Anonymizer(PRIV_NAMES)(text) == text
+
+
+@pytest.mark.parametrize("text", ["3412 345 67", "3412 34567", "3412345 67"])
+def test_glued_mobiles_without_the_zero_are_caught(text):
+    assert Anonymizer(PRIV_NAMES)(text) == "<TEL>"

@@ -72,8 +72,10 @@ PHONE = re.compile(
     rf"{_MG_PHONE_SPACED}"
     rf"|{_INTL}\d{{1,3}}(?:\s*\(\d{{1,4}}\))?(?:{_SEP}\d){{6,13}}"  # other intl: +33 6 …, +1 (555) …
     rf"|[0Oo](?:{_SEP}\d){{9}}"  # national, 10 digits however grouped; "O34" typed with a letter O
-    # mobile without the 0: 34 12 345 67, any grouping once "34" stands apart ("345 000 000 Ar" stays)
-    rf"|3[2-9](?=[\s./,_-]){_SEP}\d(?:{_SEP}\d){{6}}"
+    # mobile without the 0: "34 12" as separate pairs, then any grouping ("34 12 2019/5"); a pair
+    # after "3x" keeps price pairs out ("35 000, 3 500")
+    rf"|3[2-9](?=[\s./,_-]){_SEP}\d\d(?=[\s./,_-]){_SEP}\d(?:{_SEP}\d){{4}}"
+    rf"|3[2-9]{_SEP}\d\d{_SEP}\d{{3}}{_SEP}\d\d"  # 34 12 345 67 grouped or glued: "3412 345 67"
     r"|\d{9,15}"  # any other long run of digits
     r")(?!\w)"
     rf"|(?<![\d+]){_MG_PHONE_GLUED}(?!\d)"  # glued to a word: "laharana034 …", "wa+26134…", "tel(034) …"
