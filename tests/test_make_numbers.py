@@ -223,8 +223,11 @@ PASSING_IDENTITY = {"n": 34, "passed": 32, "pass_rate": 32 / 34, "threshold": 0.
     [
         ({}, None),
         ({"passed": 30, "pass_rate": 30 / 34, "gate_passed": False}, "identity check failed"),
-        ({"foreign_identity": 1, "gate_passed": False}, "identity check failed"),
-        ({"foreign_identity": 1}, "does not match"),
+        ({"foreign_identity": 1, "gate_passed": False, "reasons": PASSING_IDENTITY["reasons"] | {"foreign_identity": 1}}, "identity check failed"),
+        ({"foreign_identity": 1, "reasons": PASSING_IDENTITY["reasons"] | {"foreign_identity": 1}}, "gate_passed does not match"),
+        ({"foreign_identity": 1}, "reasons.foreign_identity does not match"),
+        ({"reasons": PASSING_IDENTITY["reasons"] | {"foreign_identity": 1}}, "reasons.foreign_identity does not match"),
+        ({"reasons": {"no_name": 2}}, None),
         ({"pass_rate": 0.5}, "does not match"),
         ({"passed": 33}, "pass_rate does not match passed / n"),
         ({"n": 40}, "pass_rate does not match passed / n"),
@@ -266,7 +269,8 @@ def test_identity_numbers_are_cited(tmp_path):
 
 def test_cli_strict_fails_on_failed_identity_check(tmp_path):
     results = full_results(tmp_path / "results")
-    failed = PASSING_IDENTITY | {"foreign_identity": 1, "gate_passed": False}
+    failed = PASSING_IDENTITY | {"foreign_identity": 1, "gate_passed": False,
+                                 "reasons": PASSING_IDENTITY["reasons"] | {"foreign_identity": 1}}
     (results / numbers.IDENTITY_FILE).write_text(json.dumps(failed))
     run = run_cli("--results", str(results), "--out", str(tmp_path / "n.tex"), "--strict")
     assert run.returncode != 0

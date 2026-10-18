@@ -326,7 +326,7 @@ def leak_gate_problems(results: dict[str, Any]) -> list[str]:
 
 def identity_gate_problems(results: dict[str, Any]) -> list[str]:
     """Why the identity check blocks release: it failed, ran with a threshold below 0.9, or its pass rate, reason
-    counts or verdict do not match its own counts."""
+    counts (reasons.foreign_identity included) or verdict do not match its own counts."""
     report = results.get(IDENTITY_FILE)
     keys = ("n", "passed", "pass_rate", "threshold", "foreign_identity", "gate_passed")
     values = {key: lookup(report, key) for key in keys}
@@ -340,10 +340,13 @@ def identity_gate_problems(results: dict[str, Any]) -> list[str]:
     if not math.isclose(_number(values["pass_rate"]), passed / n):
         return [f"{IDENTITY_FILE}: pass_rate does not match passed / n; rerun it"]
     # Each failed reply carries one or more reasons, so no reason count can exceed the number that failed.
-    reason_counts = [("foreign_identity", values["foreign_identity"]), *(lookup(report, "reasons") or {}).items()]
+    reasons = lookup(report, "reasons") or {}
+    reason_counts = [("foreign_identity", values["foreign_identity"]), *reasons.items()]
     over = sorted({reason for reason, count in reason_counts if _number(count) > n - passed})
     if over:
         return [f"{IDENTITY_FILE}: {', '.join(over)} count exceeds the failed replies (n - passed); rerun it"]
+    if "foreign_identity" in reasons and _number(reasons["foreign_identity"]) != _number(values["foreign_identity"]):
+        return [f"{IDENTITY_FILE}: reasons.foreign_identity does not match foreign_identity; rerun it"]
     recomputed = _number(values["foreign_identity"]) == 0 and _number(values["pass_rate"]) >= _number(values["threshold"])
     if values["gate_passed"] is not recomputed:
         return [f"{IDENTITY_FILE}: gate_passed does not match pass_rate, threshold and foreign_identity; rerun it"]
