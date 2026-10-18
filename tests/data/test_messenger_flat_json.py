@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from fym1.data.messenger import load_threads
+from fym1.data.pipeline import build_records
 from fym1.data.segment import to_conversations
 
 
@@ -179,3 +180,41 @@ def test_long_group_chat_is_split_by_time_gaps(tmp_path):
 
     assert len(conversations) == 3
     assert all(c[0]["role"] == "user" and c[-1]["role"] == "assistant" for c in conversations)
+
+
+NICKNAME_EVENTS_FLAT = [
+    _msg(1, "Alpha", "Alpha set the nickname for Bravo to Zazakely.", "2026-07-01T08:00:00"),
+    _msg(2, "Charlie", "Charlie a défini son surnom sur Kotokely.", "2026-07-01T08:01:00"),
+    _msg(3, "Alpha", "Alpha a modifié le surnom de Bravo.", "2026-07-01T08:02:00"),  # no new nickname: unreadable
+    _msg(4, "Alpha", "Alpha set the nickname for Delta to Bibilava.", "2026-07-01T08:03:00"),  # not a participant
+    _msg(5, "Alpha", "Zazakely, aiza ianao?", "2026-07-01T08:04:00"),
+    _msg(6, "Bravo", "ao an-trano aho, Kotokely koa", "2026-07-01T08:05:00"),
+]
+
+
+def test_flat_nickname_events_are_harvested_and_counted(tmp_path):
+    _write(tmp_path / "group.json", NICKNAME_EVENTS_FLAT)
+
+    [thread] = load_threads(tmp_path)
+
+    assert thread.nicknames == {"Zazakely": "Bravo", "Kotokely": "Charlie"}
+    assert thread.unharvested_nickname_events == 2
+
+
+def test_flat_nickname_events_never_become_turns(tmp_path):
+    _write(tmp_path / "group.json", NICKNAME_EVENTS_FLAT)
+
+    [thread] = load_threads(tmp_path)
+
+    assert [m.text for m in thread.messages] == ["Zazakely, aiza ianao?", "ao an-trano aho, Kotokely koa"]
+
+
+def test_flat_nicknames_are_replaced_in_built_records(tmp_path):
+    _write(tmp_path / "group.json", NICKNAME_EVENTS_FLAT)
+
+    result = build_records(load_threads(tmp_path), owner="Bravo", is_malagasy=lambda _: True)
+
+    text = json.dumps([r["messages"] for r in result.records], ensure_ascii=False)
+    assert result.records
+    assert "Zazakely" not in text and "Kotokely" not in text
+    assert "nickname" not in text and "surnom" not in text
