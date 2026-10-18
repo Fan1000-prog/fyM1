@@ -64,7 +64,8 @@ def chrf_pp(hyps: list[str], refs: list[str]) -> float:
 def selection_row(result: dict, license: str, base_model: bool = False) -> dict:
     """One `candidates[]` row of results/model_selection.json from a results/baseline/<slug>.json file.
 
-    Sections the run did not produce (skipped model, FLORES pending) stay None. `belebele_acc` uses one
+    Sections the run did not produce (skipped model, FLORES pending) stay None; out-of-memory sections show
+    "oom" (in `belebele_protocol`, `belebele_chat_acc`, `flores`), never a number. `belebele_acc` uses one
     protocol for every model (plain-text completion); the chat-template score is a second column, left
     None for base models, which were never tuned to follow its instruction.
     `sniff_natural` is filled later from the owner's ratings.
@@ -72,6 +73,7 @@ def selection_row(result: dict, license: str, base_model: bool = False) -> dict:
     flores = result.get("flores", {})
     smoke = result.get("qlora_smoke", {})
     completion = result.get("belebele_completion", {})
+    chat = result.get("belebele", {})
     acc = completion.get("acc")
     return {
         "model": result["model"]["hub_id"],
@@ -79,7 +81,7 @@ def selection_row(result: dict, license: str, base_model: bool = False) -> dict:
         "belebele_acc": acc,
         "belebele_protocol": "completion 0-shot" + ("" if acc is not None else " (oom)" if completion.get("oom")
                                                     else " (pending)"),
-        "belebele_chat_acc": None if base_model else result.get("belebele", {}).get("acc"),
+        "belebele_chat_acc": None if base_model else "oom" if chat.get("oom") else chat.get("acc"),
         "chrf_plt_eng": flores.get("plt-eng_chrf++"),
         "chrf_eng_plt": flores.get("eng-plt_chrf++"),
         "flores": "measured" if "eng-plt_chrf++" in flores else "oom" if flores.get("oom") else "pending",

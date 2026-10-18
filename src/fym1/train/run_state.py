@@ -11,3 +11,10 @@ def session_progress(resumed: dict | None, session_seconds: float) -> dict:
     """Running totals to store with a checkpoint: earlier sessions (from the resumed checkpoint) plus this one."""
     resumed = resumed or {"wall_time_s": 0, "sessions": 0}
     return {"wall_time_s": resumed["wall_time_s"] + round(session_seconds), "sessions": resumed["sessions"] + 1}
+
+
+def check_hub_id(what: str, found: str, expected: str) -> None:
+    """Refuse a model id other than the one the notebook names (hub ids ignore case): results or training
+    would otherwise describe a different checkpoint, as when a loader silently remaps a name."""
+    if found.lower() != expected.lower():
+        raise ValueError(f"{what} is {found!r}, expected {expected!r}")
