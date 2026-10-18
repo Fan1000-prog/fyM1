@@ -249,7 +249,8 @@ changes, spaced-out letters), after decoding `\x`/`\u`/`\U`, HTML and percent es
 taken both as a break and as nothing. Only known text types are read, and a PDF with its metadata; any other file
 fails. The public tree holds no archives, so any archive (zip, gz, tar, tgz, 7z, rar, whl, jar, bz2, xz and the
 like) is refused before anything is written, found by its name or by its bytes: a file that starts like an
-archive or a compressed stream, a tar, or a file with a zip record anywhere (a zip glued to a PDF or a text file). A name of 4+ letters is a hit anywhere inside a word that no known-word list has, unless the release
+archive or a compressed stream, a tar, or a file with a zip record anywhere (a zip glued to a PDF or a text file).
+A name of 4+ letters is a hit anywhere inside a word that no known-word list has, unless the release
 owner clears that exact word in that exact file by hand, with a reason; a path is never cleared. Nothing is
 written to the public folder unless every check passes.
 
