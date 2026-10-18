@@ -188,8 +188,8 @@ is fully French or English drifts.
 
 \paragraph{LLM judge.} An LLM judge scored both answer sets blind, with labels hidden and order shuffled,
 on a published 1--5 rubric for naturalness and correctness \citep{zheng2023judging}. Methods disclosure:
-the judge is \fyJudgeModel{}; rubric in \path{src/fym1/eval/judge_rubric.md}. The same judge ran the
-greeting gate of Section~\ref{sec:selection}. Judge scores are a cheap signal, not a substitute for native
+the judge is \fyJudgeModel{}; rubric in \path{src/fym1/eval/judge_rubric.md}. The greeting gate of
+Section~\ref{sec:selection} used the same rubric with \fyGreetJudge{}. Judge scores are a cheap signal, not a substitute for native
 speakers.
 
 \paragraph{Regression checks.} Belebele accuracy, FLORES+ chrF++ in both directions, and held-out chat

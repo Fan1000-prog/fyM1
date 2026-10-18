@@ -263,3 +263,8 @@ def test_data_gate_counts_are_cited(tmp_path):
     (tmp_path / "data_gate.json").write_text(json.dumps({"conversations_before_gate": 260, "kept": 192}))
     values = resolve(tmp_path).values
     assert (values["gate-before"], values["gate-kept"], values["gate-dropped"]) == ("260", "192", None)
+
+
+def test_greeting_judge_is_disclosed(tmp_path):
+    (tmp_path / "greeting_gate.json").write_text(json.dumps({"judge": "Judge X, blind"}))
+    assert resolve(tmp_path).values["greet-judge"] == "Judge X, blind"

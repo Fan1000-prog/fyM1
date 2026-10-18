@@ -20,7 +20,7 @@ Expected files (keys are dotted paths below):
   model_selection.json   chosen (HF repo id), chosen_size (e.g. "8B"), license, hf_license (HF license id),
                          candidates[{model, license, belebele_acc, belebele_chat_acc, chrf_plt_eng,
                          chrf_eng_plt, tokens_per_word, sec_per_step, greeting_gate.judge_mean}]
-  greeting_gate.json     models.<model key>.{judge_mean, is_malagasy_rate, n}
+  greeting_gate.json     judge, models.<model key>.{judge_mean, is_malagasy_rate, n}
   train_log.json         gpu, steps, epochs, wall_time_s, final_train_loss, best_eval_loss,
                          config.{lora_r, lora_alpha, lr, lr_scheduler, max_seq_len, effective_batch}
   eval/scores.json       n_prompts, {base,fym1}.{drift_rate, leak_rate, perplexity,
@@ -173,6 +173,7 @@ def candidate_numbers() -> list[Number]:
         for label, key, fmt in [("mean", "judge_mean", fixed(2)), ("malagasy", "is_malagasy_rate", percent)]
     ]
     out.append(Number("greet-answers", "greeting_gate.json", ("models", GREETING_KEYS[QWEN], "n"), count))
+    out.append(Number("greet-judge", "greeting_gate.json", "judge", text))
     return out
 
 
