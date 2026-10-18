@@ -90,6 +90,7 @@ def test_paper_author_line():
     assert re.findall(r"\\author\{([^}]*)\}", tex) == [f"by {AUTHOR}"]
 
 
-def test_model_card_citation_author():
-    card = (REPO_ROOT / "MODEL_CARD.md").read_text("utf-8")
-    assert re.findall(r"author\s*=\s*\{(.*)\},", card) == [f"{{{AUTHOR}}}"]
+@pytest.mark.parametrize("name", ["README.md", "MODEL_CARD.md"])
+def test_citation_author(name):
+    card = (REPO_ROOT / name).read_text("utf-8")
+    assert re.findall(r"author\s*=\s*\{(.*)\},", card) == [AUTHOR]
