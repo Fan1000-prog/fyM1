@@ -3,9 +3,10 @@
 The public repo is a fresh single-commit repo built from this snapshot, so private git history never ships.
 Release blocker (lead decision 21): the export's sender names are read at run time, removed from the hand-written
 name lists, and searched for in every file except the lists a script rebuilds from public data alone. The lists
-scripts/build_known_words.py builds from public data minus the hand lists do not ship (REBUILT_LISTS). Everything
-this module reports is a count or a repo path; it never returns a sender name, a message text, a private id
-or a matched secret value.
+scripts/build_known_words.py builds from public data minus the hand lists do not ship (REBUILT_LISTS). Release
+blocker (lead decision 34): any shipped file sharing a CHAT_TEXT_NGRAM-word run with the export's message texts
+fails the release. Everything this module reports is a count or a repo path; it never returns a sender name, a
+message text, a private id or a matched secret value.
 """
 
 import fnmatch
@@ -29,7 +30,8 @@ from fym1.data.anonymize import MIN_NAME_PREFIX, NAME_SUFFIXES, compare_key, fol
 from fym1.data.gate import PERSON_MARKER_WORDS, is_hidden_char
 from fym1.data.gate import tokens as gate_tokens
 from fym1.data.known_words import KNOWN_WORDS, known_by
-from fym1.data.messenger import load_threads
+from fym1.data.messenger import Thread, load_threads
+from fym1.eval.metrics import NgramIndex
 
 
 @dataclass(frozen=True)
@@ -159,6 +161,8 @@ INNER_NAME_ALLOWED: dict[tuple[str, str], str] = {
 }
 # Meta's label for a deleted or unknown account: not a person's name.
 PLACEHOLDER_SENDERS = frozenset({"facebook user", "utilisateur de facebook", "instagram user", "meta user"})
+# Word-run length that counts as copied chat text: the same n as the training-data leak gate (fym1.eval.metrics).
+CHAT_TEXT_NGRAM = 8
 PRIVATE_HF_ID = "Fan1000-Prog/" + "fyM1-"  # split so test_public_name does not see a Hub id
 
 SECRET_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -227,6 +231,8 @@ class Report:
     name_hits: dict[str, int] = field(default_factory=dict)
     private_ids: int = 0
     private_id_hits: dict[str, int] = field(default_factory=dict)
+    chat_messages: int = 0
+    chat_text_hits: list[str] = field(default_factory=list)
     unscannable: list[str] = field(default_factory=list)
     secret_hits: dict[str, dict[str, int]] = field(default_factory=dict)
     emails_allowed: int = 0
@@ -235,7 +241,8 @@ class Report:
 
     @property
     def ok(self) -> bool:
-        return not (self.name_hits or self.private_id_hits or self.secret_hits or self.unscannable)
+        return not (self.name_hits or self.private_id_hits or self.secret_hits or self.unscannable
+                    or self.chat_text_hits)
 
     def as_dict(self) -> dict:
         return {
@@ -260,6 +267,12 @@ class Report:
                 "ids_checked": self.private_ids,
                 "hits_per_file": self.private_id_hits,
                 "hits_total": sum(self.private_id_hits.values()),
+            },
+            "chat_text": {
+                "messages_indexed": self.chat_messages,
+                "ngram_words": CHAT_TEXT_NGRAM,
+                "files_with_hits": self.chat_text_hits,
+                "files_total": len(self.chat_text_hits),
             },
             "secrets": {
                 "hits_per_file": self.secret_hits,
@@ -342,15 +355,41 @@ def name_tokens(senders: Iterable[str]) -> tuple[frozenset[str], int, int]:
     return frozenset(tokens), len(short - tokens), placeholders
 
 
-def export_senders(export: Path) -> list[str]:
-    """Every sender and listed participant in the export. Errors never carry the export's paths or text."""
+def read_export(export: Path) -> list[Thread]:
+    """The export's conversations. Errors never carry the export's paths or text."""
     try:
         threads = load_threads(export)
     except (ValueError, OSError, KeyError, TypeError) as error:
         raise RefusedError(f"export could not be read ({type(error).__name__})") from None
     if not threads:
         raise RefusedError("export holds no conversations")
+    return threads
+
+
+def export_senders(threads: list[Thread]) -> list[str]:
+    """Every sender and listed participant in the export."""
     return [p for thread in threads for p in [*thread.participants, *(m.sender for m in thread.messages)]]
+
+
+# ---- chat text ------------------------------------------------------------------------------------------------
+
+
+def chat_text_index(threads: list[Thread]) -> tuple[NgramIndex, int]:
+    """CHAT_TEXT_NGRAM-word runs of every message text, as written and as the anonymiser `normalise`s it, and the
+    number of messages read. Refused when no message is that long: an empty index would pass every file unchecked."""
+    texts = [m.text for thread in threads for m in thread.messages if m.text]
+    try:
+        index = NgramIndex([*texts, *map(normalise, texts)], n=CHAT_TEXT_NGRAM)
+    except ValueError:
+        raise RefusedError(f"export has no {CHAT_TEXT_NGRAM}-word message to check copied chat text against") \
+            from None
+    return index, len(texts)
+
+
+def has_chat_text(text: str, index: NgramIndex) -> bool:
+    """`text` shares a word run with the export's messages, read as written and in both name-scan `readings`
+    (escapes decoded, hidden characters as a break and taken out)."""
+    return any(index.shares_with(reading) for reading in (text, *readings(text)))
 
 
 def count_name_hits(text: str, names: frozenset[str], allowed: frozenset[str] = frozenset()) -> int:
@@ -673,18 +712,21 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
     """
     root, sha = check_inputs(repo, ref, out)
     ids, id_count = load_private_ids(private_ids, worktrees(root))
-    names, short, placeholders = name_tokens(export_senders(export))
+    threads = read_export(export)
+    names, short, placeholders = name_tokens(export_senders(threads))
     if not names:
         raise RefusedError("export gave no sender name tokens")
+    chat, chat_messages = chat_text_index(threads)
     files, excluded = tracked_files(root, sha)
     out.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{out.name}.partial-", dir=out.parent))
     try:
-        report = _write_and_check(files, excluded, staging, names, ids)
+        report = _write_and_check(files, excluded, staging, names, ids, chat)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
     report.ref, report.name_tokens, report.private_ids = sha, len(names), id_count
+    report.chat_messages = chat_messages
     report.short_tokens_skipped, report.placeholder_senders_skipped = short, placeholders
     if not report.ok:
         shutil.rmtree(staging)
@@ -696,7 +738,7 @@ def build_snapshot(repo: Path, ref: str, out: Path, export: Path, private_ids: P
 
 
 def _write_and_check(files: dict[str, tuple[bytes, int]], excluded: list[dict], out: Path, names: frozenset[str],
-                     ids: re.Pattern[str]) -> Report:
+                     ids: re.Pattern[str], chat: NgramIndex) -> Report:
     kept = write_files(files, out)
     report = Report(ref="", files_copied=len(kept), excluded=excluded)
     matched = {exclusion_entry(e["path"]) for e in excluded}
@@ -726,6 +768,8 @@ def _write_and_check(files: dict[str, tuple[bytes, int]], excluded: list[dict], 
             report.name_hits[path] = hits
         if id_hits := count_private_ids(text, ids) + count_private_ids(path, ids):
             report.private_id_hits[path] = id_hits
+        if has_chat_text(text, chat):
+            report.chat_text_hits.append(path)
         if secrets := secret_hits(path, text):
             report.secret_hits[path] = dict(sorted(secrets.items()))
         report.emails_allowed += allowed_email_count(path, text)
@@ -753,6 +797,7 @@ def _redact_named_paths(report: Report, names: frozenset[str], ids: re.Pattern[s
     for attr in ("list_entries_removed", "name_hits", "private_id_hits", "secret_hits", "private_hf_ids"):
         setattr(report, attr, {alias(p): v for p, v in sorted(getattr(report, attr).items())})
     report.unscannable = [alias(p) for p in report.unscannable]
+    report.chat_text_hits = [alias(p) for p in report.chat_text_hits]
     report.excluded = [{**e, "path": alias(e["path"])} for e in report.excluded]
 
 

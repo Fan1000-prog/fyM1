@@ -43,11 +43,18 @@ def make_repo(tmp_path: Path, files: dict[str, str | bytes]) -> Path:
     return repo
 
 
-def make_export(tmp_path: Path, senders: list[str] = FAKE_SENDERS) -> Path:
+# Synthetic chat line in the synthetic export: shipped text sharing 8 words in a row with it is copied chat text.
+FAKE_CHAT = "rahampitso maraina dia handeha hiantsena izahay miaraka amin'ny namanay any an-tanàna"
+FAKE_CHAT_WORDS = FAKE_CHAT.replace("'", " ").replace("-", " ").split()  # as fym1.eval.metrics splits words
+
+
+def make_export(tmp_path: Path, senders: list[str] = FAKE_SENDERS, chat: str = FAKE_CHAT) -> Path:
+    """Each sender says "salama"; the first one also says `chat`."""
     raw = tmp_path / "raw"
     raw.mkdir()
-    messages = [{"id": str(i), "sender": s, "text": "salama", "timestamp": f"2026-01-01T10:0{i}:00"}
-                for i, s in enumerate(senders)]
+    lines = [*((s, "salama") for s in senders), (senders[0], chat)]
+    messages = [{"id": str(i), "sender": s, "text": text, "timestamp": f"2026-01-01T10:0{i}:00"}
+                for i, (s, text) in enumerate(lines)]
     (raw / "export.json").write_text(json.dumps({"conversation": {"title": "t"}, "messages": messages}))
     return raw
 
@@ -549,6 +556,59 @@ def test_private_ids_file_empty_or_missing_is_refused(tmp_path):
         build_snapshot(repo, "HEAD", tmp_path / "public", export, tmp_path / "missing.txt")
 
 
+# ---- copied chat text (lead decision 34) ------------------------------------------------------------------------
+
+
+def _run(words: list[str]) -> str:
+    return " ".join(words)
+
+
+@pytest.mark.parametrize(("text", "hit"), [
+    (f"Example reply: {_run(FAKE_CHAT_WORDS[2:10])}.", True),  # 8 words in a row
+    (f"Example reply: {_run(FAKE_CHAT_WORDS[2:10]).upper()}!", True),  # any case
+    (f'"text": "{_run(FAKE_CHAT_WORDS[:4])}\\n{_run(FAKE_CHAT_WORDS[4:8])}"', True),  # JSON escape between words
+    (f"{_run(FAKE_CHAT_WORDS[:4])}\u200b {_run(FAKE_CHAT_WORDS[4:8])}", True),  # hidden character
+    (f"Example reply: {_run(FAKE_CHAT_WORDS[2:9])}.", False),  # only 7 words in a row
+    (f"{_run(FAKE_CHAT_WORDS[:4])} sy {_run(FAKE_CHAT_WORDS[4:8])}", False),  # a word between the halves
+])
+def test_has_chat_text_needs_an_8_word_run(tmp_path, text, hit):
+    index, messages = release.chat_text_index(release.read_export(make_export(tmp_path)))
+    assert messages == len(FAKE_SENDERS) + 1
+    assert release.has_chat_text(text, index) == hit
+
+
+def test_export_without_an_8_word_message_is_refused_before_anything_is_written(tmp_path):
+    repo = make_repo(tmp_path, CLEAN_FILES)
+    with pytest.raises(RefusedError, match="8-word message"):
+        snap(repo, tmp_path / "public", make_export(tmp_path, chat=_run(FAKE_CHAT_WORDS[:7])))
+    assert not (tmp_path / "public").exists() and not _leftovers(tmp_path)
+
+
+def test_copied_chat_text_fails_with_counts_and_paths_only(tmp_path, capsys):
+    copied = _run(FAKE_CHAT_WORDS[1:9])
+    files = {**CLEAN_FILES, "paper/examples.tex": f"Reply: {copied}\n", "docs/near.md": _run(FAKE_CHAT_WORDS[:7]),
+             f"docs/{FAKE_ID}.md": f"{copied}\n"}
+    repo = make_repo(tmp_path, files)
+    out, results = tmp_path / "public", tmp_path / "results.json"
+    assert cli.main([*cli_args(tmp_path, repo, out), "--results", str(results)]) == 1
+    assert not out.exists() and not _leftovers(tmp_path)  # refused: nothing written
+    report = json.loads(results.read_text())
+    assert report["ok"] is False
+    assert report["chat_text"] == {"messages_indexed": 3, "ngram_words": 8, "files_total": 2,
+                                   "files_with_hits": ["<redacted path 1>", "paper/examples.tex"]}
+    printed = capsys.readouterr()
+    for blob in (results.read_text(), printed.out + printed.err):
+        assert copied not in blob and not any(word in blob for word in FAKE_CHAT_WORDS if len(word) > 5)
+    assert "files sharing an 8-word run 2" in printed.out
+
+
+def test_a_7_word_overlap_passes_end_to_end(tmp_path):
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "docs/near.md": f"{_run(FAKE_CHAT_WORDS[:7])}\n"})
+    report = snap(repo, tmp_path / "public", make_export(tmp_path))
+    assert report.ok and report.chat_text_hits == []
+    assert (tmp_path / "public/docs/near.md").exists()
+
+
 # ---- unreadable files and NOTICE ------------------------------------------------------------------------------
 
 
@@ -610,6 +670,14 @@ def test_pdf_metadata_is_scanned(tmp_path):
     path = tmp_path / "paper.pdf"
     path.write_bytes(_pdf("<< /Author (Zafy Bodo) /Title (notes) >>"))
     assert count_name_hits(release.read_text(path), NAMES) == 2
+
+
+@needs_poppler
+def test_chat_text_in_a_pdf_fails(tmp_path):
+    pdf = _pdf(f"<< /Title ({_run(FAKE_CHAT_WORDS[:8])}) >>")
+    repo = make_repo(tmp_path, {**CLEAN_FILES, "paper/main.pdf": pdf})
+    report = snap(repo, tmp_path / "public", make_export(tmp_path))
+    assert report.chat_text_hits == ["paper/main.pdf"] and not report.unscannable and not report.ok
 
 
 @pytest.mark.parametrize("path", ["data/a.zip", "data/a.txt.gz", "dist/x.tar.gz", "dist/x.TGZ", "vendor/x.whl",

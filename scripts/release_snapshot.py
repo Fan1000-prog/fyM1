@@ -7,14 +7,15 @@ Copies the commit's tracked files (no git history) into --out, outside every wor
 in fym1.release.EXCLUDES (including the word lists scripts/build_known_words.py writes), and adds a NOTICE for
 the third-party word lists. Sender names are read from the export at run time, removed from the hand-written
 name lists and searched for in every file but the lists a script builds from public data alone, as the strict
-gate reads words (case changes, spaced-out letters, digits typed for letters, hidden characters, escapes); then
-a secret scan runs. Only known text types and PDFs (text and metadata) are read; any other file fails, and any
+gate reads words (case changes, spaced-out letters, digits typed for letters, hidden characters, escapes). Any
+file sharing an 8-word run with the export's message texts fails (copied chat text, counted per file, never
+shown); then a secret scan runs. Only known text types and PDFs (text and metadata) are read; any other file fails, and any
 archive (zip, gz, tar, whl, ...) is refused before anything is written. Writes the counts report to --results
 only (never into --out: the report is a private build record).
 --private-ids names a file outside the repo (one private account id per line); any whole-word,
 case-insensitive match in a snapshot file or path fails the check, counted per file, never shown.
 Prints and writes counts and repo paths only, never a name, message text or secret value.
-Exit 0: clean, snapshot in --out. Exit 1: name hits, secret hits or an unreadable file; nothing written to --out.
+Exit 0: clean, snapshot in --out. Exit 1: name hits, private-id hits, copied chat text, secret hits or an unreadable file; nothing written to --out.
 Exit 2: refused before anything was written.
 """
 
@@ -52,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
           f"in {len(report.name_hits)} files, unscannable {len(report.unscannable)}")
     print(f"private ids {report.private_ids}, hits {summary['private_ids']['hits_total']} "
           f"in {len(report.private_id_hits)} files")
+    print(f"chat messages {report.chat_messages}, files sharing an {summary['chat_text']['ngram_words']}-word run "
+          f"{summary['chat_text']['files_total']}")
     print(f"secret hits {summary['secrets']['hits_total']} in {len(report.secret_hits)} files")
     print(f"report: {results}")
     print("OK" if report.ok else "FAILED: see the report's per-file counts; nothing was written to --out")
