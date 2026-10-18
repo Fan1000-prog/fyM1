@@ -1,12 +1,17 @@
 """Counts over the chats the strict gate kept: messages per role and post-run leak checks. No text.
 
 The leak checks are deliberately simpler and blunter than the gate (fym1.data.gate): they run on the
-gate's output as a second, independent look. Each must be 0 on a clean build. They do not excuse
-prices, so a 7-digit price left in a kept chat shows up here too.
+gate's output as a second, independent look. Text is NFKC-normalised first (anonymize.normalise), so
+full-width or circled forms count like plain ones. The checks excuse nothing, so a clean build can still
+count things the gate keeps on purpose: a price ("1 500 000 Ar" is a spaced digit run) or a bare domain
+with no path ("example.com" is a link). A non-zero count means "look at these", not "the gate failed";
+only a phone number, email address, @handle or link with a path among them is a leak.
 """
 
 import re
 from collections.abc import Iterable
+
+from fym1.data.anonymize import normalise
 
 ROLES = ("user", "assistant")
 MIN_LEAK_DIGITS = 7
@@ -22,7 +27,7 @@ KEPT_COUNT_KEYS = (
 )
 
 DIGIT_RUN = re.compile(rf"\d{{{MIN_LEAK_DIGITS},}}")
-SPACED_DIGIT_RUN = re.compile(r"\d(?:[\W_]{0,3}\d)*")  # digits split by up to 3 non-letters
+SPACED_DIGIT_RUN = re.compile(r"\d(?:[\W_]*\d)*")  # any non-letter gap joins digits, as in the gate
 EMAIL = re.compile(r"[\w.+-]+\s*[@＠]\s*[\w-]+(?:\.[\w-]+)+")
 AT_SIGN = re.compile("[@＠]")
 LINK = re.compile(
@@ -32,7 +37,7 @@ LINK = re.compile(
 
 
 def _texts(records: Iterable[dict]) -> list[str]:
-    return [turn["content"] for record in records for turn in record["messages"]]
+    return [normalise(turn["content"]) for record in records for turn in record["messages"]]
 
 
 def message_counts(records: Iterable[dict]) -> dict[str, int]:

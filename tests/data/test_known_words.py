@@ -1,5 +1,7 @@
 """Known-word lists and the script that builds them: synthetic text only."""
 
+import re
+from importlib.resources import files
 from pathlib import Path
 
 from fym1.data.known_words import KNOWN_WORDS, known_by, word_list
@@ -60,14 +62,23 @@ def test_build_takes_frequent_insee_first_names_but_not_malagasy_words(build_kno
     assert names == ["sandrine"]
 
 
-def test_every_word_list_file_starts_with_a_source_line(build_known_words):
+BUILD_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "build_known_words.py"
+
+
+def _first_line(name):
+    return files("fym1.data").joinpath(name).read_text("utf-8").splitlines()[0]
+
+
+def test_every_word_list_file_starts_with_a_source_line():
     for name in ("mg_wiki_words.txt", "fr_words.txt", "en_words.txt", "first_names.txt", "mg_known_names.txt"):
-        first = (Path(build_known_words.DATA) / name).read_text("utf-8").splitlines()[0]
-        assert first.startswith("# "), name
+        assert _first_line(name).startswith("# "), name
 
 
-def test_build_pins_the_wikipedia_revision(build_known_words):
-    assert len(build_known_words.WIKIPEDIA_REVISION) == 40
+def test_build_pins_the_wikipedia_revision():
+    """Read from the script text, so this runs without the `data` group the script imports."""
+    pinned = re.search(r'^WIKIPEDIA_REVISION = "([0-9a-f]+)"', BUILD_SCRIPT.read_text("utf-8"), re.MULTILINE)
+
+    assert pinned and len(pinned.group(1)) == 40
 
 
 def test_build_keeps_first_names_a_wikipedia_uses_as_words_and_not_names(build_known_words):
@@ -82,6 +93,5 @@ def test_build_keeps_first_names_a_wikipedia_uses_as_words_and_not_names(build_k
     assert words == ["rose", "tia"]
 
 
-def test_wordlike_first_names_file_starts_with_a_source_line(build_known_words):
-    first = (Path(build_known_words.DATA) / "wordlike_first_names.txt").read_text("utf-8").splitlines()[0]
-    assert first.startswith("# ")
+def test_wordlike_first_names_file_starts_with_a_source_line():
+    assert _first_line("wordlike_first_names.txt").startswith("# ")

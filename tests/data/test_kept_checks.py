@@ -33,6 +33,10 @@ def test_clean_chats_have_no_leaks():
         ("vola 1500000 Ar", "leak_digit_runs"),  # no price excuse, unlike the gate
         ("antsoy 034 12 345 67", "leak_spaced_digit_runs"),
         ("antsoy 034.12.345.67", "leak_spaced_digit_runs"),
+        ("antsoy 034 -- 12 -- 345 -- 67", "leak_spaced_digit_runs"),  # any gap joins digits, as in the gate
+        ("antsoy 034 ... 123 ... 4567", "leak_spaced_digit_runs"),
+        ("antsoy 034 - - 123 - - 4567", "leak_spaced_digit_runs"),
+        ("antsoy ０３４１２３４５６７", "leak_digit_runs"),  # full-width digits read as plain
         ("alefaso any amin'ny rabe.sample@example.mg", "leak_emails"),
         ("alefaso amin'ny rabe @ example.com", "leak_emails"),
         ("ry @someone", "leak_at_signs"),
@@ -41,6 +45,7 @@ def test_clean_chats_have_no_leaks():
         ("jereo www.example", "leak_links"),
         ("jereo example.com", "leak_links"),
         ("jereo m.me/someone", "leak_links"),
+        ("jereo ＥＸＡＭＰＬＥ．ＣＯＭ", "leak_links"),
     ],
 )
 def test_each_leak_is_counted(text, key):
