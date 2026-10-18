@@ -1,7 +1,7 @@
 # Anonymisation (scripts/build_chats.py)
 
 Runs on the owner's laptop before anything leaves it. Code: `src/fym1/data/anonymize.py`.
-Tests: `tests/data/test_anonymize.py`, `tests/data/test_anonymize_probes.py`.
+Tests: `tests/data/test_anonymize.py`, `tests/data/test_anonymize_probes.py`, `tests/data/test_anonymize_dates.py`.
 
 ## What is replaced
 
@@ -22,6 +22,19 @@ Common Malagasy words (top 3,000 from Malagasy Wikipedia, `src/fym1/data/mg_comm
 are never wiped by a prefix match. If a contact's name *is* a common word ("Vola"), that word is
 replaced everywhere; `build_chats.py` reports how often (`common_word_replacements`), and how many
 nickname events it could not read (`unharvested_nickname_events`).
+
+## Dates next to numbers
+
+Real dates are found in the whole message before phones are: `dd/mm/yyyy`, `dd-mm-yyyy`, `dd.mm.yyyy`,
+`dd/mm/yy`, `dd/mm`, `yyyy-mm-dd` (day 1-31, month 1-12), and ranges of them (`15/03-20/03/2026`). A phone
+is never read out of a date, so "15/03/2026 1 500 Ar", "le 15/03/2026 14h30" and "15/03/2026 14 30" stay
+as written, and "15/03/2026 034 12 345 67" keeps the date and masks the phone. A date glued to more
+digits ("34/12/2019/5", "038 27 2000/5") is not a date. A phone that starts with `+`, `00`, `261` or
+`02x`/`03x` outside a date still wins when a date shape sits inside it ("034 01/02/26 7").
+
+Checked by a generated corpus of 5,000 everyday lines (dates, prices, times, quantities): none gets a
+`<TEL>` (before this rule, 1,568 did). Two non-date numbers side by side ("08 18 150 000") are still
+one number to the phone rule; that is not a date problem.
 
 ## Leftover names: the owner's second pass
 

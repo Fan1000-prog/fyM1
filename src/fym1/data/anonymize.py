@@ -80,22 +80,64 @@ PHONE = re.compile(
     r")(?!\w)"
     rf"|(?<![\d+]){_MG_PHONE_GLUED}(?!\d)"  # glued to a word: "laharana034 …", "wa+26134…", "tel(034) …"
 )
-# "01/02/2026 03/04" is dates, not a phone: the whole match must be one real day/month/year,
-# plus at most one time or number group. A phone with a year-like group ("038 27 2000/5") or
-# one that merely contains a date ("+261 34/12/2019/5") is still a phone; a match starting
-# with a country code can never fit this shape.
-_WHOLE_DATE = re.compile(
-    r"(?:(?P<day>\d{1,2})[/-](?P<month>\d{1,2})[/-](?:19|20)\d\d"
-    r"|(?:19|20)\d\d[/-](?P<month2>\d{1,2})[/-](?P<day2>\d{1,2}))(?:\s+\d{1,4})?"
+# Real dates are found in the whole text first, so a phone match can't start inside one:
+# "15/03/2026 1 500 Ar" would otherwise read "03/2026 1 500" as a 10-digit number.
+# dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy, dd/mm/yy, dd/mm, yyyy-mm-dd, and ranges of them
+# ("15/03-20/03/2026"). Not after "digit/" or "digit.", nor before "/digit", ".digit" or
+# "-digit", so "34/12/2019/5" and "038 27 2000/5" are not dates.
+_DAY = r"(?:0?[1-9]|[12]\d|3[01])"
+_MONTH = r"(?:0?[1-9]|1[0-2])"
+_YEAR = r"(?:19|20)\d\d"
+_ONE_DATE = "|".join(
+    [rf"{_DAY}{sep}{_MONTH}{sep}(?:{_YEAR}|\d\d)" for sep in ("/", "-", r"\.")]
+    + [rf"{_YEAR}{sep}{_MONTH}{sep}{_DAY}" for sep in ("/", "-", r"\.")]
+    + [rf"{_DAY}/{_MONTH}"]
 )
+DATE = re.compile(rf"(?<!\d)(?<!\d[/.])(?:{_ONE_DATE})(?:\s*[-–]\s*(?:{_ONE_DATE}))*(?![/.-]?\d)")
+# A phone starting outside a date with one of these still wins over a date shape inside it,
+# unless it continues an amount ("25 000 000 28/09", "1 261 340 000 19/04").
+_STRONG_PHONE_START = re.compile(r"\(?\s*(?:\+|00[1-9]|261|[0Oo]\s*\)?\s*[./,_-]?\s*[23]\d)")
+_AMOUNT_BEFORE = re.compile(r"\d[ .,]$")
+_DATE_FILLER = "\ue010"  # private-use: not a digit, word, space or separator
 
 
-def _is_whole_date(text: str) -> bool:
-    match = _WHOLE_DATE.fullmatch(text.strip())
-    if not match:
-        return False
-    day, month = int(match["day"] or match["day2"]), int(match["month"] or match["month2"])
-    return 1 <= day <= 31 and 1 <= month <= 12
+def _is_strong_phone(text: str, match: re.Match) -> bool:
+    return bool(_STRONG_PHONE_START.match(match.group())) and not _AMOUNT_BEFORE.search(text, 0, match.start())
+
+
+def _mask_phones(text: str) -> str:
+    """Every phone becomes <TEL>; real dates are never read as part of one.
+
+    Phones are matched on a copy where each date is blanked out, so "15/03/2026 1 500 Ar"
+    keeps its price and "15/03/2026 034 12 345 67" masks only the phone. A strong phone
+    (+, 00x, 261, 0[23]x) that starts outside a date and runs through a date shape is
+    matched on the real text and still wins: "034 01/02/26 7".
+    """
+    dates = [m.span() for m in DATE.finditer(text)]
+    if not dates:
+        return PHONE.sub("<TEL>", text)
+    blanked = list(text)
+    for start, end in dates:
+        blanked[start:end] = _DATE_FILLER * (end - start)
+    spans = [m.span() for m in PHONE.finditer("".join(blanked))]
+    pos = 0
+    while match := PHONE.search(text, pos):
+        start, end = match.span()
+        date_end = next((e for s, e in dates if s <= start < e), None)
+        if date_end is not None:
+            pos = date_end
+            continue
+        if any(s < end and start < e for s, e in dates) and _is_strong_phone(text, match):
+            spans.append((start, end))
+        pos = start + 1
+    pieces, done = [], 0
+    for start, end in sorted(spans):
+        if start >= done:
+            pieces += [text[done:start], "<TEL>"]
+        done = max(done, end)  # an overlapping match widens the phone before it
+    return "".join(pieces) + text[done:]
+
+
 # Malagasy plot addresses: "Lot II M 85 Ter", "Lot IVG 12 Bis". Kept only if it holds a number.
 _LOT_PART = r"(?:[IVX]+[A-Z]*|\d+[A-Za-z]*|[A-Z]{1,3}|[Bb]is|[Tt]er|[Qq]uater)\b"
 LOT_ADDRESS = re.compile(rf"\b[Ll][Oo][Tt]\.?\s+{_LOT_PART}(?:[\s-]+{_LOT_PART})*")
@@ -182,10 +224,6 @@ def _hashed_fake(text: str, words: int, firsts: list[str], lasts: list[str]) -> 
     return first if words == 1 else f"{first} {lasts[number // len(firsts) % len(lasts)]}"
 
 
-def _phone(match: re.Match) -> str:
-    return match.group() if _is_whole_date(match.group()) else "<TEL>"
-
-
 def _lot_address(match: re.Match) -> str:
     return "<ADDRESS>" if any(c.isdigit() for c in match.group()) else match.group()
 
@@ -223,7 +261,7 @@ class Anonymizer:
         text = unicodedata.normalize("NFC", text)
         text = EMAIL.sub("<EMAIL>", text)
         text = URL.sub("<URL>", text)
-        text = PHONE.sub(_phone, text)
+        text = _mask_phones(text)
         text = LOT_ADDRESS.sub(_lot_address, text)
         text = LABELLED_HANDLE.sub(_labelled_handle, text)
         mentions: list[str] = []
