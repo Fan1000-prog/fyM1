@@ -19,7 +19,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from fym1.data.anonymize import NAME_SUFFIXES, compare_key, normalise
+from fym1.data.anonymize import MIN_NAME_PREFIX, NAME_SUFFIXES, compare_key, is_everyday_word, normalise
 from fym1.data.gate import PERSON_MARKER_WORDS
 from fym1.data.messenger import load_threads
 
@@ -124,12 +124,9 @@ TEST_EMAIL_DOMAINS: dict[str, str] = {
     "mail.mg": "made-up domain of a synthetic known-words probe",
     "t.invalid": "reserved .invalid domain, the git identity of synthetic test repos",
 }
-# Under tests/ only: synthetic probes that need a real provider's shape (plus-tags, upper case) to test masking.
-# Kept as (local part, domain) so this file holds no address itself.
-TEST_PROBE_EMAILS: dict[str, str] = {
-    f"{local}@{domain}": "synthetic anonymiser probe in tests/data/test_anonymize_probes.py"
-    for local, domain in (("nirina+tag", "gmail.com"), ("nirina", "gmail.com"), ("nirina.rk+fy", "yahoo.fr"),
-                          ("marie-claire.rasoanaivo", "gmail.com"))
+# Test files whose synthetic probes need a real provider's shape (plus-tags, upper case) to test email masking.
+EMAIL_PROBE_FILES: dict[str, str] = {
+    "tests/data/test_anonymize_probes.py": "synthetic anonymiser probes at real providers' domains",
 }
 SECRET_FILE_NAMES = frozenset({".env", "kaggle.json", "access_token", "id_rsa", "id_ed25519", ".netrc"})
 SECRET_FILE_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
@@ -207,10 +204,16 @@ def words(text: str) -> list[str]:
 
 def is_name_word(word: str, names: frozenset[str]) -> bool:
     """`word` (a `words()` key) is a name, alone or with a glued person marker ("iZafy", "n'iZafy" reads "izafy",
-    "ryZafy") and/or a glued possessive ending ("Zafyko"), the anonymiser's suffix list."""
+    "ryZafy") and/or a glued possessive ending ("Zafyko"), the anonymiser's suffix list, or starts with a 4+ letter
+    name ("zafybodo"). Like the anonymiser, only an exact name match counts for an everyday word."""
+    if word in names:
+        return True
+    if is_everyday_word(word):  # checked first, as the anonymiser does: "farany" is not "Fara" + "-ny"
+        return False
     stems = {word} | {word[len(m):] for m in PERSON_MARKER_WORDS if word.startswith(m)}
     stems |= {stem[: -len(s)] for stem in stems for s in NAME_SUFFIXES if stem.endswith(s)}
-    return not stems.isdisjoint(names)
+    long_names = [name for name in names if len(name) >= MIN_NAME_PREFIX]
+    return not stems.isdisjoint(names) or any(stem.startswith(n) for stem in stems for n in long_names)
 
 
 def name_tokens(senders: Iterable[str]) -> tuple[frozenset[str], int, int]:
@@ -309,8 +312,7 @@ def email_allowed(path: str, email: str) -> bool:
     address = email.casefold()
     if address in ALLOWED_EMAILS:
         return True
-    in_tests = path.startswith("tests/")
-    return in_tests and (address.rsplit("@", 1)[1] in TEST_EMAIL_DOMAINS or address in TEST_PROBE_EMAILS)
+    return path in EMAIL_PROBE_FILES or (path.startswith("tests/") and address.rsplit("@", 1)[1] in TEST_EMAIL_DOMAINS)
 
 
 def allowed_email_count(path: str, text: str) -> int:
@@ -477,7 +479,8 @@ def _redact_named_paths(report: Report, names: frozenset[str], ids: re.Pattern[s
     aliases: dict[str, str] = {}
 
     def alias(path: str) -> str:
-        if count_name_hits(path, names) or count_private_ids(path, ids):
+        # Redaction is cheap, so a name anywhere inside a path word counts here ("bodozafy").
+        if any(name in word for word in words(path) for name in names) or count_private_ids(path, ids):
             return aliases.setdefault(path, f"<redacted path {len(aliases) + 1}>")
         return path
 

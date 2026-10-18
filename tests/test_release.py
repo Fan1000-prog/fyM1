@@ -83,6 +83,12 @@ def test_name_tokens_fold_case_and_accents_and_skip_short_and_placeholders():
     assert (short, placeholders) == (1, 1)
 
 
+def test_prefix_rule_spares_everyday_words_like_the_anonymiser():
+    names = frozenset({"fara"})
+    assert release.is_name_word("faraso", names)
+    assert not release.is_name_word("farany", names)  # "farany" is not "Fara" + "-ny"
+
+
 def test_strip_list_catches_stretched_and_glued_entries():
     text, removed = strip_list("mialy\nZafyyy\niBodo\nfanja\n", NAMES)
     assert (text, removed) == ("mialy\nfanja\n", 2)
@@ -100,7 +106,9 @@ def test_strip_list_removes_matching_entries_any_case_or_accent_and_keeps_commen
     ("zafy_test", 2),
     ('"line\\nZafy"', 1),
     ('"\\u005aafy"', 1),
-    ("Zafyo Bodoina", 0),
+    ("Zafyo Bodoina", 2),  # the anonymiser's 4+ letter prefix rule
+    ("zafybodo_42", 1),
+    ("Zaf Bod Tes", 0),
     ("nothing here", 0),
     ("Salama iZafy", 1),
     ("tamin'n'iZafy sy an'iBodo", 2),
@@ -129,7 +137,8 @@ def test_secret_hits_count_patterns_and_files_without_values():
 def test_secret_hits_env_files_and_email_allow_list():
     assert secret_hits("config/.env", "") == {"secret_file": 1}
     assert secret_hits("scripts/x.py", "see x@y.mg") == {}
-    assert secret_hits("tests/data/test_x.py", "probe zz@mail.example and NIRINA@GMAIL.COM") == {}
+    assert secret_hits("tests/data/test_x.py", "probe zz@mail.example") == {}
+    assert secret_hits("tests/data/test_anonymize_probes.py", "PROBE" + "@GMAIL.COM") == {}
     assert release.allowed_email_count("tests/data/test_x.py", "probe zz@mail.example") == 1
     # Only the made-up domains and the listed probes are allowed under tests/, and nothing outside tests/.
     assert secret_hits("tests/data/test_x.py", "real.person" + "@gmail.com") == {"email": 1}
@@ -168,7 +177,8 @@ def test_snapshot_drops_excluded_paths_strips_hand_lists_only_and_passes(tmp_pat
 
 
 def test_name_and_secret_hits_fail_and_never_leak(tmp_path, capsys):
-    files = {**CLEAN_FILES, "docs/notes.md": f"Thanks to Zafy.\nkey {FAKE_HF}\n", "zafy/readme.md": "x\n"}
+    files = {**CLEAN_FILES, "docs/notes.md": f"Thanks to Zafy.\nkey {FAKE_HF}\n", "zafy/readme.md": "x\n",
+             "docs/inbox/xbodox_1.md": f"{FAKE_HF}\n"}  # a name inside a path word: redacted too
     repo = make_repo(tmp_path, files)
     out = tmp_path / "public"
     code = cli.main([*cli_args(tmp_path, repo, out), "--results", str(tmp_path / "results/release_check.json")])
@@ -177,7 +187,8 @@ def test_name_and_secret_hits_fail_and_never_leak(tmp_path, capsys):
     report = json.loads((tmp_path / "results/release_check.json").read_text())
     assert report["ok"] is False
     assert report["names"]["hits_per_file"] == {"docs/notes.md": 1, "<redacted path 1>": 1}
-    assert report["secrets"]["hits_per_file"] == {"docs/notes.md": {"hf_token": 1}}
+    assert report["secrets"]["hits_per_file"] == {"<redacted path 2>": {"hf_token": 1},
+                                                  "docs/notes.md": {"hf_token": 1}}
     written = (tmp_path / "results/release_check.json").read_text()
     printed = capsys.readouterr()
     for blob in (written, printed.out + printed.err):
