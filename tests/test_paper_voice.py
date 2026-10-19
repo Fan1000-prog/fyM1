@@ -1,7 +1,9 @@
-"""Guards the paper's voice and outline: one author, first person singular, the standard section order."""
+"""Guards the voice (one author, first person singular) of the paper, README and model card, and the paper outline."""
 
 import re
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PAPER = REPO_ROOT / "paper" / "fym1.tex"
@@ -29,6 +31,11 @@ def prose() -> str:
 
 def test_paper_speaks_in_first_person_singular():
     assert PLURAL_OR_THIRD_PERSON.findall(prose()) == []
+
+
+@pytest.mark.parametrize("name", ["README.md", "MODEL_CARD.md"])
+def test_public_docs_speak_in_first_person_singular(name):
+    assert PLURAL_OR_THIRD_PERSON.findall((REPO_ROOT / name).read_text("utf-8")) == []
 
 
 def citation_author() -> str:

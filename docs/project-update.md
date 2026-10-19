@@ -40,8 +40,8 @@ Tooling, the export reader and the greeting gate are merged. The base model is p
 - **GPU:** Kaggle ran the Gemma 3 baseline (version 5). The Gemma 4 baseline moved to Colab. Training and eval
   run on Colab Pro (A100, paid; owner order 2026-10-18); a Kaggle T4 is only the fallback.
 
-`main`: 3,753 tests pass, 12 expected failures (`uv run pytest -q`). The strict xfails pin known
-anonymiser limits.
+`main`: run `uv run pytest -q` for the current test count; it must be green. The expected failures
+(strict xfails) pin known anonymiser limits.
 
 ## 2. Done
 

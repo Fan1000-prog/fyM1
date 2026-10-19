@@ -5,7 +5,7 @@ An open AI model that chats in everyday Malagasy — the way people really text,
 "fy" means sweet or pleasant in Malagasy. M is for Malagasy. 1 is the first version.
 
 **[Try it](#try-it)** · [Paper](paper/fym1.tex) · [Model card](MODEL_CARD.md) · [Roadmap](#roadmap) ·
-[Help us rate](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)
+[Help me rate](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)
 
 > **Status: v0.1.** *pending* means not measured yet. Coming in v0.2: the full panel's blind human
 > ratings, each model's answer to each test prompt, and the layer-pruning experiment.
@@ -35,7 +35,7 @@ everyday Malagasy chat, trained on one rented GPU and shared under an open licen
   [Hugging Face](https://huggingface.co/Fan1000-Prog).
   The GGUF file runs with llama.cpp and Ollama.
 - **Read the paper:** [paper/fym1.tex](paper/fym1.tex) (LaTeX source; build the PDF with `tectonic`, see [How to reproduce](#how-to-reproduce))
-- **Help us rate (native speakers):** [fy-m1-arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena) —
+- **Help me rate (native speakers):** [fy-m1-arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena) —
   read two answers, pick the more natural one. No login.
 
 ## Results
@@ -74,7 +74,7 @@ Where each number comes from:
 
 ## How the base model was chosen
 
-We tested open chat models that fit training on one 16 GB T4 GPU (the free GPU on Kaggle and Colab). fy-m1 must ship under a simple open
+I tested open chat models that fit training on one 16 GB T4 GPU (the free GPU on Kaggle and Colab). fy-m1 must ship under a simple open
 licence, so the base needs one too.
 
 | | AfriqueQwen3.5-9B-Instruct | Gemma 4 12B | Gemma 3 12B (baseline only) |
@@ -151,15 +151,15 @@ assistant's replies only, so the model learns how to answer, not how to ask.
 
 ## How it was made
 
-| Step | What we did | Why |
+| Step | What I did | Why |
 |---|---|---|
 | Real chats | One family's Messenger export. Everyone in it agreed. Each person's side is used as the assistant in turn. | That is where the everyday style lives. |
-| Cleaning | Names, nicknames, phone numbers, emails, links and handles are replaced **on the owner's laptop**. Raw chats never go to git, the cloud or any public place. | Privacy. |
+| Cleaning | Names, nicknames, phone numbers, emails, links and handles are replaced **on my laptop**. Raw chats never go to git, the cloud or any public place. | Privacy. |
 | Strict gate | No one reads the cleaned text. A script drops any conversation with a long number, a contact or too many unknown words, and replaces every word it does not know with a fake name. <!-- n:gate-kept -->192<!-- /n --> of <!-- n:gate-before -->260<!-- /n --> conversations passed. | Losing a word is cheap. Leaking a name is not. |
 | Synthetic chats | An open model with a permissive licence, run by me, writes more everyday chats from cleaned examples. | Real chats are too few. No closed-model outputs. |
 | Formal slice | A small set of chats from Malagasy Wikipedia. | Keeps facts and spelling. Small, so the style stays casual. |
-| Identity chats | A few "who are you?" answers and polite refusals, written by the owner. | It says it is fy-m1, made by Fan's lab, and refuses harmful requests. Not a safety feature. |
-| Training | **QLoRA** on a Colab Pro A100 GPU (paid): the model stays frozen in 4-bit and we train small add-on weights. Loss on the assistant's replies only. | A model this size fits one GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). I train on a Colab Pro A100; the free T4 is used for the baseline and smoke tests. |
+| Identity chats | A few "who are you?" answers and polite refusals, written by me. | It says it is fy-m1, made by Fan's lab, and refuses harmful requests. Not a safety feature. |
+| Training | **QLoRA** on a Colab Pro A100 GPU (paid): the model stays frozen in 4-bit and I train small add-on weights. Loss on the assistant's replies only. | A model this size fits one GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). I train on a Colab Pro A100; the free T4 is used for the baseline and smoke tests. |
 | Checkpoints | Saved to a private repo often; a new session resumes from the latest one. | Colab sessions can disconnect. |
 | Test prompts | Written fresh, never taken from the chats. | So they can be public and anyone can run them. |
 | Leak check | Any fy-m1 answer that shares a run of 8 words with the real chats blocks release, unless it is a generic phrase. | Privacy again. |
@@ -228,7 +228,7 @@ Plans, not promises. In this order:
   (<!-- n:base-license -->CC-BY-4.0<!-- /n -->). If you use it, credit fy-m1 and the base model.
 - **Code:** [Apache-2.0](LICENSE).
 - **Wikipedia text:** the formal chats are built from Malagasy Wikipedia text, which is
-  [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). We credit it here. The model stays
+  [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). I credit it here. The model stays
   CC-BY-4.0. Anyone who reuses Malagasy Wikipedia text must follow its ShareAlike terms.
 - Gemma 3 was only a comparison. None of its outputs are in the training data.
 
@@ -252,7 +252,7 @@ Plans, not promises. In this order:
   word case counts from its text, and the formal slice uses Malagasy Wikipedia, licensed
   [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 - [HPLT 2.0 cleaned](https://huggingface.co/datasets/HPLT/HPLT2.0_cleaned) (Malagasy, `plt_Latn`): the data
-  cleaner's Malagasy web-text word list (`mg_corpus_words.txt`) is built from it. We keep only that word list,
+  cleaner's Malagasy web-text word list (`mg_corpus_words.txt`) is built from it. I keep only that word list,
   never the text.
 - [INSEE fichier des prénoms](https://www.insee.fr/fr/statistiques/7633685): the French first-name list,
   [Licence Ouverte / Etalab 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence/).
