@@ -66,8 +66,9 @@ answering; r2 (a new data mix to fix that) is training now and is not measured y
 - On the Hub: private `fyM1-chats`, `DATA_REVISION 4e5dde2fa8034e055937cf05a05acdb54c5d2454`, `DATA_DIR mix-r2/`
   (from the upload, not a `results/` file).
 - At train time one identity chat fell into the eval split: 75 identity rows train, 1,315 train / 26 eval (from
-  the r2 run log, not in `results/` yet; check against r2's `train_log` when it lands, since 1,315 + 26 is 4 short
-  of 1,345).
+  the r2 run log, not in `results/` yet). Why 1,315 + 26 = 1,341, not 1,345: the split is over 1,281 unique rows
+  (933 + 16 + 63 + 269); eval takes 26 of them (1 identity chat, counted once), the 15 identity chats left in
+  train are repeated x5, so train = 1,255 + 60 = 1,315.
 
 **Decoding defaults** (PR #71, `src/fym1/generation.py`): temp 0.6, repetition_penalty 1.1, top_p 0.9, top_k 50,
 3-exchange chat history. Used by `05_try`, `02_eval_export` and the chat Space.
