@@ -1,0 +1,19 @@
+{
+  "model": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
+  "revision": "693f12e444a30971ca53889128d7bade9491ecb3",
+  "rank_source": "scripts/build_notebooks.py (01_train)",
+  "hidden_size": 4096,
+  "intermediate_size": 12288,
+  "num_hidden_layers": 32,
+  "lora_r": 16,
+  "lora_alpha": 16,
+  "scale": 1.0,
+  "example": {
+    "matrix": "mlp.up_proj",
+    "d": 12288,
+    "k": 4096,
+    "full_params": 50331648,
+    "lora_params": 262144,
+    "lora_share": 0.005208333333333333
+  }
+}

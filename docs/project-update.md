@@ -105,7 +105,7 @@ Older ones are also in spec §8 and the plan's "Changes from the plan"; the 2026
   (`qlora_smoke.compute_dtype` in `results/baseline/`); Gemma 4 is expected to need float32 under Unsloth (slower),
   not measured yet. Training code reaches
   the GPU only by syncing clean `origin/main` to the Hub, never during a run.
-- **Judge disclosure:** "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code; rubric in
+- **Judge disclosure:** "Claude Opus 5.5 (claude-opus-5-5), blind, run in Claude Code; rubric in
   `src/fym1/eval/judge_rubric.md`." Methods disclosure, not attribution.
 
 GPU history: Kaggle versions 2–4 of the baseline failed (no GPU, no internet or no HF token reached the run);

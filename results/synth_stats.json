@@ -1,0 +1,28 @@
+{
+  "raw": 2500,
+  "kept": 1319,
+  "dropped": {
+    "unparseable": 10,
+    "length": 211,
+    "not_malagasy": 23,
+    "placeholder": 2,
+    "unknown_name": 932,
+    "leak_8gram": 3,
+    "duplicate": 0,
+    "near_duplicate": 0
+  },
+  "by_generator": {
+    "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1": 2500
+  },
+  "seed": 0,
+  "few_shot_k": 3,
+  "target_raw": 2500,
+  "gpus": "2x Tesla T4",
+  "code_sha": "e9646de75929",
+  "data_revision": "local-sha256-ab507af8b51f",
+  "generator": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
+  "dtype": "float16",
+  "generator_licence": "cc-by-4.0",
+  "gen_seconds": 15274.8,
+  "new_tokens": 479619
+}

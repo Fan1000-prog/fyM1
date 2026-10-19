@@ -400,3 +400,10 @@ def test_candidate_licence_comes_from_selection(tmp_path):
         json.dumps({"candidates": [{"model": numbers.GEMMA3, "license": "Gemma Terms of Use"}]})
     )
     assert resolve(tmp_path).values["sel-gemma3-license"] == "Gemma Terms of Use"
+
+
+def test_small_share_and_gigabyte_formats():
+    assert numbers.percent2(0.005208) == "0.52%"
+    assert numbers.gb(9.8) == "9.8 GB"
+    with pytest.raises(ValueError):
+        numbers.percent2(1.5)

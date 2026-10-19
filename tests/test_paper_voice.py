@@ -5,6 +5,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PAPER = REPO_ROOT / "paper" / "fym1.tex"
+README = REPO_ROOT / "README.md"
 
 SECTION_ORDER = [
     "Introduction",
@@ -30,9 +31,16 @@ def test_paper_speaks_in_first_person_singular():
     assert PLURAL_OR_THIRD_PERSON.findall(prose()) == []
 
 
+def citation_author() -> str:
+    """The author in the README's citation, read from there so this file holds no personal name."""
+    found = re.findall(r"^\s*author\s*=\s*\{([^}]*)\},?$", README.read_text("utf-8"), re.M)
+    assert len(found) == 1 and len(found[0].split()) == 2, "README citation needs one two-word author"
+    return found[0]
+
+
 def test_paper_has_one_author_with_the_byline():
     authors = re.findall(r"\\author\{([^}]*)\}", prose())
-    assert authors == ["by Fandresena Raharinaivo"]
+    assert authors == [f"by {citation_author()}"]
 
 
 def test_paper_has_the_standard_sections_in_order():

@@ -91,6 +91,64 @@ Winner: AfriqueQwen3.5-9B-Instruct. Of the models measured so far, it translates
 best (Gemma 4's score is still pending). It ties Gemma 4 on greetings and reading, and trains in 16-bit on a T4 (Gemma 4 is expected to need slower 32-bit). Gemma 3 is only a
 comparison: its terms would make fy-m1 a Gemma derivative. Full table: the paper, Table 1.
 
+## How fy-m1 is trained
+
+Three pictures, in plain words. The paper has the full versions (Figures 1, 2 and 4).
+
+**1. The whole path.** Private chats never leave my laptop until they are cleaned and checked. The rest runs
+on rented GPUs and free Hugging Face Spaces.
+
+```mermaid
+flowchart TD
+  A["Messenger export (my laptop only)"] --> B["Anonymise: fake names, placeholders for numbers and links"]
+  B --> C["Strict gate: drop any risky chat, nobody reads the text"]
+  C --> D["Real chats (private dataset)"]
+  D -- "few-shot examples" --> E["Open model writes synthetic chats (AfriqueQwen)"]
+  E --> F["Filter + strict sample gate"]
+  D --> G["QLoRA training on one GPU"]
+  F --> G
+  W["Formal Wikipedia chats + identity chats"] --> G
+  G --> H["Evaluation: Belebele, FLORES+, LLM judge, identity check, leak check"]
+  H --> I["Vocabulary trim"]
+  I --> J["4-bit GGUF file"]
+  J --> K["Hugging Face Spaces: chat + arena"]
+```
+
+**2. How much data is left after each check.** Every check throws data away on purpose: losing a chat is
+cheap, leaking a name is not. These numbers are written by `paper/make_figures.py` from `results/`.
+
+<!-- figure:funnel:start -->
+```mermaid
+flowchart LR
+  R0["260 real conversations, cleaned on my laptop"] --> R1["192 passed the strict gate"]
+  S0["2,500 synthetic chats written by an open model"] --> S1["1,319 kept by the filter"]
+  S1 --> S2["1,284 passed the sample gate"]
+  R1 --> T["Training mix (+ formal and identity chats)"]
+  S2 --> T
+```
+<!-- figure:funnel:end -->
+
+**3. What QLoRA trains.** The base model stays frozen and squeezed to 4 bits. Next to each big matrix
+W₀ I train two thin matrices, A and B. Their product is a small correction added to the frozen output.
+
+```mermaid
+flowchart LR
+  x(("x")) --> W0["W₀: frozen, 4-bit NF4, d × k"]
+  x --> A["A: trained, r × k"]
+  A --> B["B: trained, d × r, starts at zero"]
+  B --> S["× α / r"]
+  W0 --> P(("+"))
+  S --> P
+  P --> h(("h"))
+```
+
+$$h = W_0\,x + \frac{\alpha}{r}\,B A\,x$$
+
+Example: one MLP matrix of the base model has <!-- n:budget-d -->12,288<!-- /n --> × <!-- n:budget-k -->4,096<!-- /n -->
+= <!-- n:budget-full -->50,331,648<!-- /n --> weights. A rank-<!-- n:budget-r -->16<!-- /n --> adapter trains only
+<!-- n:budget-lora -->262,144<!-- /n --> of them (<!-- n:budget-share -->0.52%<!-- /n -->). The loss counts the
+assistant's replies only, so the model learns how to answer, not how to ask.
+
 ## How it was made
 
 | Step | What we did | Why |
@@ -98,7 +156,7 @@ comparison: its terms would make fy-m1 a Gemma derivative. Full table: the paper
 | Real chats | One family's Messenger export. Everyone in it agreed. Each person's side is used as the assistant in turn. | That is where the everyday style lives. |
 | Cleaning | Names, nicknames, phone numbers, emails, links and handles are replaced **on the owner's laptop**. Raw chats never go to git, the cloud or any public place. | Privacy. |
 | Strict gate | No one reads the cleaned text. A script drops any conversation with a long number, a contact or too many unknown words, and replaces every word it does not know with a fake name. <!-- n:gate-kept -->192<!-- /n --> of <!-- n:gate-before -->260<!-- /n --> conversations passed. | Losing a word is cheap. Leaking a name is not. |
-| Synthetic chats | An open model with a permissive licence, run by us, writes more everyday chats from cleaned examples. | Real chats are too few. No closed-model outputs. |
+| Synthetic chats | An open model with a permissive licence, run by me, writes more everyday chats from cleaned examples. | Real chats are too few. No closed-model outputs. |
 | Formal slice | A small set of chats from Malagasy Wikipedia. | Keeps facts and spelling. Small, so the style stays casual. |
 | Identity chats | A few "who are you?" answers and polite refusals, written by the owner. | It says it is fy-m1, made by Fan's lab, and refuses harmful requests. Not a safety feature. |
 | Training | **QLoRA** on a Colab Pro A100 GPU (paid): the model stays frozen in 4-bit and we train small add-on weights. Loss on the assistant's replies only. | A model this size fits one GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). I train on a Colab Pro A100; the free T4 is used for the baseline and smoke tests. |
@@ -129,6 +187,7 @@ Then, in order:
 
    ```bash
    uv run python paper/make_numbers.py --markdown README.md MODEL_CARD.md
+   uv run python paper/make_figures.py --readme README.md
    cd paper && tectonic fym1.tex
    ```
 
