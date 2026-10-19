@@ -137,7 +137,6 @@ the r2 eval PR copies them in with `scripts/fetch_train_log.py`):
 - Old r1-era files in `fyM1-chats` (`chats.jsonl`, `formal.jsonl`, `synth/*`): r2 does not use them; keep them so
   r1 can be rebuilt.
 - Note: `~/fyM1-persona-mix` and local branch `data/persona-mix` were deleted by main with the owner's OK.
-- Local worktrees left from merged work: `~/fyM1-try`, `~/fyM1-eval-r1` (if still on disk).
 
 ## 1. Where we are
 
