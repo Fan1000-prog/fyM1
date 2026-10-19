@@ -1,4 +1,4 @@
-"""Build notebooks/00_baseline.ipynb, 01_train.ipynb, 02_eval_export.ipynb and 04_synth.ipynb.
+"""Build notebooks/00_baseline.ipynb, 01_train.ipynb, 02_eval_export.ipynb, 04_synth.ipynb and 05_try.ipynb.
 This script is their source of truth.
 
 Usage: python scripts/build_notebooks.py [--check]
@@ -1111,8 +1111,76 @@ print("NOTEBOOK_METRICS", json.dumps(metrics))"""),
     ]
 
 
+def try_cells() -> list:
+    return [
+md("""# fy-m1 05 — try fy-m1 (chat)
+Chat with a trained fy-m1 adapter. **Runtime → Run all**, then type in the box under the last cell.
+An empty line or `quit` ends the chat. Loads the base model in 4-bit plus the LoRA adapter `<RUN_ID>/final/`
+from the private `Fan1000-Prog/fyM1-ckpt`, with the training system prompt (private `fyM1-chats`, at the
+run's data revision). A 4-bit 9B fits any Colab GPU (T4, L4, A100). Needs the `HF_TOKEN` secret (Colab: Secrets
+pane with notebook access) and code synced to `fyM1-ckpt` `code/`. Nothing typed here is saved anywhere."""),
+code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
+!pip install -q -U unsloth unsloth_zoo"""),
+code("""RUN_ID = "fym1-9b-a100-r1"  # the run whose final/ adapter to load
+CKPT_REPO, DATA_REPO = "Fan1000-Prog/fyM1-ckpt", "Fan1000-Prog/fyM1-chats"
+TEMPERATURE, TOP_P, MAX_NEW_TOKENS, HISTORY_TURNS = 0.7, 0.9, 256, 6"""),
+bootstrap_cell(),
+code("""import sys, json
+from huggingface_hub import hf_hub_download, snapshot_download
+
+os.environ["HF_TOKEN"] = hf_token()  # never print it
+code_dir = snapshot_download(CKPT_REPO, allow_patterns=["code/**"], local_dir=CODE_DIR)
+sys.path.insert(0, f"{code_dir}/code/src")
+from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS
+from fym1.train.run_state import check_hub_id
+from fym1.runtime import scratch_dir
+
+train_log = json.load(open(hf_hub_download(CKPT_REPO, f"{RUN_ID}/train_log.json")))
+MODEL_ID, DATA_REVISION = train_log["model"], train_log["config"]["data_revision"]
+system_prompt = open(hf_hub_download(DATA_REPO, "system_prompt.txt", repo_type="dataset",
+                                     revision=DATA_REVISION)).read().strip()
+adapter_dir = snapshot_download(CKPT_REPO, allow_patterns=[f"{RUN_ID}/final/*"], local_dir=f"{scratch_dir()}/try")
+ADAPTER = f"{adapter_dir}/{RUN_ID}/final"
+print("RUN", RUN_ID, "| base", MODEL_ID, "| adapter", train_log["final_adapter"])"""),
+code("""import torch
+from peft import PeftModel
+from unsloth import FastModel
+
+model, processor = FastModel.from_pretrained(MODEL_ID, max_seq_length=2048, load_in_4bit=True,
+                                             full_finetuning=False, use_exact_model_name=True)
+check_hub_id("loaded model", model.config._name_or_path, MODEL_ID)
+model = PeftModel.from_pretrained(model, ADAPTER)
+FastModel.for_inference(model)
+tok = getattr(processor, "tokenizer", processor)
+print("READY on", torch.cuda.get_device_name(0), "| vram GB", round(torch.cuda.memory_allocated() / 2**30, 2))"""),
+code("""from transformers import TextStreamer
+
+
+@torch.inference_mode()
+def reply(history):
+    messages = [{"role": "system", "content": system_prompt}] + history[-2 * HISTORY_TURNS + 1:]
+    text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **CHAT_TEMPLATE_KWARGS)
+    enc = tok(text, return_tensors="pt", add_special_tokens=False).to("cuda")
+    ids = model.generate(**enc, max_new_tokens=MAX_NEW_TOKENS, do_sample=True, temperature=TEMPERATURE,
+                         top_p=TOP_P, pad_token_id=tok.pad_token_id,
+                         streamer=TextStreamer(tok, skip_prompt=True, skip_special_tokens=True))
+    return tok.decode(ids[0, enc["input_ids"].shape[1]:], skip_special_tokens=True).strip()
+
+
+history = []
+while True:
+    user = input("ianao> ").strip()
+    if not user or user.lower() == "quit":
+        print("veloma!")
+        break
+    history.append({"role": "user", "content": user})
+    print("fy-m1> ", end="")
+    history.append({"role": "assistant", "content": reply(history)})"""),
+    ]
+
+
 NOTEBOOKS = {"00_baseline": baseline_cells, "01_train": train_cells, "02_eval_export": eval_cells,
-             "04_synth": synth_cells}
+             "04_synth": synth_cells, "05_try": try_cells}
 
 
 def build(name: str) -> str:

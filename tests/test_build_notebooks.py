@@ -123,3 +123,24 @@ def test_eval_notebook_never_prints_answer_or_chat_text():
     assert prints
     for needle in ("replies", "rows", "response", "texts", "held", "hyp_", "SYSTEM_PROMPT", '["messages"]', "(items", " items"):
         assert not any(needle in line for line in prints), needle
+
+
+def try_code() -> str:
+    import json
+
+    nb = json.loads((ROOT / "notebooks" / "05_try.ipynb").read_text())
+    return "\n".join("".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code")
+
+
+def test_try_notebook_loads_the_final_adapter_with_the_training_prompt():
+    code = try_code()
+    assert 'f"{RUN_ID}/final/*"' in code and "PeftModel.from_pretrained(model, ADAPTER)" in code
+    assert "load_in_4bit=True" in code
+    assert '"system_prompt.txt"' in code and "revision=DATA_REVISION" in code
+    assert "**CHAT_TEMPLATE_KWARGS" in code
+
+
+def test_try_notebook_chat_ends_on_empty_line_or_quit_and_saves_nothing():
+    code = try_code()
+    assert 'if not user or user.lower() == "quit":' in code
+    assert "upload" not in code and "open(" not in code.replace("open(hf_hub_download", "")
