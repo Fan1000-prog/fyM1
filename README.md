@@ -156,7 +156,7 @@ assistant's replies only, so the model learns how to answer, not how to ask.
 | Real chats | One family's Messenger export. Everyone in it agreed. Each person's side is used as the assistant in turn. | That is where the everyday style lives. |
 | Cleaning | Names, nicknames, phone numbers, emails, links and handles are replaced **on the owner's laptop**. Raw chats never go to git, the cloud or any public place. | Privacy. |
 | Strict gate | No one reads the cleaned text. A script drops any conversation with a long number, a contact or too many unknown words, and replaces every word it does not know with a fake name. <!-- n:gate-kept -->192<!-- /n --> of <!-- n:gate-before -->260<!-- /n --> conversations passed. | Losing a word is cheap. Leaking a name is not. |
-| Synthetic chats | An open model with a permissive licence, run by us, writes more everyday chats from cleaned examples. | Real chats are too few. No closed-model outputs. |
+| Synthetic chats | An open model with a permissive licence, run by me, writes more everyday chats from cleaned examples. | Real chats are too few. No closed-model outputs. |
 | Formal slice | A small set of chats from Malagasy Wikipedia. | Keeps facts and spelling. Small, so the style stays casual. |
 | Identity chats | A few "who are you?" answers and polite refusals, written by the owner. | It says it is fy-m1, made by Fan's lab, and refuses harmful requests. Not a safety feature. |
 | Training | **QLoRA** on a Colab Pro A100 GPU (paid): the model stays frozen in 4-bit and we train small add-on weights. Loss on the assistant's replies only. | A model this size fits one GPU ([QLoRA paper](https://arxiv.org/abs/2305.14314)). I train on a Colab Pro A100; the free T4 is used for the baseline and smoke tests. |

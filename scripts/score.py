@@ -20,7 +20,7 @@ must be judged.
 Step 2, unblind the judge scores:
   uv run python scripts/score.py judge \
       --raw results/eval/judge_raw.json --key results/eval/judge_key.json \
-      --label "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code; \
+      --label "Claude Opus 5.5 (claude-opus-5-5), blind, run in Claude Code; \
 rubric in src/fym1/eval/judge_rubric.md" \
       --out results/eval/judge.json
 

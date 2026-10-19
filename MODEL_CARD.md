@@ -71,7 +71,7 @@ Described here, not shared. Part of it is private conversations.
   every word it did not know with a fake name. The cleaned data is in a private dataset and is not released.
 - **Synthetic chats:** <!-- n:synth-gate-kept -->1,284<!-- /n --> everyday chats (of <!-- n:synth-raw -->2,500<!-- /n --> written,
   <!-- n:synth-kept -->1,319<!-- /n --> kept by the filter, then a strict sample gate) written by
-  <!-- n:synth-generator -->McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1<!-- /n --> (licence <!-- n:synth-licence -->cc-by-4.0<!-- /n -->), run by us,
+  <!-- n:synth-generator -->McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1<!-- /n --> (licence <!-- n:synth-licence -->cc-by-4.0<!-- /n -->), run by me,
   from cleaned examples. Only permissively licensed generators are allowed.
 - **Formal slice:** <!-- n:data-formal -->pending<!-- /n --> short chats from Malagasy Wikipedia, for facts and
   spelling.

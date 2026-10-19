@@ -167,7 +167,7 @@ Decisions made while building. They override earlier sections where they conflic
 - Early stopping uses the repo's own tested rule, which survives a runtime restart.
 
 ### 8.5 Judge disclosure
-- The LLM judge is named in the paper as a method: "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code; rubric in `src/fym1/eval/judge_rubric.md`." This is a methods disclosure, not authorship.
+- The LLM judge is named in the paper as a method: "Claude Opus 5.5 (claude-opus-5-5), blind, run in Claude Code; rubric in `src/fym1/eval/judge_rubric.md`." This is a methods disclosure, not authorship.
 
 ### 8.6 Name, data and process (owner, new run)
 - Public name is **fy-m1** (lowercase, one hyphen; §7.5). `tests/test_public_name.py` guards it.

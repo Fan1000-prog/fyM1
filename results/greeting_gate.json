@@ -1,5 +1,5 @@
 {
-  "judge": "Claude Opus 5.5 (claude-opus-5-5), blind, run as judging agents in Claude Code",
+  "judge": "Claude Opus 5.5 (claude-opus-5-5), blind, run in Claude Code",
   "rubric": "src/fym1/eval/judge_rubric.md",
   "blind_seed": 20261018,
   "prompts": [
