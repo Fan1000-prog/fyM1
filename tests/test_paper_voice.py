@@ -32,8 +32,7 @@ def test_paper_speaks_in_first_person_singular():
 
 
 def citation_author() -> str:
-    """The author in the README's citation. Read from there so this file holds no name: the release's name scan
-    allows the author string only in fym1.release.AUTHOR_FILES."""
+    """The author in the README's citation, read from there so this file holds no personal name."""
     found = re.findall(r"^\s*author\s*=\s*\{([^}]*)\},?$", README.read_text("utf-8"), re.M)
     assert len(found) == 1 and len(found[0].split()) == 2, "README citation needs one two-word author"
     return found[0]
