@@ -1131,7 +1131,7 @@ from huggingface_hub import hf_hub_download, snapshot_download
 os.environ["HF_TOKEN"] = hf_token()  # never print it
 code_dir = snapshot_download(CKPT_REPO, allow_patterns=["code/**"], local_dir=CODE_DIR)
 sys.path.insert(0, f"{code_dir}/code/src")
-from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS
+from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text
 from fym1.train.run_state import check_hub_id
 from fym1.runtime import scratch_dir
 
@@ -1153,13 +1153,21 @@ model = PeftModel.from_pretrained(model, ADAPTER)
 FastModel.for_inference(model)
 tok = getattr(processor, "tokenizer", processor)
 print("READY on", torch.cuda.get_device_name(0), "| vram GB", round(torch.cuda.memory_allocated() / 2**30, 2))"""),
+code("""def render(messages, add_generation_prompt=False):
+    return tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=add_generation_prompt,
+                                   **CHAT_TEMPLATE_KWARGS)
+
+
+def chat_prompt(messages):
+    \"\"\"Past turns exactly as training rendered them (training_text), then the generation prompt.\"\"\"
+    return training_text(render, messages) + render(messages, True)[len(render(messages)):]"""),
 code("""from transformers import TextStreamer
 
 
 @torch.inference_mode()
 def reply(history):
     messages = [{"role": "system", "content": system_prompt}] + history[-2 * HISTORY_TURNS + 1:]
-    text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **CHAT_TEMPLATE_KWARGS)
+    text = chat_prompt(messages)
     enc = tok(text, return_tensors="pt", add_special_tokens=False).to("cuda")
     ids = model.generate(**enc, max_new_tokens=MAX_NEW_TOKENS, do_sample=True, temperature=TEMPERATURE,
                          top_p=TOP_P, pad_token_id=tok.pad_token_id,
