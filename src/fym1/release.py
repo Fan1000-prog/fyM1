@@ -822,6 +822,11 @@ def notice_text() -> str:
         "(Licence Ouverte / Etalab 2.0) and HPLT 2.0 cleaned (CC0 1.0). Lists derived from CC BY-SA data are",
         "shared under the same licence (https://creativecommons.org/licenses/by-sa/4.0/).",
         "",
+        "Training data credited, not included: the r2 training mix uses the original (human-written) Malagasy",
+        "annotations of the Aya Dataset (https://huggingface.co/datasets/CohereLabs/aya_dataset), Apache-2.0,",
+        "by Singh et al. 2024, \"Aya Dataset: An Open-Access Collection for Multilingual Instruction Tuning\"",
+        "(https://arxiv.org/abs/2402.06619).",
+        "",
     ]
     return "\n".join(lines)
 

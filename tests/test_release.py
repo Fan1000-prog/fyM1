@@ -331,6 +331,7 @@ def test_snapshot_drops_excluded_paths_strips_hand_lists_only_and_passes(tmp_pat
     assert report.name_hits == {}
     notice = (out / "NOTICE").read_text()
     assert "CC BY-SA 4.0" in notice
+    assert "Aya Dataset" in notice and "Apache-2.0" in notice  # r2 training data credit
     assert not any(word in notice.lower() for word in ("privacy", "removed", "release_check"))
     assert sorted(p.name for p in out.iterdir()) == ["NOTICE", "README.md", "src"]
     assert {e["path"] for e in report.excluded} == {"AGENTS.md", "docs/superpowers/plan.md"}
