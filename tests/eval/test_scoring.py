@@ -57,19 +57,20 @@ def test_blind_batch_is_reproducible_and_shuffled():
 def test_judge_means_per_model():
     _, key = blind_batch(ANSWERS, seed=0)
     judgements = [
-        {"id": blind_id, "naturalness": 2 if k["model"] == "base" else 5, "correctness": 4}
+        {"id": blind_id, "naturalness": 2 if k["model"] == "base" else 5, "correctness": 4,
+         "answers": 1 if k["model"] == "fym1" or k["prompt_id"] == "p0" else 0}
         for blind_id, k in key.items()
     ]
     assert judge_means(judgements, key) == {
-        "base": {"naturalness": 2.0, "correctness": 4.0, "n": 2},
-        "fym1": {"naturalness": 5.0, "correctness": 4.0, "n": 2},
+        "base": {"naturalness": 2.0, "correctness": 4.0, "n": 2, "answer_rate": 0.5, "answer_n": 2},
+        "fym1": {"naturalness": 5.0, "correctness": 4.0, "n": 2, "answer_rate": 1.0, "answer_n": 2},
     }
 
 
 def test_judge_means_rejects_partial_judge_output():
     _, key = blind_batch(ANSWERS, seed=0)
     judged = list(key)[:3]
-    judgements = [{"id": blind_id, "naturalness": 3, "correctness": 3} for blind_id in judged]
+    judgements = [{"id": blind_id, "naturalness": 3, "correctness": 3, "answers": 1} for blind_id in judged]
     with pytest.raises(ValueError, match="1 of 4"):
         judge_means(judgements, key)
 
@@ -93,7 +94,7 @@ def test_blind_batch_requires_same_prompts_for_every_model():
 def test_judge_means_rejects_unknown_id():
     _, key = blind_batch(ANSWERS, seed=0)
     with pytest.raises(ValueError, match="unknown"):
-        judge_means([{"id": "nope", "naturalness": 3, "correctness": 3}], key)
+        judge_means([{"id": "nope", "naturalness": 3, "correctness": 3, "answers": 1}], key)
 
 
 @pytest.mark.parametrize("score", [0, 6, 3.5, "4"])
@@ -101,13 +102,23 @@ def test_judge_means_rejects_out_of_range_scores(score):
     _, key = blind_batch(ANSWERS, seed=0)
     blind_id = next(iter(key))
     with pytest.raises(ValueError, match="1-5"):
-        judge_means([{"id": blind_id, "naturalness": score, "correctness": 3}], key)
+        judge_means([{"id": blind_id, "naturalness": score, "correctness": 3, "answers": 1}], key)
+
+
+@pytest.mark.parametrize("flag", [None, 2, -1, 0.5, True, "1"])
+def test_judge_means_rejects_answers_flag_other_than_0_or_1(flag):
+    _, key = blind_batch(ANSWERS, seed=0)
+    row = {"id": next(iter(key)), "naturalness": 3, "correctness": 3}
+    if flag is not None:
+        row["answers"] = flag
+    with pytest.raises(ValueError, match="answers must be 0 or 1"):
+        judge_means([row], key)
 
 
 def test_judge_means_rejects_duplicate_judgement():
     _, key = blind_batch(ANSWERS, seed=0)
     blind_id = next(iter(key))
-    row = {"id": blind_id, "naturalness": 3, "correctness": 3}
+    row = {"id": blind_id, "naturalness": 3, "correctness": 3, "answers": 1}
     with pytest.raises(ValueError, match="twice"):
         judge_means([row, row], key)
 

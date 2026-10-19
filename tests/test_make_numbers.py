@@ -31,7 +31,7 @@ def results_dir(tmp_path: Path) -> Path:
             {
                 "judge": "Some judge, blind",
                 "base": {"naturalness": 2.5, "correctness": 3.0, "n": 150},
-                "fym1": {"naturalness": 4.125, "correctness": 3.5, "n": 150},
+                "fym1": {"naturalness": 4.125, "correctness": 3.5, "n": 150, "answer_rate": 0.92, "answer_n": 150},
             }
         )
     )
@@ -66,6 +66,8 @@ def test_present_values_are_formatted(results_dir):
     assert macro(tex, "drift-base") == r"40.0\%"
     assert macro(tex, "drift-fym1") == r"5.3\%"
     assert macro(tex, "natural-fym1") == "4.12"
+    assert macro(tex, "answers-fym1") == r"92.0\%"
+    assert macro(tex, "answers-base") == r"\textbf{pending}"  # judge.json from before the answers flag
     assert macro(tex, "model-repo") == "Fan1000-Prog/fy-m1-8B"
     assert (macro(tex, "leak-matches"), macro(tex, "leak-generic"), macro(tex, "leak-rejected")) == ("2", "2", "0")
 

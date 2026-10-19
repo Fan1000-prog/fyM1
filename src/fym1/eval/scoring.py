@@ -4,7 +4,7 @@ The schema is the one paper/make_numbers.py reads.
 
 Answer files are `answers_<model>.jsonl`, one row per prompt: `{"id", "prompt", "response"}`.
 scores.json: `{"n_prompts", "<model>": {"drift_rate", <NOTEBOOK_METRICS>...}}`.
-judge.json:  `{"judge", "<model>": {"naturalness", "correctness", "n"}}`.
+judge.json:  `{"judge", "<model>": {"naturalness", "correctness", "n", "answer_rate", "answer_n"}}`.
 """
 
 import json
@@ -16,6 +16,8 @@ from statistics import mean
 from fym1.eval.metrics import drift_rate
 
 JUDGE_CRITERIA = ("naturalness", "correctness")
+# Binary judge flag: 1 = the reply responds to the prompt as asked, 0 = it does not (see judge_rubric.md).
+ANSWERS_FLAG = "answers"
 ANSWERS_PREFIX = "answers_"
 # Metrics measured in notebooks/02_eval_export.ipynb; any of them may still be missing (pending).
 NOTEBOOK_METRICS = frozenset(
@@ -76,8 +78,19 @@ def _check_score(judgement: dict, criterion: str) -> int:
     return score
 
 
+def _check_answers_flag(judgement: dict) -> int:
+    flag = judgement.get(ANSWERS_FLAG)
+    if type(flag) is not int or flag not in (0, 1):
+        raise ValueError(f"{judgement.get('id')}: {ANSWERS_FLAG} must be 0 or 1, got {flag!r}")
+    return flag
+
+
 def judge_means(judgements: list[dict], key: dict[str, dict]) -> dict[str, dict]:
-    """Mean judge score per model and criterion, unblinded with the key from `blind_batch`."""
+    """Mean judge score per model and criterion, unblinded with the key from `blind_batch`.
+
+    Also the share of replies the judge flagged as answering the prompt (`answer_rate`) and how
+    many replies that share is over (`answer_n`).
+    """
     scores: dict[str, dict[str, list[int]]] = defaultdict(lambda: defaultdict(list))
     seen = set()
     for judgement in judgements:
@@ -90,12 +103,17 @@ def judge_means(judgements: list[dict], key: dict[str, dict]) -> dict[str, dict]
         model = key[blind_id]["model"]
         for criterion in JUDGE_CRITERIA:
             scores[model][criterion].append(_check_score(judgement, criterion))
+        scores[model][ANSWERS_FLAG].append(_check_answers_flag(judgement))
     missing = len(key) - len(seen)
     if missing:
         raise ValueError(f"judge output is partial: {missing} of {len(key)} blind ids not judged")
     return {
         model: {c: float(mean(by_criterion[c])) for c in JUDGE_CRITERIA}
         | {"n": len(by_criterion[JUDGE_CRITERIA[0]])}
+        | {
+            "answer_rate": float(mean(by_criterion[ANSWERS_FLAG])),
+            "answer_n": len(by_criterion[ANSWERS_FLAG]),
+        }
         for model, by_criterion in sorted(scores.items())
     }
 

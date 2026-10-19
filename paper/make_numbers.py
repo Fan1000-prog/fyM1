@@ -29,7 +29,7 @@ Expected files (keys are dotted paths below):
                          config.{lora_r, lora_alpha, lr, lr_scheduler, max_seq_len, effective_batch}
   eval/scores.json       n_prompts, {base,fym1}.{drift_rate, leak_rate, perplexity,
                          belebele_acc, chrf_plt_eng, chrf_eng_plt}
-  eval/judge.json        judge, {base,fym1}.{naturalness, correctness}
+  eval/judge.json        judge, {base,fym1}.{naturalness, correctness, answer_rate}
   eval/leak_review.json  matches, approved_generic, rejected (counts of distinct matched 8-word runs)
   eval/identity_check.json  n, passed, pass_rate, threshold, foreign_identity, gate_passed (reasons checked)
   eval/arena.json        votes, raters, fym1_win_rate, ci_low, ci_high (early votes at v0.1)
@@ -296,6 +296,8 @@ NUMBERS: list[Number] = [
     Number("natural-fym1", "eval/judge.json", "fym1.naturalness", fixed(2)),
     Number("correct-base", "eval/judge.json", "base.correctness", fixed(2)),
     Number("correct-fym1", "eval/judge.json", "fym1.correctness", fixed(2)),
+    Number("answers-base", "eval/judge.json", "base.answer_rate", percent),
+    Number("answers-fym1", "eval/judge.json", "fym1.answer_rate", percent),
     # human arena: v0.1 reports the early votes in at release; the full panel's result is v0.2
     Number("arena-votes", "eval/arena.json", "votes", count),
     Number("arena-raters", "eval/arena.json", "raters", count),

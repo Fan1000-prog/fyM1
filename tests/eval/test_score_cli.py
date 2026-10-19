@@ -166,3 +166,41 @@ def test_blind_refuses_a_key_inside_the_judge_batch_dir(tmp_path):
     result = blind(tmp_path, out, out.parent / "judge_key.json")
     assert result.returncode != 0
     assert not out.exists()
+
+
+def test_judge_writes_answer_rate_per_model_from_blind_ids(tmp_path):
+    out = tmp_path / "judge_batch" / "judge_input.jsonl"
+    key_path = tmp_path / "judge_key.json"
+    assert blind(tmp_path, out, key_path).returncode == 0
+    items = [json.loads(line) for line in out.read_text().splitlines()]
+    assert all(set(item) == {"id", "prompt", "response"} for item in items)  # still blind
+    key = json.loads(key_path.read_text())
+    raw = tmp_path / "judge_raw.json"
+    raw.write_text(json.dumps([
+        {"id": item["id"], "naturalness": 4, "correctness": 4,
+         "answers": int(key[item["id"]]["model"] == "fym1"), "note": "made up"}
+        for item in items
+    ]))
+    judge_json = tmp_path / "judge.json"
+    result = run("judge", "--raw", str(raw), "--key", str(key_path), "--label", "Judge X, blind",
+                 "--out", str(judge_json))
+    assert result.returncode == 0, result.stderr
+    summary = json.loads(judge_json.read_text())
+    assert summary["base"]["answer_rate"] == 0.0 and summary["base"]["answer_n"] == 1
+    assert summary["fym1"]["answer_rate"] == 1.0 and summary["fym1"]["answer_n"] == 1
+
+
+def test_judge_rejects_an_answers_flag_other_than_0_or_1(tmp_path):
+    out = tmp_path / "judge_batch" / "judge_input.jsonl"
+    key_path = tmp_path / "judge_key.json"
+    blind(tmp_path, out, key_path)
+    ids = [json.loads(line)["id"] for line in out.read_text().splitlines()]
+    raw = tmp_path / "judge_raw.json"
+    raw.write_text(json.dumps(
+        [{"id": i, "naturalness": 4, "correctness": 4, "answers": 2, "note": ""} for i in ids]
+    ))
+    judge_json = tmp_path / "judge.json"
+    result = run("judge", "--raw", str(raw), "--key", str(key_path), "--label", "x", "--out", str(judge_json))
+    assert result.returncode != 0
+    assert "answers must be 0 or 1" in result.stderr
+    assert not judge_json.exists()
