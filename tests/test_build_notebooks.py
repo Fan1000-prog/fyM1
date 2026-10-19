@@ -99,7 +99,7 @@ def test_eval_notebook_answer_files_are_the_ones_the_laptop_scripts_read():
     from fym1.eval.scoring import model_name
 
     code = "\n".join(eval_code_lines())
-    names = ["answers_base", "answers_fym1", "answers_fym1_identity"]
+    names = ["answers_base", "answers_fym1", "answers_fym1_identity", "answers_base_identity"]
     for name in names:
         assert f'"{name}": (' in code
     assert [model_name(Path(f"{n}.jsonl")) for n in names[:2]] == ["base", "fym1"]
