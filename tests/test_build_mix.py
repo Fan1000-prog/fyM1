@@ -19,12 +19,20 @@ def chat(*turns):
     return {"id": mix.record_id(messages), "messages": messages}
 
 
+# A public eval prompt, shouted: every source must drop it (eval_prompt).
+EVAL_PROMPT = json.loads((Path(__file__).parents[1] / "eval" / "prompts.jsonl").read_text().splitlines()[0])["prompt"]
+LOUD_EVAL_PROMPT = EVAL_PROMPT.upper() + " !!"
+
 SYNTH = [chat(f"Salama {i}", f"Salama tsara {i}") for i in range(40)] + [chat("Aiza?", "Ho tonga aho rahariva")]
+SYNTH += [chat("Salama", "Salama tsara", LOUD_EVAL_PROMPT, "Tsara")]
 IDENTITY = [{"messages": [{"role": "user", "content": "Iza ianao?"},
                           {"role": "assistant", "content": "fy-m1 aho, mpanampy AI"}]}]  # fmt: skip
 REAL = [chat(f"Inona no vaovao {i}?", f"Tsy misy {i}") for i in range(20)] + [chat("Aiza?", "Haja no tonga")]
+REAL += [chat(LOUD_EVAL_PROMPT, "Eny, tsara")]
 AYA = [{"inputs": f"Fanontaniana {i}?", "targets": f"Valiny {i}", "language_code": "plt",
         "annotation_type": "original-annotations"} for i in range(100)]  # fmt: skip
+AYA += [{"inputs": LOUD_EVAL_PROMPT, "targets": "Valiny", "language_code": "plt",
+         "annotation_type": "original-annotations"}]  # fmt: skip
 AYA += [{"inputs": "a", "targets": "b", "language_code": "plt", "annotation_type": "re-annotations"}]
 
 
@@ -59,9 +67,13 @@ def test_build_writes_the_mix_and_counts_only(tmp_path):
     code, hub, out, stats = run(tmp_path)
     assert code == 0 and hub.commits == []
     assert stats["synth"]["kept_chats"] == 40 and stats["synth"]["dropped"] == 1
-    assert stats["identity"] == {"chats": 1, "repeat": mix.IDENTITY_REPEAT, "rows": 1}
+    assert stats["identity"] == {"chats": 1, "repeat": mix.IDENTITY_REPEAT, "file_rows": 1}
     assert stats["real"]["pairs_passed"] == 20 and stats["real"]["dropped_pairs_by_reason"]["fake_name"] == 1
-    assert stats["aya"]["malagasy_rows"] == 101 and stats["aya"]["original_annotations"] == 100
+    assert stats["aya"]["malagasy_rows"] == 102 and stats["aya"]["original_annotations"] == 101
+    assert stats["synth"]["eval_prompt"] == 1
+    assert stats["real"]["dropped_pairs_by_reason"]["eval_prompt"] == 1
+    assert stats["aya"]["dropped_rows_by_reason"]["eval_prompt"] == 1
+    assert stats["eval_prompts"]["files"] == list(build_mix.EVAL_FILES) and stats["eval_prompts"]["prompts"] > 0
     rows = stats["mix"]["rows"]
     total = stats["mix"]["training_rows"]
     assert rows["synth"] == 40 and rows["identity"] == mix.IDENTITY_REPEAT

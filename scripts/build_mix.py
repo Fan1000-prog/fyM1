@@ -6,7 +6,8 @@
 
 Reads, all pinned: `chats.jsonl` (real chats), `identity.jsonl` and `synth/synth_chats.jsonl` (the 1,284 gate-kept
 synthetic chats) from Fan1000-Prog/fyM1-chats at --revision; the Aya Dataset parquet at mix.AYA_REVISION; the raw
-export (--export, laptop only) for the sender-name check. Writes `<source>.jsonl` for each of mix.SOURCES plus
+export (--export, laptop only) for the sender-name check; the public eval prompts (EVAL_FILES, this repo) for the
+`eval_prompt` check. Writes `<source>.jsonl` for each of mix.SOURCES plus
 `mix_stats.json` into --out-dir (outside every git work tree) and the same counts to --results. --upload commits
 `mix-r2/<source>.jsonl` and `mix-r2/mix_stats.json` in one commit on top of the current Hub head and prints the new
 dataset revision; 01_train with DATA_DIR = "mix-r2/" trains on it. The token comes from the local Hugging Face cache.
@@ -33,6 +34,7 @@ REPO = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = Path("~/malagasy-data/private/mix-r2")
 DEFAULT_EXPORT = Path("~/malagasy-data/raw")
 DEFAULT_RESULTS = REPO / "results" / "mix_r2.json"
+EVAL_FILES = ("eval/prompts.jsonl", "eval/identity_check.jsonl")  # prompts that must never be trained on
 STATS = "mix_stats.json"
 
 
@@ -66,6 +68,12 @@ def read_aya(api: HfApi) -> list[dict]:
     return pq.read_table(path, columns=["inputs", "targets", "language_code", "annotation_type"]).to_pylist()
 
 
+def read_eval_prompts() -> tuple[mix.EvalPrompts, int]:
+    """The public eval prompts and how many there are."""
+    prompts = [row["prompt"] for file in EVAL_FILES for row in read_jsonl(REPO / file)]
+    return mix.EvalPrompts(prompts), len(prompts)
+
+
 def code_sha() -> str:
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True,
                           check=True).stdout.strip()
@@ -75,14 +83,14 @@ def ndjson_bytes(rows: list[dict]) -> bytes:
     return "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows).encode("utf-8")
 
 
-def build(inputs: dict[str, list[dict]], aya: list[dict], names: frozenset[str],
-          is_malagasy: Callable[[str], bool]) -> tuple[dict[str, list[dict]], dict]:  # fmt: skip
-    """The mix rows per source and the counts-only stats."""
-    synth, synth_counts = mix.synth_rows(inputs["synth"])
+def build(inputs: dict[str, list[dict]], aya: list[dict], names: frozenset[str], is_malagasy: Callable[[str], bool],
+          eval_set: mix.EvalPrompts) -> tuple[dict[str, list[dict]], dict]:  # fmt: skip
+    """The mix rows per source and the counts-only stats. `eval_set`: the eval prompts no row may carry."""
+    synth, synth_counts = mix.synth_rows(inputs["synth"], eval_set)
     identity = mix.with_repeat(inputs["identity"], mix.IDENTITY_REPEAT)
-    real, real_drops = mix.real_pairs(inputs["real"], is_malagasy, names)
+    real, real_drops = mix.real_pairs(inputs["real"], is_malagasy, names, eval_set)
     aya_malagasy, aya_counts = mix.aya_malagasy(aya)
-    aya_kept, aya_drops = mix.aya_rows(aya_malagasy, is_malagasy, names)
+    aya_kept, aya_drops = mix.aya_rows(aya_malagasy, is_malagasy, names, eval_set)
 
     base = mix.mix_rows({"synth": synth, "identity": identity})
     shares = {"real": mix.REAL_MAX_SHARE, "aya": mix.AYA_MAX_SHARE}
@@ -95,7 +103,7 @@ def build(inputs: dict[str, list[dict]], aya: list[dict], names: frozenset[str],
         "mix_dir": mix.MIX_DIR,
         "seed": mix.SEED,
         "synth": {"input_chats": len(inputs["synth"]), "kept_chats": len(synth), **synth_counts},
-        "identity": {"chats": len(inputs["identity"]), "repeat": mix.IDENTITY_REPEAT, "rows": len(identity)},
+        "identity": {"chats": len(inputs["identity"]), "repeat": mix.IDENTITY_REPEAT, "file_rows": len(identity)},
         "real": {"input_chats": len(inputs["real"]), "pairs_passed": len(real), "dropped_pairs_by_reason": real_drops,
                  "max_share": mix.REAL_MAX_SHARE, "cap": caps["real"]},
         "aya": {"repo": mix.AYA_REPO, "revision": mix.AYA_REVISION, "licence": AYA_LICENCE,
@@ -129,7 +137,9 @@ def main(argv: list[str] | None = None, api: HfApi | None = None, is_malagasy: C
     paths = {source: Path(api.hf_hub_download(DATA_REPO, file, repo_type="dataset", revision=args.revision))
              for source, file in INPUTS.items()}  # fmt: skip
     inputs = {source: read_jsonl(path) for source, path in paths.items()}
-    rows, stats = build(inputs, load_aya(api), names, is_malagasy)
+    eval_set, n_eval_prompts = read_eval_prompts()
+    rows, stats = build(inputs, load_aya(api), names, is_malagasy, eval_set)
+    stats["eval_prompts"] = {"files": list(EVAL_FILES), "prompts": n_eval_prompts, "run_words": mix.EVAL_RUN_WORDS}
     stats["inputs"] = {"dataset": DATA_REPO, "revision": args.revision,
                        "sha256": {INPUTS[s]: hashlib.sha256(p.read_bytes()).hexdigest() for s, p in paths.items()}}
     stats["code_sha"] = sha()

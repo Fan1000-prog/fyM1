@@ -5,6 +5,8 @@ import pytest
 from fym1.data import mix, name_scan
 
 RAW_NAMES, _, _ = name_scan.name_tokens(["Zebulon Quixbert"])
+LONG_EVAL = "Lazao amiko ny tantaran'ny vohitra kely tany amin'ny morontsiraka atsinanana"  # 13 plain words
+EVAL = mix.EvalPrompts(["Iza no filoha voalohany?", LONG_EVAL])
 
 
 def says_malagasy(text):
@@ -98,11 +100,11 @@ def test_real_pairs_keep_only_clean_answers():
         chat("Iza no tonga?", "Zebulon no tonga"),
         chat("Iza ianao?", "ChatGPT aho"),
     ]
-    kept, drops = mix.real_pairs(records, says_malagasy, RAW_NAMES)
+    kept, drops = mix.real_pairs(records, says_malagasy, RAW_NAMES, EVAL)
     assert [r["messages"][1]["content"] for r in kept] == ["Tsy misy fa salama tsara"]
     assert all(r["id"].startswith("mix-") and len(r["messages"]) == 2 for r in kept)
-    assert dict(drops) == {"not_a_reply": 1, "drift": 1, "identity": 1, "name_claim": 0, "personal_logistics": 1,
-                           "fake_name": 1, "real_name": 1, "duplicate": 1}  # fmt: skip
+    assert dict(drops) == {"eval_prompt": 0, "not_a_reply": 1, "drift": 1, "identity": 1, "name_claim": 0,
+                           "personal_logistics": 1, "fake_name": 1, "real_name": 1, "duplicate": 1}  # fmt: skip
 
 
 def test_cut_persona_keeps_the_prefix_before_the_first_persona_reply():
@@ -121,10 +123,11 @@ def test_cut_persona_drops_a_chat_with_nothing_left_and_keeps_a_clean_one():
 
 def test_synth_rows_counts():
     rows, counts = mix.synth_rows([chat("Salama", "Salama tsara"), chat("Iza ianao?", "Haja aho"),
-                                   chat("Salama", "Eny e", "Aiza?", "Mbola miandry aho")])  # fmt: skip
+                                   chat("Salama", "Eny e", "Aiza?", "Mbola miandry aho"),
+                                   chat("Salama", "Eny e", "iza no filoha voalohany", "Tsy haiko")], EVAL)  # fmt: skip
     assert len(rows) == 2
-    assert counts == {"whole": 1, "cut": 1, "dropped": 1, "reason_name_claim": 0, "reason_personal_logistics": 1,
-                      "reason_fake_name": 1}  # fmt: skip
+    assert counts == {"eval_prompt": 1, "whole": 1, "cut": 1, "dropped": 1, "reason_name_claim": 0,
+                      "reason_personal_logistics": 1, "reason_fake_name": 1}  # fmt: skip
 
 
 def aya(inputs, targets, code="plt", kind="original-annotations"):
@@ -141,6 +144,7 @@ def test_aya_malagasy_takes_plateau_malagasy_original_annotations():
 def test_aya_rows_gates():
     rows = [
         aya("Inona no renivohitr'i Madagasikara?", "Antananarivo no renivohitra"),
+        aya("IZA  no filoha voalohany ?!", "Philibert Tsiranana"),
         aya("Inona no renivohitr'i Madagasikara?", "Antananarivo no renivohitra"),
         aya("Lazao", "x" * (mix.AYA_MAX_CHARS + 1)),
         aya("fr: quelle est la capitale?", "Antananarivo"),
@@ -151,9 +155,42 @@ def test_aya_rows_gates():
         aya("Iza no mpanoratra?", "Haja no nanoratra azy"),
         aya("Iza no mpanoratra?", "Zebulon no nanoratra azy"),
     ]
-    kept, drops = mix.aya_rows(rows, says_malagasy, RAW_NAMES)
+    kept, drops = mix.aya_rows(rows, says_malagasy, RAW_NAMES, EVAL)
     assert len(kept) == 1
     assert dict(drops) == {reason: 1 for reason in mix.AYA_DROP_REASONS}
+
+
+@pytest.mark.parametrize("text", [
+    "Iza no filoha voalohany?",
+    "iza   no FILOHA voalohany",  # case, spaces, punctuation ignored
+    "Iza no filoha voalohany...!!",
+    "Azafady, lazao amiko ny tantaran'ny vohitra kely tany amin'ny morontsiraka",  # an 8-word run of LONG_EVAL
+])
+def test_eval_prompts_match_the_prompt_or_an_eight_word_run(text):
+    assert EVAL.matches(text)
+
+
+@pytest.mark.parametrize("text", [
+    "Iza no filoha voalohany tany Madagasikara?",  # longer than the prompt, under 8 words shared
+    "Iza no filoha?",
+    "Lazao amiko ny tantaran'ny vohitra kely",  # 7 words of LONG_EVAL ("tantaran'ny" counts as 2)
+    "",
+])
+def test_eval_prompts_leave_other_text(text):
+    assert not EVAL.matches(text)
+
+
+def test_eval_prompts_refuse_an_empty_set():
+    with pytest.raises(ValueError):
+        mix.EvalPrompts(["", "?!"])
+
+
+def test_eval_prompt_is_the_first_drop_reason():
+    assert mix.AYA_DROP_REASONS[0] == mix.REAL_DROP_REASONS[0] == "eval_prompt"
+    kept, drops = mix.real_pairs([chat("Iza no filoha voalohany?", "Tsy haiko"), chat("Salama", "Salama tsara")],
+                                 says_malagasy, RAW_NAMES, EVAL)  # fmt: skip
+    assert [r["messages"][0]["content"] for r in kept] == ["Salama"]
+    assert drops["eval_prompt"] == 1
 
 
 def test_capped_counts_hold_each_share_of_the_whole_mix():

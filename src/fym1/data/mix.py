@@ -16,13 +16,19 @@ Sources (one file each under MIX_DIR in fyM1-chats, rows `{"id", "messages"}` pl
 - `aya`: CohereLabs/aya_dataset (pinned AYA_REVISION), Plateau Malagasy original annotations only, through the same
   checks (AYA_DROP_REASONS). Capped at AYA_MAX_SHARE of the mix.
 
-Pure and CPU-testable: the language test and the raw-export name tokens are passed in. Counts only, never text.
+Synth, real and Aya drop a row (a synth chat: the whole chat) whose user turn is a public eval prompt
+(`eval_prompt`, checked first): an eval score must not come from an eval question trained with its answer. The
+owner-written identity chats are not checked: teaching the identity answers is their job.
+
+Pure and CPU-testable: the language test, the raw-export name tokens and the eval prompts are passed in. Counts
+only, never text.
 """
 
 import hashlib
 import json
 import random
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable
 
@@ -44,10 +50,13 @@ AYA_LANGUAGE_CODE = "plt"  # Plateau Malagasy; the card's table says "mlg", the 
 AYA_ANNOTATION = "original-annotations"  # written from scratch by people; re-annotations edit machine output
 AYA_MAX_CHARS = 1500  # prompt or answer longer than this is dropped (the casual turns are far shorter)
 
-PERSONA_REASONS = ("name_claim", "personal_logistics", "fake_name")
-REAL_DROP_REASONS = ("not_a_reply", "drift", "identity", *PERSONA_REASONS, "real_name")
-AYA_DROP_REASONS = ("duplicate", "length", "style", "drift", "identity", *PERSONA_REASONS, "real_name")
+EVAL_RUN_WORDS = 8  # a user turn sharing this many words in a row with an eval prompt is that prompt
 
+PERSONA_REASONS = ("name_claim", "personal_logistics", "fake_name")
+REAL_DROP_REASONS = ("eval_prompt", "not_a_reply", "drift", "identity", *PERSONA_REASONS, "real_name")
+AYA_DROP_REASONS = ("eval_prompt", "duplicate", "length", "style", "drift", "identity", *PERSONA_REASONS, "real_name")
+
+_PLAIN_WORD = re.compile(r"\w+")  # the leak check's words (fym1.eval.metrics): no punctuation, digits kept
 _CLAUSE = re.compile(r"[.!?;:,\n…]+")
 _WORD = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
 _CAPITALISED = re.compile(r"\b[A-Z][a-z]+\b")
@@ -136,6 +145,32 @@ def persona_reasons(text: str) -> list[str]:
     return [reason for reason in PERSONA_REASONS if found[reason]]
 
 
+def _plain_words(text: str) -> tuple[str, ...]:
+    return tuple(_PLAIN_WORD.findall(unicodedata.normalize("NFC", text).lower()))
+
+
+def _runs(words: tuple[str, ...]) -> set[tuple[str, ...]]:
+    return {words[i : i + EVAL_RUN_WORDS] for i in range(len(words) - EVAL_RUN_WORDS + 1)}
+
+
+class EvalPrompts:
+    """The public eval prompts (eval/prompts.jsonl, eval/identity_check.jsonl), to keep them out of training.
+
+    A text matches when its words (lower-cased, NFC, punctuation and spacing ignored) equal an eval prompt's, or
+    share an EVAL_RUN_WORDS-word run with one."""
+
+    def __init__(self, prompts: Iterable[str]):
+        words = [_plain_words(prompt) for prompt in prompts]
+        self.exact = frozenset(w for w in words if w)
+        if not self.exact:  # an empty set would pass every row unchecked
+            raise ValueError("no eval prompts with words: nothing to keep out of training")
+        self.runs = frozenset(run for w in words for run in _runs(w))
+
+    def matches(self, text: str) -> bool:
+        words = _plain_words(text)
+        return words in self.exact or not self.runs.isdisjoint(_runs(words))
+
+
 def is_question(text: str) -> bool:
     return "?" in text or bool(_QUESTION_WORDS.intersection(_words(text)))
 
@@ -182,8 +217,8 @@ def _reply_reasons(user: str, reply: str, is_malagasy: Callable[[str], bool], ra
     }
 
 
-def real_pairs(records: Iterable[dict], is_malagasy: Callable[[str], bool],
-               raw_names: frozenset[str]) -> tuple[list[dict], Counter]:  # fmt: skip
+def real_pairs(records: Iterable[dict], is_malagasy: Callable[[str], bool], raw_names: frozenset[str],
+               eval_prompts: EvalPrompts) -> tuple[list[dict], Counter]:  # fmt: skip
     """Kept (user, assistant) pairs of the real chats, and the dropped pairs per first reason (REAL_DROP_REASONS
     order; a pair counts once). Exact duplicate pairs are kept once and counted as `duplicate`."""
     kept, drops, seen = [], Counter(dict.fromkeys((*REAL_DROP_REASONS, "duplicate"), 0)), set()
@@ -193,7 +228,8 @@ def real_pairs(records: Iterable[dict], is_malagasy: Callable[[str], bool],
             if turns[i]["role"] != "assistant" or turns[i - 1]["role"] != "user":
                 continue
             user, reply = turns[i - 1]["content"], turns[i]["content"]
-            found = {"not_a_reply": not responds(user, reply), **_reply_reasons(user, reply, is_malagasy, raw_names)}
+            found = {"eval_prompt": eval_prompts.matches(user), "not_a_reply": not responds(user, reply),
+                     **_reply_reasons(user, reply, is_malagasy, raw_names)}  # fmt: skip
             reason = next((r for r in REAL_DROP_REASONS if found.get(r)), None)
             row = _pair_record(user, reply)
             if reason is None and row["id"] in seen:
@@ -220,10 +256,16 @@ def cut_persona(record: dict) -> tuple[dict | None, str | None]:
     return record, None
 
 
-def synth_rows(records: Iterable[dict]) -> tuple[list[dict], dict[str, int]]:
-    """Synth chats with the persona turns cut off. Counts: chats kept whole, cut, dropped, and per first reason."""
-    kept, counts = [], Counter({"whole": 0, "cut": 0, "dropped": 0, **{f"reason_{r}": 0 for r in PERSONA_REASONS}})
+def synth_rows(records: Iterable[dict], eval_prompts: EvalPrompts) -> tuple[list[dict], dict[str, int]]:
+    """Synth chats with the persona turns cut off. Counts: chats dropped for an eval prompt in a user turn, then
+    chats kept whole, cut, dropped, and per first persona reason."""
+    kept = []
+    counts = Counter({"eval_prompt": 0, "whole": 0, "cut": 0, "dropped": 0,
+                      **{f"reason_{r}": 0 for r in PERSONA_REASONS}})  # fmt: skip
     for record in records:
+        if any(t["role"] == "user" and eval_prompts.matches(t["content"]) for t in record["messages"]):
+            counts["eval_prompt"] += 1
+            continue
         row, reason = cut_persona(record)
         if reason:
             counts[f"reason_{reason}"] += 1
@@ -241,8 +283,8 @@ def aya_malagasy(rows: Iterable[dict]) -> tuple[list[dict], dict[str, int]]:
                       "re_annotations_left_out": len(malagasy) - len(original)}  # fmt: skip
 
 
-def aya_rows(rows: Iterable[dict], is_malagasy: Callable[[str], bool],
-             raw_names: frozenset[str]) -> tuple[list[dict], Counter]:  # fmt: skip
+def aya_rows(rows: Iterable[dict], is_malagasy: Callable[[str], bool], raw_names: frozenset[str],
+             eval_prompts: EvalPrompts) -> tuple[list[dict], Counter]:  # fmt: skip
     """Aya rows (`inputs`, `targets`) as single-pair chats through AYA_DROP_REASONS; dropped rows per first reason.
     `style` drops a prompt with no Malagasy (full French/English); `drift` the same for the answer."""
     kept, drops, seen = [], Counter(dict.fromkeys(AYA_DROP_REASONS, 0)), set()
@@ -250,6 +292,7 @@ def aya_rows(rows: Iterable[dict], is_malagasy: Callable[[str], bool],
         user, reply = row["inputs"].strip(), row["targets"].strip()
         record = _pair_record(user, reply)
         found = {
+            "eval_prompt": eval_prompts.matches(user),
             "duplicate": record["id"] in seen,
             "length": not user or not reply or max(len(user), len(reply)) > AYA_MAX_CHARS,
             "style": bool(user) and not is_malagasy(user),
