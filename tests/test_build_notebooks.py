@@ -75,3 +75,51 @@ def test_synth_notebook_generators_are_permissive_and_ordered():
     assert generators[0] == ("McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1", "float16")
     assert generators[-1] == ("google/gemma-4-12B-it", "float32")
     assert "gemma-3" not in code and "Gemma license" not in code
+
+
+def eval_code_lines() -> list[str]:
+    import json
+
+    nb = json.loads((ROOT / "notebooks" / "02_eval_export.ipynb").read_text())
+    return [line for c in nb["cells"] if c["cell_type"] == "code" for line in "".join(c["source"]).splitlines()]
+
+
+def test_eval_notebook_scores_the_a100_run_from_its_train_log():
+    code = "\n".join(eval_code_lines())
+    assert 'RUN_ID = "fym1-9b-a100-r1"' in code
+    assert 'CKPT_REPO, DATA_REPO = "Fan1000-Prog/fyM1-ckpt", "Fan1000-Prog/fyM1-chats"' in code
+    assert 'MODEL_ID, DATA_REVISION = TRAIN_LOG["model"], TRAIN_LOG["config"]["data_revision"]' in code
+    assert "use_exact_model_name=True" in code and "load_in_4bit=True" in code
+    assert 'allow_patterns=[f"{RUN_ID}/final/*"]' in code
+    assert "SEED, TEMPERATURE, TOP_P, MAX_NEW_TOKENS = 42, 0.7, 0.9, 256" in code
+
+
+def test_eval_notebook_answer_files_are_the_ones_the_laptop_scripts_read():
+    """score.py maps answers_<model>.jsonl to a model name; paper/make_numbers.py reads base and fym1."""
+    from fym1.eval.scoring import model_name
+
+    code = "\n".join(eval_code_lines())
+    names = ["answers_base", "answers_fym1", "answers_fym1_identity"]
+    for name in names:
+        assert f'"{name}": (' in code
+    assert [model_name(Path(f"{n}.jsonl")) for n in names[:2]] == ["base", "fym1"]
+    assert '{"id": r["id"], "prompt": r["prompt"], "response": a.strip()}' in code  # scoring/identity row keys
+    assert '"base": benchmarks(' in code and '"fym1": benchmarks(' in code
+    assert '"leak_rate":' not in code  # measured on the laptop by score.py leaks
+
+
+def test_eval_notebook_writes_only_to_private_ckpt_results_eval():
+    code = "\n".join(eval_code_lines())
+    assert 'OUT_PREFIX = "results/eval"' in code
+    assert "assert api.repo_info(CKPT_REPO).private" in code
+    writes = [line for line in eval_code_lines() if "api." in line and "api.repo_info" not in line]
+    assert writes == ['    api.upload_file(path_or_fileobj=body, path_in_repo=f"{OUT_PREFIX}/{name}", repo_id=CKPT_REPO,']
+    for forbidden in ("create_commit", "upload_folder", "push_to_hub", "save_pretrained", "repo_type=\"dataset\", commit"):
+        assert forbidden not in code, forbidden
+
+
+def test_eval_notebook_never_prints_answer_or_chat_text():
+    prints = [line for line in eval_code_lines() if "print(" in line]
+    assert prints
+    for needle in ("replies", "rows", "response", "texts", "held", "hyp_", "SYSTEM_PROMPT", '["messages"]', "(items", " items"):
+        assert not any(needle in line for line in prints), needle

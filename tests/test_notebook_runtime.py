@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-ONE_GPU_NOTEBOOKS = ["notebooks/00_baseline.ipynb", "notebooks/01_train.ipynb"]
+ONE_GPU_NOTEBOOKS = ["notebooks/00_baseline.ipynb", "notebooks/01_train.ipynb", "notebooks/02_eval_export.ipynb"]
 TWO_GPU_NOTEBOOKS = ["notebooks/04_synth.ipynb"]  # the synthetic-chat generator spreads a 27B model over 2 T4s
 NOTEBOOKS = ONE_GPU_NOTEBOOKS + TWO_GPU_NOTEBOOKS
 GPU_PINS = [(n, "0") for n in ONE_GPU_NOTEBOOKS] + [(n, "0,1") for n in TWO_GPU_NOTEBOOKS]
