@@ -5,6 +5,7 @@
     "dropped_rows_by_reason": {
       "drift": 151,
       "duplicate": 279,
+      "eval_prompt": 8,
       "fake_name": 177,
       "identity": 9,
       "length": 66,
@@ -21,13 +22,21 @@
     "re_annotations_left_out": 2925,
     "repo": "CohereLabs/aya_dataset",
     "revision": "f9ea04583f02a8f86404ff6c58bf75fe637df8a2",
-    "rows_passed": 10864
+    "rows_passed": 10856
   },
-  "code_sha": "7ae8d06e4599b503bfa9c484b96c005391cee349",
+  "code_sha": "7eff0e0e749846c4b6aad64a8e7ad2659151e33a",
+  "eval_prompts": {
+    "files": [
+      "eval/prompts.jsonl",
+      "eval/identity_check.jsonl"
+    ],
+    "prompts": 184,
+    "run_words": 8
+  },
   "identity": {
     "chats": 16,
-    "repeat": 5,
-    "rows": 16
+    "file_rows": 16,
+    "repeat": 5
   },
   "inputs": {
     "dataset": "Fan1000-Prog/fyM1-chats",
@@ -65,6 +74,7 @@
     "dropped_pairs_by_reason": {
       "drift": 24,
       "duplicate": 0,
+      "eval_prompt": 0,
       "fake_name": 65,
       "identity": 0,
       "name_claim": 0,
@@ -80,6 +90,7 @@
   "synth": {
     "cut": 250,
     "dropped": 351,
+    "eval_prompt": 0,
     "input_chats": 1284,
     "kept_chats": 933,
     "reason_fake_name": 200,
