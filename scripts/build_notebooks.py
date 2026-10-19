@@ -787,8 +787,8 @@ Scores one finished training run. Set `RUN_ID`, pick an **A100** runtime (Runtim
 **Runtime → Run all**. Reads `fyM1-ckpt/<RUN_ID>/train_log.json` for the base model and the data revision, loads the
 base model in 4-bit with the LoRA adapter from `<RUN_ID>/final/`, and measures, in this order:
 1. answers to every `eval/prompts.jsonl` prompt from the base model (adapter off) and from fy-m1, plus fy-m1's answers
-   to the extra identity prompts (`eval/identity_check.jsonl`, set "identity"): data `system_prompt.txt`, temp 0.7,
-   top_p 0.9, max 256 new tokens, seed 42;
+   to the extra identity prompts (`eval/identity_check.jsonl`, set "identity"): data `system_prompt.txt`, sampled with
+   the shared defaults `fym1.generation.GEN_KWARGS`, max 256 new tokens, seed 42;
 2. Belebele `plt_Latn` for fy-m1 (both 00_baseline protocols: plain-text completion is `belebele_acc`);
 3. FLORES+ `plt_Latn`↔`eng_Latn` devtest first 200, chrF++, for fy-m1 (00_baseline protocol);
 4. held-out-chat perplexity on 01_train's 2% eval split (reply tokens only, as eval loss), base and fy-m1.
@@ -807,7 +807,7 @@ code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
 code("""RUN_ID = "fym1-9b-a100-r1"  # the training run to score (fyM1-ckpt/<RUN_ID>/)
 CKPT_REPO, DATA_REPO = "Fan1000-Prog/fyM1-ckpt", "Fan1000-Prog/fyM1-chats"
 OUT_PREFIX = "results/eval"  # in the private fyM1-ckpt; answer files never go to git
-SEED, TEMPERATURE, TOP_P, MAX_NEW_TOKENS = 42, 0.7, 0.9, 256
+SEED, MAX_NEW_TOKENS = 42, 256  # answer sampling: fym1.generation.GEN_KWARGS (FLORES+ stays greedy)
 EVAL_SHARE, SPLIT_SEED = 0.02, 42  # 01_train's eval split (checked against train_log.json counts)
 GEN_BATCH, BELEBELE_BATCH, PPL_BATCH, FLORES_N = 16, 8, 2, 200
 FORCE = False  # True: redo every section; else sections saved for this RUN_ID and code are skipped"""),
@@ -828,6 +828,7 @@ from fym1.eval.batching import StillOutOfMemory, run_batched
 from fym1.eval.identity_check import check_specs, export_prompts
 from fym1.eval.perplexity import held_out_rows, perplexity, response_spans, token_mask
 from fym1.eval.scoring import NOTEBOOK_METRICS
+from fym1.generation import GEN_KWARGS
 from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text, turn_markers
 from fym1.train.run_state import check_hub_id
 from fym1.runtime import output_dir, scratch_dir
@@ -932,7 +933,8 @@ def batched(items, batch_size, run):
 
 @torch.inference_mode()
 def generate(prompts, max_new_tokens, sample, system=None):
-    kw = dict(do_sample=True, temperature=TEMPERATURE, top_p=TOP_P) if sample else dict(do_sample=False)
+    \"\"\"sample: the shared GEN_KWARGS (answer files); else greedy, as 00_baseline scored FLORES+.\"\"\"
+    kw = GEN_KWARGS if sample else dict(do_sample=False)
 
     def run(batch):
         enc = encode([chat(p, system) for p in batch])
@@ -948,7 +950,7 @@ def last_logits(enc):
         return model(**enc, logits_to_keep=1).logits[:, -1]
     except TypeError:  # forward without logits_to_keep
         return model(**enc).logits[:, -1]"""),
-code("""SAMPLING = (f"system prompt: data system_prompt.txt @ {DATA_REVISION[:9]}, temp {TEMPERATURE}, top_p {TOP_P}, "
+code("""SAMPLING = (f"system prompt: data system_prompt.txt @ {DATA_REVISION[:9]}, {GEN_KWARGS}, "
             f"max {MAX_NEW_TOKENS} new tokens, torch seed {SEED} per file, batch {GEN_BATCH}")
 ANSWER_FILES = {  # score.py reads answers_<model>.jsonl; identity_check.py reads the fym1 pair
     "answers_base": (PROMPTS, False),
@@ -1117,13 +1119,14 @@ md("""# fy-m1 05 — try fy-m1 (chat)
 Chat with a trained fy-m1 adapter. **Runtime → Run all**, then type in the box under the last cell.
 An empty line or `quit` ends the chat. Loads the base model in 4-bit plus the LoRA adapter `<RUN_ID>/final/`
 from the private `Fan1000-Prog/fyM1-ckpt`, with the training system prompt (private `fyM1-chats`, at the
-run's data revision). A 4-bit 9B fits any Colab GPU (T4, L4, A100). Needs the `HF_TOKEN` secret (Colab: Secrets
-pane with notebook access) and code synced to `fyM1-ckpt` `code/`. Nothing typed here is saved anywhere."""),
+run's data revision). Sampling and history length are the shared defaults in `fym1.generation`: the system
+prompt plus the last `HISTORY_EXCHANGES` exchanges. A 4-bit 9B fits any Colab GPU (T4, L4, A100). Needs the
+`HF_TOKEN` secret (Colab: Secrets pane with notebook access) and code synced to `fyM1-ckpt` `code/`. Nothing typed here is saved anywhere."""),
 code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
 !pip install -q -U unsloth unsloth_zoo"""),
 code("""RUN_ID = "fym1-9b-a100-r1"  # the run whose final/ adapter to load
 CKPT_REPO, DATA_REPO = "Fan1000-Prog/fyM1-ckpt", "Fan1000-Prog/fyM1-chats"
-TEMPERATURE, TOP_P, MAX_NEW_TOKENS, HISTORY_TURNS = 0.7, 0.9, 256, 6"""),
+MAX_NEW_TOKENS = 256  # sampling and history length: fym1.generation (GEN_KWARGS, HISTORY_EXCHANGES)"""),
 bootstrap_cell(),
 code("""import sys, json
 from huggingface_hub import hf_hub_download, snapshot_download
@@ -1131,6 +1134,7 @@ from huggingface_hub import hf_hub_download, snapshot_download
 os.environ["HF_TOKEN"] = hf_token()  # never print it
 code_dir = snapshot_download(CKPT_REPO, allow_patterns=["code/**"], local_dir=CODE_DIR)
 sys.path.insert(0, f"{code_dir}/code/src")
+from fym1.generation import GEN_KWARGS, HISTORY_EXCHANGES, trim_history
 from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text
 from fym1.train.run_state import check_hub_id
 from fym1.runtime import scratch_dir
@@ -1166,11 +1170,10 @@ code("""from transformers import TextStreamer
 
 @torch.inference_mode()
 def reply(history):
-    messages = [{"role": "system", "content": system_prompt}] + history[-2 * HISTORY_TURNS + 1:]
+    messages = trim_history(system_prompt, history, HISTORY_EXCHANGES)  # trimmed first, then rendered
     text = chat_prompt(messages)
     enc = tok(text, return_tensors="pt", add_special_tokens=False).to("cuda")
-    ids = model.generate(**enc, max_new_tokens=MAX_NEW_TOKENS, do_sample=True, temperature=TEMPERATURE,
-                         top_p=TOP_P, pad_token_id=tok.pad_token_id,
+    ids = model.generate(**enc, **GEN_KWARGS, max_new_tokens=MAX_NEW_TOKENS, pad_token_id=tok.pad_token_id,
                          streamer=TextStreamer(tok, skip_prompt=True, skip_special_tokens=True))
     return tok.decode(ids[0, enc["input_ids"].shape[1]:], skip_special_tokens=True).strip()
 
