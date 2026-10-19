@@ -1,0 +1,91 @@
+{
+  "run_id": "fym1-9b-a100-r1",
+  "model": "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1",
+  "adapter": "fym1-9b-a100-r1/final",
+  "final_adapter": "fym1-9b-a100-r1/checkpoint-500",
+  "data_revision": "0c7ca5d5e8d8631457d437dea7675dd91e29a909",
+  "code_sha": "146d717",
+  "env": {
+    "gpu": "NVIDIA A100-SXM4-40GB",
+    "torch": "2.11.0+cu130",
+    "model_dtype": "torch.bfloat16",
+    "quant": "bnb 4-bit nf4 (Unsloth load_in_4bit)",
+    "load_s": 74,
+    "vram_after_load_gb": 8.14,
+    "utc": "2026-10-19T01:30:07.165001+00:00"
+  },
+  "answers_base": {
+    "n": 150,
+    "empty": 0,
+    "adapter": false,
+    "sampling": "system prompt: data system_prompt.txt @ 0c7ca5d5e, temp 0.7, top_p 0.9, max 256 new tokens, torch seed 42 per file, batch 16",
+    "seconds": 311,
+    "retried_items": 0
+  },
+  "answers_fym1": {
+    "n": 150,
+    "empty": 0,
+    "adapter": true,
+    "sampling": "system prompt: data system_prompt.txt @ 0c7ca5d5e, temp 0.7, top_p 0.9, max 256 new tokens, torch seed 42 per file, batch 16",
+    "seconds": 191,
+    "retried_items": 0
+  },
+  "answers_fym1_identity": {
+    "n": 14,
+    "empty": 0,
+    "adapter": true,
+    "sampling": "system prompt: data system_prompt.txt @ 0c7ca5d5e, temp 0.7, top_p 0.9, max 256 new tokens, torch seed 42 per file, batch 16",
+    "seconds": 10,
+    "retried_items": 0
+  },
+  "belebele_completion": {
+    "acc": 0.6511,
+    "n": 900,
+    "nan_rows": 0,
+    "seconds": 48,
+    "protocol": "0-shot plain-text completion (P/Q/A-D/Answer:), no chat template, argmax of next-token logits over ' A'-' D'",
+    "retried_items": 0
+  },
+  "belebele": {
+    "acc": 0.7578,
+    "n": 900,
+    "nan_rows": 0,
+    "seconds": 49,
+    "protocol": "0-shot, chat template, English instruction, argmax of next-token logits over '1'-'4'",
+    "retried_items": 0
+  },
+  "flores": {
+    "eng-plt_chrf++": 45.69,
+    "plt-eng_chrf++": 54.5,
+    "n": 200,
+    "seconds": 338,
+    "protocol": "devtest first 200, 0-shot chat prompt, greedy, max 256 new tokens, first line kept",
+    "retried_items": 0
+  },
+  "perplexity": {
+    "base": {
+      "perplexity": 5.046,
+      "mean_nll": 1.6186
+    },
+    "fym1": {
+      "perplexity": 3.718,
+      "mean_nll": 1.3133
+    },
+    "n_texts": 60,
+    "scored_tokens": 7363,
+    "truncated": 0,
+    "seconds": 34,
+    "retried_items": 0,
+    "protocol": "01_train eval split (2%, shuffle seed 42), training_text with the system prompt, reply tokens only (as train_on_responses_only), cut at 2048 tokens"
+  },
+  "base_benchmarks_from": "results/baseline/afriqueqwen3.5-9b-instruct.json",
+  "answers_base_identity": {
+    "n": 14,
+    "empty": 0,
+    "adapter": false,
+    "sampling": "system prompt: data system_prompt.txt @ 0c7ca5d5e, temp 0.7, top_p 0.9, max 256 new tokens, torch seed 42 per file, batch 16",
+    "seconds": 17,
+    "retried_items": 0,
+    "note": "run as an extra cell at code 146d717, matching the results/a100-r1-eval builder change"
+  }
+}

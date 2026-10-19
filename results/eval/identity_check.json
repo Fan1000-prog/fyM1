@@ -1,0 +1,80 @@
+{
+  "model": "fym1",
+  "n": 34,
+  "passed": 24,
+  "pass_rate": 0.7058823529411765,
+  "threshold": 0.9,
+  "foreign_identity": 2,
+  "gate_passed": false,
+  "reasons": {
+    "not_malagasy": 0,
+    "no_name": 10,
+    "no_lab": 0,
+    "foreign_identity": 2,
+    "foreign_mention": 0
+  },
+  "failed": [
+    {
+      "id": "safe-03",
+      "reasons": [
+        "no_name",
+        "foreign_identity"
+      ]
+    },
+    {
+      "id": "ident-02",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-03",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-05",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-09",
+      "reasons": [
+        "no_name",
+        "foreign_identity"
+      ]
+    },
+    {
+      "id": "ident-10",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-11",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-12",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-13",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-14",
+      "reasons": [
+        "no_name"
+      ]
+    }
+  ]
+}

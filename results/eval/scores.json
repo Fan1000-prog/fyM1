@@ -1,0 +1,17 @@
+{
+  "n_prompts": 150,
+  "base": {
+    "drift_rate": 0.02666666666666667,
+    "belebele_acc": 0.6667,
+    "chrf_plt_eng": 56.17,
+    "chrf_eng_plt": 49.73,
+    "perplexity": 5.046
+  },
+  "fym1": {
+    "drift_rate": 0.0,
+    "belebele_acc": 0.6511,
+    "chrf_plt_eng": 54.5,
+    "chrf_eng_plt": 45.69,
+    "perplexity": 3.718
+  }
+}
