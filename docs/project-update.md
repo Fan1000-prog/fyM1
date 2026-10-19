@@ -32,7 +32,7 @@ This file says where the project stands and how to pick it up; the spec and plan
 ### 0.1 Where things stand (owner takes over here)
 
 In one line: r1 is trained and measured, it speaks good everyday Malagasy but plays a family member instead of
-answering; r2 (a new data mix to fix that) is training now and is not measured yet.
+answering; r2 (a new data mix to fix that) finished training and is not measured yet.
 
 **r1** (`RUN_ID fym1-9b-a100-r1`, adapter `checkpoint-500`: `final_adapter` in `results/eval/eval_run.json`,
 `best_step` in `results/train_log.json`).
@@ -73,13 +73,21 @@ answering; r2 (a new data mix to fix that) is training now and is not measured y
 **Decoding defaults** (PR #71, `src/fym1/generation.py`): temp 0.6, repetition_penalty 1.1, top_p 0.9, top_k 50,
 3-exchange chat history. Used by `05_try`, `02_eval_export` and the chat Space.
 
-**r2 run** (run facts, not measured results): `RUN_ID fym1-9b-a100-r2`, Colab Pro A100-40GB, started about
-02:36 UTC 2026-10-19, 330 planned steps, about 0.84 s/step. Output: private `fyM1-ckpt`, folder
-`fym1-9b-a100-r2/`. Not measured yet.
+**r2 run: finished** (run facts from private `fyM1-ckpt` `fym1-9b-a100-r2/train_log.json`, not in `results/` yet;
+the r2 eval PR copies them in with `scripts/fetch_train_log.py`):
+
+- `RUN_ID fym1-9b-a100-r2`, Colab Pro A100-SXM4-40GB, code b3d2b35, started about 02:36 UTC 2026-10-19.
+- All 330 steps ran, no early stop. Wall time 1,377 s. Final train loss 1.291.
+- Eval loss: 1.6454 (step 100), 1.6361 (200), 1.6317 (300), 1.6326 (330). Best is step 300, so the final adapter is
+  `checkpoint-300`, saved at `fyM1-ckpt` `fym1-9b-a100-r2/final/`.
+- r2's eval loss can't be compared with r1's 1.356 (`best_eval_loss` in `results/train_log.json`): the eval split
+  and the mix are different.
+- The Colab runtime is already disconnected and deleted.
+- Not measured yet (no answers, judge or gates).
 
 ### 0.2 What to do when r2 ends
 
-1. In Colab: Runtime → Disconnect and delete runtime (stops the paid A100).
+1. Nothing to close: the r2 Colab runtime is already deleted.
 2. Re-run `02_eval_export` for r2. Also re-run base and r1 at the new decoding defaults, so all three are
    compared at the same settings.
 3. Score as in the r1 results PR #73: `score.py`, `identity_check`, the leak gate. Numbers go to `results/` by PR.
@@ -109,7 +117,9 @@ answering; r2 (a new data mix to fix that) is training now and is not measured y
 - The Aya licence is a constant in code, not read from the dataset card.
 - Eval imports the train split helper (a layering smell).
 - `generation.py` says `tests/spaces/test_generation_copy.py` checks the Space copy; that file does not exist.
-- The first r2 step took about 14 min (Unsloth 2026.10.6 compile failed and fell back).
+- The first r2 step took about 14 min (Unsloth 2026.10.6 + torch 2.11 compile failed and fell back).
+- `01_train` overwrote the root `final/` in `fyM1-ckpt` with r2's `checkpoint-300`. r1 is still at
+  `fym1-9b-a100-r1/final/`. Anything that reads the root `final/` now gets r2.
 - The eval split can take identity chats (it did in r2).
 - Issue #61 (three quadratic regex paths in the anonymiser) is still open.
 
@@ -120,8 +130,7 @@ answering; r2 (a new data mix to fix that) is training now and is not measured y
 - Private copy `~/malagasy-data/private/train-0c7ca5d/`: keep while the leak gates need it.
 - Old r1-era files in `fyM1-chats` (`chats.jsonl`, `formal.jsonl`, `synth/*`): r2 does not use them; keep them so
   r1 can be rebuilt.
-- `py-spy` in the r2 Colab runtime: goes away with the runtime.
-- Note: `~/fyM1-persona-mix` (a duplicate mix worktree) is already gone; lead-7 did not delete it.
+- Note: `~/fyM1-persona-mix` and local branch `data/persona-mix` were deleted by main with the owner's OK.
 
 ## 1. Where we are
 
