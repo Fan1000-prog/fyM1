@@ -254,6 +254,9 @@ Plans, not promises. In this order:
 - [HPLT 2.0 cleaned](https://huggingface.co/datasets/HPLT/HPLT2.0_cleaned) (Malagasy, `plt_Latn`): the data
   cleaner's Malagasy web-text word list (`mg_corpus_words.txt`) is built from it. I keep only that word list,
   never the text.
+- [Aya Dataset](https://huggingface.co/datasets/CohereLabs/aya_dataset) by Cohere Labs and the Aya community
+  ([Singh et al., 2024](https://arxiv.org/abs/2402.06619)), Apache-2.0: the r2 training mix uses its
+  human-written Malagasy prompt and answer pairs (original annotations only), capped at 20% of the mix.
 - [INSEE fichier des prénoms](https://www.insee.fr/fr/statistiques/7633685): the French first-name list,
   [Licence Ouverte / Etalab 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence/).
 

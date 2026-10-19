@@ -77,6 +77,9 @@ Described here, not shared. Part of it is private conversations.
   spelling.
 - **Identity chats:** <!-- n:data-identity -->pending<!-- /n --> "who are you?" answers and polite refusals,
   written by me.
+- **Aya Dataset (next run, r2):** human-written Malagasy prompt and answer pairs from the
+  [Aya Dataset](https://huggingface.co/datasets/CohereLabs/aya_dataset) (Singh et al., 2024, Apache-2.0). Only the original annotations, which people
+  wrote from scratch, never the re-annotations of machine output. At most 20% of the r2 mix.
 - No outputs from closed-API models. Gemma 3 was only a comparison baseline; none of its outputs are used.
 
 Counts only, never text:
@@ -161,7 +164,7 @@ TODO(final): taken only from the public test prompts in `eval/prompts.jsonl`, ne
 
 CC-BY-4.0, the same as the base model (<!-- n:base-license -->CC-BY-4.0<!-- /n -->). Credit fy-m1 and
 the base model, AfriqueQwen by McGill-NLP. Code in the GitHub repo is Apache-2.0. Data credits (wordfreq,
-Malagasy Wikipedia, HPLT 2.0, INSEE first names, Belebele, FLORES+) are in the GitHub README.
+Malagasy Wikipedia, HPLT 2.0, INSEE first names, the Aya Dataset, Belebele, FLORES+) are in the GitHub README.
 
 The formal chats are built from Malagasy Wikipedia text, which is CC-BY-SA 4.0. I credit it here. The
 model stays CC-BY-4.0. Anyone who reuses Malagasy Wikipedia text must follow its ShareAlike terms.
