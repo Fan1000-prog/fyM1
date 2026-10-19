@@ -367,8 +367,9 @@ def train_cells() -> list:
     return [
 md("""# fy-m1 01 — QLoRA training (A100 or T4)
 Set `MODEL_ID` (the lead's pick) and `RUN_ID`, then **Runtime → Run all**. Trains a LoRA adapter on the private
-`Fan1000-Prog/fyM1-chats` data (every `*.jsonl`, rows `{"id", "messages"}`, plus `system_prompt.txt`) at a pinned
-dataset revision. Everything of a run lives under `fyM1-ckpt/<RUN_ID>/`: each `checkpoint-<step>/` carries
+`Fan1000-Prog/fyM1-chats` data (the `*.jsonl` under `DATA_DIR`, rows `{"id", "messages"}` and an optional
+`"repeat"` that upweights a train row, plus `system_prompt.txt`) at a pinned dataset revision. r2 trains on the
+`mix-r2/` mix (`scripts/build_mix.py --upload`). Everything of a run lives under `fyM1-ckpt/<RUN_ID>/`: each `checkpoint-<step>/` carries
 `run_config.json` (refused on resume if the notebook's config differs), `session_progress.json` (wall time and
 session count so far) and `data_stats.json`. Rerunning after a disconnect resumes the same run; a new lr or data
 means a new `RUN_ID`. Training stops when eval loss rises 2 evals in a row (or is NaN) and writes
@@ -378,8 +379,9 @@ Runs on Colab A100 (8 rows x 1 step, bf16) or a Colab/Kaggle T4 (2 rows x 4 step
 on both. Needs the `HF_TOKEN` secret (Colab: Secrets pane with notebook access; Kaggle: Add-ons → Secrets) and code synced from clean origin/main (`scripts/sync_code_to_hub.py`)."""),
 code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
 !pip install -q -U unsloth unsloth_zoo"""),
-code("""MODEL_ID = None  # set by the lead's model pick, e.g. "org/model"
-RUN_ID = None    # e.g. "r1-lr2e-4"; one folder per run in fyM1-ckpt
+code("""MODEL_ID = "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1"  # the lead's model pick
+RUN_ID = "fym1-9b-a100-r2"  # one folder per run in fyM1-ckpt; r1 = fym1-9b-a100-r1 (DATA_DIR "")
+DATA_DIR = "mix-r2/"  # train on the *.jsonl under this folder of fyM1-chats ("" = every *.jsonl, as r1 did)
 LR, LR_SCHEDULER, WARMUP, EPOCHS, MAX_LEN = 2e-4, "cosine", 10, 2, 2048
 SAVE_EVERY = 100  # BATCH x GRAD_ACCUM is picked by GPU below (effective batch 8 everywhere)
 LORA_R, LORA_ALPHA = 16, 16
@@ -401,6 +403,7 @@ from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text, turn_mar
 from fym1.train.supervise import best_eval, eval_losses, should_stop
 from fym1.train.run_state import check_hub_id, config_mismatch, session_progress
 from fym1.train.hardware import batch_shape, precision_flags
+from fym1.train.data_mix import data_files, split_rows
 from fym1.runtime import output_dir, scratch_dir
 import torch
 
@@ -423,8 +426,8 @@ DATA_REVISION = saved_config["data_revision"] if saved_config else api.dataset_i
 RUN_CONFIG = {"run_id": RUN_ID, "model": MODEL_ID, "lr": LR, "lr_scheduler": LR_SCHEDULER, "warmup_steps": WARMUP,
               "epochs": EPOCHS, "max_seq_len": MAX_LEN, "batch": BATCH, "grad_accum": GRAD_ACCUM,
               "save_every": SAVE_EVERY, "lora_r": LORA_R, "lora_alpha": LORA_ALPHA, "eval_share": EVAL_SHARE,
-              "seed": SEED, "data_revision": DATA_REVISION, "chat_template_kwargs": CHAT_TEMPLATE_KWARGS,
-              "code_sha": CODE_SHA, "hardware": HARDWARE}  # resume on other code is refused: no code sync during a run
+              "seed": SEED, "data_revision": DATA_REVISION, "data_dir": DATA_DIR,
+              "chat_template_kwargs": CHAT_TEMPLATE_KWARGS, "code_sha": CODE_SHA, "hardware": HARDWARE}  # resume on other code is refused: no code sync during a run
 if saved_config:
     mismatch = config_mismatch(saved_config, RUN_CONFIG)
     assert not mismatch, f"{resume} belongs to a different run config: {mismatch}; use a new RUN_ID"
@@ -459,20 +462,21 @@ code("""if not STOPPED:
         return tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=add_generation_prompt,
                                        **CHAT_TEMPLATE_KWARGS)
 
-    files = [f for f in list_repo_files(DATA_REPO, repo_type="dataset", revision=DATA_REVISION) if f.endswith(".jsonl")]
+    files = data_files(list_repo_files(DATA_REPO, repo_type="dataset", revision=DATA_REVISION), DATA_DIR)
     system_prompt = open(hf_hub_download(DATA_REPO, "system_prompt.txt", repo_type="dataset",
                                          revision=DATA_REVISION)).read().strip()
     rows = []
     for f in files:
         path = hf_hub_download(DATA_REPO, f, repo_type="dataset", revision=DATA_REVISION)
         rows += [json.loads(l) for l in open(path) if l.strip()]
-    random.Random(SEED).shuffle(rows)
-    texts = [training_text(render, [{"role": "system", "content": system_prompt}] + r["messages"]) for r in rows]
-    n_eval = max(1, round(len(texts) * EVAL_SHARE))
-    train_ds, eval_ds = Dataset.from_dict({"text": texts[n_eval:]}), Dataset.from_dict({"text": texts[:n_eval]})
-    lengths = [len(tok(t, add_special_tokens=False)["input_ids"]) for t in texts]
-    DATA_STATS = {"files": files, "revision": DATA_REVISION, "examples": len(texts), "train": len(train_ds),
-                  "eval": n_eval, "tokens": sum(lengths), "over_max_len": sum(l > MAX_LEN for l in lengths)}
+    train_rows, eval_rows = split_rows(rows, EVAL_SHARE, SEED)  # a row's "repeat" applies to train rows only
+    text_of = lambda r: training_text(render, [{"role": "system", "content": system_prompt}] + r["messages"])
+    train_texts, eval_texts = [text_of(r) for r in train_rows], [text_of(r) for r in eval_rows]
+    train_ds, eval_ds = Dataset.from_dict({"text": train_texts}), Dataset.from_dict({"text": eval_texts})
+    lengths = [len(tok(t, add_special_tokens=False)["input_ids"]) for t in train_texts + eval_texts]
+    DATA_STATS = {"files": files, "data_dir": DATA_DIR, "revision": DATA_REVISION, "examples": len(rows),
+                  "train": len(train_ds), "eval": len(eval_ds), "tokens": sum(lengths),
+                  "over_max_len": sum(l > MAX_LEN for l in lengths)}
     print(DATA_STATS)"""),
 code("""if not STOPPED:
     from trl import SFTTrainer, SFTConfig
@@ -562,7 +566,7 @@ log = {
                "warmup_steps": WARMUP, "max_seq_len": MAX_LEN, "batch": BATCH, "grad_accum": GRAD_ACCUM,
                "effective_batch": BATCH * GRAD_ACCUM,
                "hardware": (saved_config if STOPPED else RUN_CONFIG).get("hardware"),
-               "data_revision": DATA_REVISION, "chat_template_kwargs": CHAT_TEMPLATE_KWARGS},
+               "data_revision": DATA_REVISION, "data_dir": DATA_DIR, "chat_template_kwargs": CHAT_TEMPLATE_KWARGS},
     "loss_curve": [{"step": h["step"], "loss": h["loss"]} for h in history if "loss" in h],
     "eval_curve": [{"step": s, "eval_loss": l} for s, l in eval_losses(history)],
 }
@@ -827,6 +831,7 @@ from fym1.eval import baseline as bl
 from fym1.eval.batching import StillOutOfMemory, run_batched
 from fym1.eval.identity_check import check_specs, export_prompts
 from fym1.eval.perplexity import held_out_rows, perplexity, response_spans, token_mask
+from fym1.train.data_mix import data_files
 from fym1.eval.scoring import NOTEBOOK_METRICS
 from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text, turn_markers
 from fym1.train.run_state import check_hub_id
@@ -1044,7 +1049,8 @@ def reply_nll(texts, spans):
 
 if section("perplexity"):
     t0 = time.time()
-    files = [f for f in list_repo_files(DATA_REPO, repo_type="dataset", revision=DATA_REVISION) if f.endswith(".jsonl")]
+    files = data_files(list_repo_files(DATA_REPO, repo_type="dataset", revision=DATA_REVISION),
+                       TRAIN_LOG["config"].get("data_dir", ""))  # r1 logs have no data_dir: every *.jsonl
     rows = []
     for f in files:  # same files and order as 01_train; private chat text stays in memory, never printed
         rows += jsonl(hf_hub_download(DATA_REPO, f, repo_type="dataset", revision=DATA_REVISION))
