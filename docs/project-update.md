@@ -34,6 +34,12 @@ This file says where the project stands and how to pick it up; the spec and plan
 In one line: r1 is trained and measured, it speaks good everyday Malagasy but plays a family member instead of
 answering; r2 (a new data mix to fix that) finished training and is not measured yet.
 
+**Owner decision (2026-10-19): ship fy-m1 v1 = r2** (`fym1-9b-a100-r2`, `checkpoint-300`) as it is, with a clean
+system prompt that tells it to be a helpful assistant in everyday Malagasy and to say it is fy-m1. The owner tried
+r2 in `05_try`: much better than r1, but it still does not give a full assistant answer in an everyday style
+(the owner's hands-on impression, not a measured number). No r3 before shipping; r3 (a dedicated casual Q&A set,
+tuning the real-pair share) is future work.
+
 **r1** (`RUN_ID fym1-9b-a100-r1`, adapter `checkpoint-500`: `final_adapter` in `results/eval/eval_run.json`,
 `best_step` in `results/train_log.json`).
 
@@ -85,30 +91,30 @@ the r2 eval PR copies them in with `scripts/fetch_train_log.py`):
 - The Colab runtime is already disconnected and deleted.
 - Not measured yet (no answers, judge or gates).
 
-### 0.2 What to do when r2 ends
+### 0.2 Next session: ship v1 (in this order)
 
-1. Nothing to close: the r2 Colab runtime is already deleted.
-2. Re-run `02_eval_export` for r2. Also re-run base and r1 at the new decoding defaults, so all three are
-   compared at the same settings.
-3. Score as in the r1 results PR #73: `score.py`, `identity_check`, the leak gate. Numbers go to `results/` by PR.
-4. Share the try link (`05_try` with `RUN_ID fym1-9b-a100-r2`) only if r2 answers more often than r1 **and** is
-   not worse than base.
-5. Watch: real pairs are only about 5% of r2, and r1's naturalness gain came mostly from real chats. If r2's
-   naturalness drops a lot while its answer rate goes up, the next knob is the real-pair share.
-6. If r2 still does not answer: for r3, add a generated casual assistant-style Q&A set (`04_synth`).
+1. **System prompt.** Write the clean helpful-assistant system prompt (everyday Malagasy, says it is fy-m1) as one
+   source of truth used by `05_try`, `02_eval_export` and both Spaces. It differs from the training system prompt;
+   the paper says so.
+2. **Measure r2.** Re-run `02_eval_export` for base, r1 and r2 at the decoding defaults and the new system prompt,
+   so all three compare at the same settings. Score as in PR #73: `score.py`, `identity_check`, the leak gate.
+   Copy the r2 train log into `results/` with `scripts/fetch_train_log.py`. Numbers go to `results/` by PR.
+   Watch naturalness: real pairs are only about 5% of r2, and r1's naturalness gain came mostly from real chats.
+3. **Final README, model card and paper** from `paper/make_numbers.py --strict` (details below).
+4. **Shrink and demo:** `03_trim`, merge the adapter, 4-bit + GGUF; Spaces `fy-m1-chat` and `fy-m1-arena` with the
+   new system prompt and a Playwright smoke test.
+5. **Public clean repo:** release snapshot and its checks (decision 35 rewrite of private ids and links, a fresh
+   agent re-checks sender names and secrets), then `Fan1000-prog/fy-m1` as one fresh commit.
 
-### 0.3 What is left after that
+### 0.3 Write-up details
 
-- `03_trim`, merge the adapter, 4-bit + GGUF.
-- Spaces `fy-m1-chat` and `fy-m1-arena`.
-- `paper/make_numbers.py --strict`.
 - Paper results: write up r1 as a documented failure mode (persona leakage from group-chat data). Disclose that 2
   identity training turns contain a short identity-check prompt. One line on the repetition-penalty difference
   between the notebook and the Space (transformers applies it to the whole sequence, llama.cpp to the last 64
   tokens; see `generation.py`).
 - README: the "whole path" diagram and the funnel still say "formal" chats; r2 leaves them out and adds Aya.
-  Update them once the release run is picked.
-- Release snapshot and its checks; public repo `Fan1000-prog/fy-m1`.
+  Update them for r2 (the release run).
+- Future work: r3 with a dedicated casual assistant-style Q&A set (`04_synth`) and a tuned real-pair share.
 
 ### 0.4 Known limits and open issues
 
@@ -131,6 +137,7 @@ the r2 eval PR copies them in with `scripts/fetch_train_log.py`):
 - Old r1-era files in `fyM1-chats` (`chats.jsonl`, `formal.jsonl`, `synth/*`): r2 does not use them; keep them so
   r1 can be rebuilt.
 - Note: `~/fyM1-persona-mix` and local branch `data/persona-mix` were deleted by main with the owner's OK.
+- Local worktrees left from merged work: `~/fyM1-try`, `~/fyM1-eval-r1` (if still on disk).
 
 ## 1. Where we are
 
