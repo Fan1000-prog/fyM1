@@ -1,4 +1,5 @@
-"""Build notebooks/00_baseline.ipynb, 01_train.ipynb, 04_synth.ipynb and 05_try.ipynb. This script is their source of truth.
+"""Build notebooks/00_baseline.ipynb, 01_train.ipynb, 02_eval_export.ipynb, 04_synth.ipynb and 05_try.ipynb.
+This script is their source of truth.
 
 Usage: python scripts/build_notebooks.py [--check]
 Edit the cells here, run it, and commit both this file and the notebooks. --check exits non-zero when a
@@ -779,6 +780,337 @@ print("SYNTH_STATS", json.dumps(stats))"""),
     ]
 
 
+def eval_cells() -> list:
+    return [
+md("""# fy-m1 02 — eval export (A100)
+Scores one finished training run. Set `RUN_ID`, pick an **A100** runtime (Runtime → Change runtime type), then
+**Runtime → Run all**. Reads `fyM1-ckpt/<RUN_ID>/train_log.json` for the base model and the data revision, loads the
+base model in 4-bit with the LoRA adapter from `<RUN_ID>/final/`, and measures, in this order:
+1. answers to every `eval/prompts.jsonl` prompt from the base model (adapter off) and from fy-m1, plus fy-m1's answers
+   to the extra identity prompts (`eval/identity_check.jsonl`, set "identity"): data `system_prompt.txt`, temp 0.7,
+   top_p 0.9, max 256 new tokens, seed 42;
+2. Belebele `plt_Latn` for fy-m1 (both 00_baseline protocols: plain-text completion is `belebele_acc`);
+3. FLORES+ `plt_Latn`↔`eng_Latn` devtest first 200, chrF++, for fy-m1 (00_baseline protocol);
+4. held-out-chat perplexity on 01_train's 2% eval split (reply tokens only, as eval loss), base and fy-m1.
+
+Everything goes to the **private** `fyM1-ckpt` under `results/eval/`: `answers_base.jsonl`, `answers_fym1.jsonl`,
+`answers_fym1_identity.jsonl` (private, never in git), `notebook_metrics.json` (for `scripts/score.py scores`) and
+`eval_run.json` (protocols, counts, timings). The base model's Belebele and chrF++ come from its 00_baseline file
+(`results/baseline/<slug>.json`, same protocols), so they are not rerun here. `leak_rate` is measured on the owner's
+laptop (`scripts/score.py leaks`). Nothing here prints answer or chat text. A rerun skips sections already saved for the
+same `RUN_ID` and code; set `FORCE = True` to redo all.
+Follow-up, not in this notebook: merge the LoRA, save 4-bit and export GGUF Q4_K_M.
+Needs the `HF_TOKEN` secret (Colab Secrets pane with notebook access) and code synced to `fyM1-ckpt` `code/`
+(`scripts/sync_code_to_hub.py`)."""),
+code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
+!pip install -q -U unsloth unsloth_zoo sacrebleu fasttext-numpy2-wheel"""),
+code("""RUN_ID = "fym1-9b-a100-r1"  # the training run to score (fyM1-ckpt/<RUN_ID>/)
+CKPT_REPO, DATA_REPO = "Fan1000-Prog/fyM1-ckpt", "Fan1000-Prog/fyM1-chats"
+OUT_PREFIX = "results/eval"  # in the private fyM1-ckpt; answer files never go to git
+SEED, TEMPERATURE, TOP_P, MAX_NEW_TOKENS = 42, 0.7, 0.9, 256
+EVAL_SHARE, SPLIT_SEED = 0.02, 42  # 01_train's eval split (checked against train_log.json counts)
+GEN_BATCH, BELEBELE_BATCH, PPL_BATCH, FLORES_N = 16, 8, 2, 200
+FORCE = False  # True: redo every section; else sections saved for this RUN_ID and code are skipped"""),
+bootstrap_cell(),
+code("""import sys, json, time, datetime, contextlib
+from huggingface_hub import HfApi, hf_hub_download, list_repo_files, snapshot_download
+from huggingface_hub.errors import EntryNotFoundError
+
+os.environ["HF_TOKEN"] = hf_token()  # never print it
+os.environ["UNSLOTH_RETURN_LOGITS"] = "1"  # perplexity needs the full logits
+api = HfApi()
+assert api.repo_info(CKPT_REPO).private, f"{CKPT_REPO} must be private: the answer files go there"
+code_dir = snapshot_download(CKPT_REPO, allow_patterns=["code/**"], local_dir=CODE_DIR)
+sys.path.insert(0, f"{code_dir}/code/src")
+CODE_SHA = open(f"{code_dir}/code/SHA").read().strip()
+from fym1.eval import baseline as bl
+from fym1.eval.batching import StillOutOfMemory, run_batched
+from fym1.eval.identity_check import check_specs, export_prompts
+from fym1.eval.perplexity import held_out_rows, perplexity, response_spans, token_mask
+from fym1.eval.scoring import NOTEBOOK_METRICS
+from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text, turn_markers
+from fym1.train.run_state import check_hub_id
+from fym1.runtime import output_dir, scratch_dir
+
+OUTPUT, SCRATCH = output_dir(), scratch_dir()
+
+
+def hub_json(path):
+    try:
+        return json.load(open(hf_hub_download(CKPT_REPO, path, force_download=True)))
+    except EntryNotFoundError:
+        return None
+
+
+def jsonl(path):
+    return [json.loads(l) for l in open(path) if l.strip()]
+
+
+TRAIN_LOG = hub_json(f"{RUN_ID}/train_log.json")
+assert TRAIN_LOG, f"no {RUN_ID}/train_log.json in {CKPT_REPO}: finish 01_train first"
+MODEL_ID, DATA_REVISION = TRAIN_LOG["model"], TRAIN_LOG["config"]["data_revision"]
+MAX_LEN = TRAIN_LOG["config"]["max_seq_len"]
+SYSTEM_PROMPT = open(hf_hub_download(DATA_REPO, "system_prompt.txt", repo_type="dataset",
+                                     revision=DATA_REVISION)).read().strip()
+PROMPTS = [{"id": r["id"], "prompt": r["prompt"]} for r in jsonl(f"{code_dir}/code/eval/prompts.jsonl")]
+SPECS = jsonl(f"{code_dir}/code/eval/identity_check.jsonl")
+check_specs(SPECS)
+IDENTITY = export_prompts(SPECS)
+assert len({r["id"] for r in PROMPTS + IDENTITY}) == len(PROMPTS) + len(IDENTITY), "prompt ids must be unique"
+
+RUN = hub_json(f"{OUT_PREFIX}/eval_run.json") or {}
+if FORCE or RUN.get("run_id") != RUN_ID or RUN.get("code_sha") != CODE_SHA:
+    RUN = {}  # another run or other code: start over
+RUN.update(run_id=RUN_ID, model=MODEL_ID, adapter=f"{RUN_ID}/final", final_adapter=TRAIN_LOG.get("final_adapter"),
+           data_revision=DATA_REVISION, code_sha=CODE_SHA)
+RETRIED = {"items": 0}  # items re-run one at a time after an OOM batch, in the current section
+
+
+def upload(name, body, what):
+    api.upload_file(path_or_fileobj=body, path_in_repo=f"{OUT_PREFIX}/{name}", repo_id=CKPT_REPO,
+                    commit_message=f"eval {RUN_ID}: {what}")
+
+
+def save_run(what):
+    body = (json.dumps(RUN, ensure_ascii=False, indent=2) + "\\n").encode()
+    upload("eval_run.json", body, what)
+    with open(f"{OUTPUT}/eval_run.json", "wb") as f:
+        f.write(body)
+
+
+def section(name):
+    print(f"== {name}: {'skip (saved)' if name in RUN else 'run'}")
+    RETRIED["items"] = 0
+    return name not in RUN
+
+
+print("RUN", RUN_ID, "| model", MODEL_ID, "| data", DATA_REVISION[:9], "| code", CODE_SHA[:9], "| prompts", len(PROMPTS),
+      "| identity prompts", len(IDENTITY), "| saved sections", sorted(k for k in RUN if isinstance(RUN[k], dict)))"""),
+code("""import torch
+from unsloth import FastModel
+from peft import PeftModel
+
+t0 = time.time()
+# use_exact_model_name: else Unsloth's name map may swap the id for its own pre-quantized checkpoint (as in 01_train)
+model, processor = FastModel.from_pretrained(MODEL_ID, max_seq_length=MAX_LEN, load_in_4bit=True,
+                                             full_finetuning=False, use_exact_model_name=True)
+check_hub_id("loaded model", model.config._name_or_path, MODEL_ID)
+local = snapshot_download(CKPT_REPO, allow_patterns=[f"{RUN_ID}/final/*"], local_dir=f"{SCRATCH}/adapter")
+model = PeftModel.from_pretrained(model, f"{local}/{RUN_ID}/final")
+FastModel.for_inference(model)
+tok = getattr(processor, "tokenizer", processor)
+tok.padding_side = "left"
+RUN["env"] = {"gpu": torch.cuda.get_device_name(0), "torch": torch.__version__, "model_dtype": str(model.dtype),
+              "quant": "bnb 4-bit nf4 (Unsloth load_in_4bit)", "load_s": round(time.time() - t0),
+              "vram_after_load_gb": round(torch.cuda.memory_allocated() / 2**30, 2),
+              "utc": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+print(RUN["env"])
+
+
+def adapter(on):
+    \"\"\"fy-m1 with the LoRA on; the base model with it off.\"\"\"
+    return contextlib.nullcontext() if on else model.disable_adapter()
+
+
+def chat(prompt, system=None):
+    messages = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
+    return tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **CHAT_TEMPLATE_KWARGS)
+
+
+def encode(texts, special_tokens=False):
+    return tok(texts, return_tensors="pt", padding=True, add_special_tokens=special_tokens).to("cuda")
+
+
+def batched(items, batch_size, run):
+    \"\"\"On CUDA OOM: empty the cache and retry that batch one item at a time; StillOutOfMemory if that fails.\"\"\"
+    def count(n):
+        RETRIED["items"] += n
+
+    return run_batched(items, batch_size, run, is_oom=lambda e: isinstance(e, torch.OutOfMemoryError),
+                       clear=torch.cuda.empty_cache, on_retry=count)
+
+
+@torch.inference_mode()
+def generate(prompts, max_new_tokens, sample, system=None):
+    kw = dict(do_sample=True, temperature=TEMPERATURE, top_p=TOP_P) if sample else dict(do_sample=False)
+
+    def run(batch):
+        enc = encode([chat(p, system) for p in batch])
+        ids = model.generate(**enc, max_new_tokens=max_new_tokens, pad_token_id=tok.pad_token_id, **kw)
+        return tok.batch_decode(ids[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
+
+    return batched(prompts, GEN_BATCH, run)
+
+
+@torch.inference_mode()
+def last_logits(enc):
+    try:
+        return model(**enc, logits_to_keep=1).logits[:, -1]
+    except TypeError:  # forward without logits_to_keep
+        return model(**enc).logits[:, -1]"""),
+code("""SAMPLING = (f"system prompt: data system_prompt.txt @ {DATA_REVISION[:9]}, temp {TEMPERATURE}, top_p {TOP_P}, "
+            f"max {MAX_NEW_TOKENS} new tokens, torch seed {SEED} per file, batch {GEN_BATCH}")
+ANSWER_FILES = {  # score.py reads answers_<model>.jsonl; identity_check.py reads the fym1 pair
+    "answers_base": (PROMPTS, False),
+    "answers_fym1": (PROMPTS, True),
+    "answers_fym1_identity": (IDENTITY, True),
+}
+for name, (items, lora_on) in ANSWER_FILES.items():
+    if not section(name):
+        continue
+    t0 = time.time()
+    torch.manual_seed(SEED)
+    with adapter(lora_on):
+        replies = generate([r["prompt"] for r in items], MAX_NEW_TOKENS, True, SYSTEM_PROMPT)
+    rows = [{"id": r["id"], "prompt": r["prompt"], "response": a.strip()} for r, a in zip(items, replies)]
+    upload(f"{name}.jsonl", "".join(json.dumps(r, ensure_ascii=False) + "\\n" for r in rows).encode(),
+           f"{name} ({len(rows)} answers)")
+    RUN[name] = {"n": len(rows), "empty": sum(not r["response"] for r in rows), "adapter": lora_on,
+                 "sampling": SAMPLING, "seconds": round(time.time() - t0), "retried_items": RETRIED["items"]}
+    save_run(name)
+    print(name, RUN[name])  # counts only, never answer text"""),
+code("""from datasets import load_dataset
+
+PROTOCOLS = {  # the two 00_baseline protocols; "belebele_completion" is the belebele_acc everyone is compared on
+    "belebele_completion": "0-shot plain-text completion (P/Q/A-D/Answer:), no chat template, argmax of next-token "
+                           "logits over ' A'-' D'",
+    "belebele": "0-shot, chat template, English instruction, argmax of next-token logits over '1'-'4'",
+}
+for name, protocol in PROTOCOLS.items():
+    if not section(name):
+        continue
+    t0 = time.time()
+    rows = load_dataset("facebook/belebele", "plt_Latn", split="test")
+    if name == "belebele_completion":
+        prompts, special = [bl.belebele_completion_prompt(r) for r in rows], True
+        option_ids = [tok.encode(" " + letter, add_special_tokens=False)[-1] for letter in "ABCD"]
+    else:
+        prompts, special = [chat(bl.belebele_prompt(r)) for r in rows], False
+        option_ids = [tok.encode(d, add_special_tokens=False)[-1] for d in "1234"]
+    try:
+        scores = torch.tensor(batched(prompts, BELEBELE_BATCH,
+                                      lambda b: last_logits(encode(b, special))[:, option_ids].float().tolist()))
+        RUN[name] = {"acc": round(bl.accuracy((scores.argmax(-1) + 1).tolist(), rows["correct_answer_num"]), 4),
+                     "n": len(scores), "nan_rows": int(torch.isnan(scores).any(-1).sum()),
+                     "seconds": round(time.time() - t0), "protocol": protocol, "retried_items": RETRIED["items"]}
+    except StillOutOfMemory:
+        RUN[name] = {"oom": True, "protocol": protocol, "retried_items": RETRIED["items"]}
+    save_run(name)
+    print(name.upper(), RUN[name])"""),
+code("""if section("flores"):
+    t0 = time.time()
+    protocol = "devtest first 200, 0-shot chat prompt, greedy, max 256 new tokens, first line kept"
+    try:
+        mg = load_dataset("openlanguagedata/flores_plus", "plt_Latn", split="devtest")
+        en = load_dataset("openlanguagedata/flores_plus", "eng_Latn", split="devtest")
+        mg_txt, en_txt = mg["text"][:FLORES_N], en["text"][:FLORES_N]
+        if "id" in mg.column_names:
+            assert mg["id"][:FLORES_N] == en["id"][:FLORES_N], "FLORES rows not aligned"
+        hyp_mg = [bl.first_line(t) for t in generate([bl.translation_prompt(s, "English", "Malagasy") for s in en_txt], 256, False)]
+        hyp_en = [bl.first_line(t) for t in generate([bl.translation_prompt(s, "Malagasy", "English") for s in mg_txt], 256, False)]
+        RUN["flores"] = {"eng-plt_chrf++": round(bl.chrf_pp(hyp_mg, mg_txt), 2),
+                         "plt-eng_chrf++": round(bl.chrf_pp(hyp_en, en_txt), 2), "n": FLORES_N,
+                         "seconds": round(time.time() - t0), "protocol": protocol, "retried_items": RETRIED["items"]}
+        save_run("flores")
+    except StillOutOfMemory:
+        RUN["flores"] = {"oom": True, "protocol": protocol, "retried_items": RETRIED["items"]}
+        save_run("flores")
+    except Exception as e:  # gated dataset not accepted yet: leave unsaved so a rerun retries it
+        print("FLORES PENDING:", type(e).__name__, str(e)[:300])
+print("FLORES", RUN.get("flores", "pending"))"""),
+code("""import torch.nn.functional as F
+
+
+def render(messages, add_generation_prompt=False):
+    return tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=add_generation_prompt,
+                                   **CHAT_TEMPLATE_KWARGS)
+
+
+@torch.inference_mode()
+def reply_nll(texts, spans):
+    \"\"\"(summed NLL, scored tokens) per text over reply tokens only, cut at MAX_LEN like training.\"\"\"
+    def run(batch):
+        enc = tok([texts[i] for i in batch], return_tensors="pt", padding=True, truncation=True, max_length=MAX_LEN,
+                  add_special_tokens=False, return_offsets_mapping=True)
+        offsets = enc.pop("offset_mapping").tolist()
+        keep = torch.tensor([token_mask(o, spans[i]) for i, o in zip(batch, offsets)])[:, 1:].to("cuda")
+        enc = enc.to("cuda")
+        logits = model(**enc).logits[:, :-1].float()
+        nll = F.cross_entropy(logits.transpose(1, 2), enc["input_ids"][:, 1:], reduction="none")
+        return [(float(n[k].sum()), int(k.sum())) for n, k in zip(nll, keep)]
+
+    return batched(list(range(len(texts))), PPL_BATCH, run)
+
+
+if section("perplexity"):
+    t0 = time.time()
+    files = [f for f in list_repo_files(DATA_REPO, repo_type="dataset", revision=DATA_REVISION) if f.endswith(".jsonl")]
+    rows = []
+    for f in files:  # same files and order as 01_train; private chat text stays in memory, never printed
+        rows += jsonl(hf_hub_download(DATA_REPO, f, repo_type="dataset", revision=DATA_REVISION))
+    held = held_out_rows(rows, EVAL_SHARE, SPLIT_SEED)
+    assert (len(rows), len(held)) == (TRAIN_LOG["data"]["examples"], TRAIN_LOG["data"]["eval"]), \\
+        "eval split differs from training: check data_revision, EVAL_SHARE and SPLIT_SEED"
+    texts = [training_text(render, [{"role": "system", "content": SYSTEM_PROMPT}] + r["messages"]) for r in held]
+    instruction_part, response_part = turn_markers(render)
+    spans = [response_spans(t, instruction_part, response_part) for t in texts]
+    del rows, held
+    tok.padding_side = "right"
+    result = {}
+    try:
+        for name, lora_on in (("base", False), ("fym1", True)):
+            with adapter(lora_on):
+                per_text = reply_nll(texts, spans)
+            nll, n_tok = sum(n for n, _ in per_text), sum(k for _, k in per_text)
+            result[name] = {"perplexity": round(perplexity(nll, n_tok), 3), "mean_nll": round(nll / n_tok, 4)}
+        RUN["perplexity"] = result | {
+            "n_texts": len(texts), "scored_tokens": n_tok,
+            "truncated": sum(len(tok(t, add_special_tokens=False)["input_ids"]) > MAX_LEN for t in texts),
+            "seconds": round(time.time() - t0), "retried_items": RETRIED["items"],
+            "protocol": f"01_train eval split ({EVAL_SHARE:.0%}, shuffle seed {SPLIT_SEED}), training_text with the "
+                        f"system prompt, reply tokens only (as train_on_responses_only), cut at {MAX_LEN} tokens"}
+    except StillOutOfMemory:
+        RUN["perplexity"] = {"oom": True, "retried_items": RETRIED["items"]}
+    finally:
+        tok.padding_side = "left"
+    del texts, spans
+    save_run("perplexity")
+print("PERPLEXITY", {k: v for k, v in RUN["perplexity"].items() if k != "protocol"})"""),
+code("""# notebook_metrics.json for `scripts/score.py scores --metrics` (leak_rate comes from `score.py leaks`, on the laptop).
+baseline = None  # the base model's 00_baseline file: same Belebele/FLORES protocols, 4-bit
+for f in sorted(f for f in list_repo_files(CKPT_REPO) if f.startswith("results/baseline/") and f.endswith(".json")):
+    found = hub_json(f)
+    if found and found.get("model", {}).get("hub_id", "").lower() == MODEL_ID.lower():
+        baseline = (f, found)
+        break
+RUN["base_benchmarks_from"] = baseline[0] if baseline else None
+
+
+def benchmarks(result):
+    flores = result.get("flores", {})
+    return {"belebele_acc": result.get("belebele_completion", {}).get("acc"),
+            "chrf_plt_eng": flores.get("plt-eng_chrf++"), "chrf_eng_plt": flores.get("eng-plt_chrf++")}
+
+
+ppl = RUN.get("perplexity", {})
+values = {
+    "base": benchmarks(baseline[1] if baseline else {}) | {"perplexity": ppl.get("base", {}).get("perplexity")},
+    "fym1": benchmarks(RUN) | {"perplexity": ppl.get("fym1", {}).get("perplexity")},
+}
+metrics = {model: {k: v for k, v in vals.items() if v is not None} for model, vals in values.items()}
+assert all(set(m) <= NOTEBOOK_METRICS for m in metrics.values())
+body = (json.dumps(metrics, indent=2) + "\\n").encode()
+upload("notebook_metrics.json", body, "notebook_metrics.json")
+with open(f"{OUTPUT}/notebook_metrics.json", "wb") as f:
+    f.write(body)
+save_run("metrics")
+missing = [s for s in (*ANSWER_FILES, *PROTOCOLS, "flores", "perplexity") if s not in RUN]
+pending = {model: sorted(NOTEBOOK_METRICS - {"leak_rate"} - set(m)) for model, m in metrics.items()}
+print("EVAL_DONE" if not missing else f"EVAL_INCOMPLETE {missing}", RUN_ID, "| pending metrics", pending)
+print("NOTEBOOK_METRICS", json.dumps(metrics))"""),
+    ]
+
+
 def try_cells() -> list:
     return [
 md("""# fy-m1 05 — try fy-m1 (chat)
@@ -847,7 +1179,8 @@ while True:
     ]
 
 
-NOTEBOOKS = {"00_baseline": baseline_cells, "01_train": train_cells, "04_synth": synth_cells, "05_try": try_cells}
+NOTEBOOKS = {"00_baseline": baseline_cells, "01_train": train_cells, "02_eval_export": eval_cells,
+             "04_synth": synth_cells, "05_try": try_cells}
 
 
 def build(name: str) -> str:

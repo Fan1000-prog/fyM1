@@ -299,7 +299,7 @@ I compared open instruction models that fit QLoRA training on a 16\,GB T4 GPU, t
 and Colab. Each candidate was loaded in 4-bit and scored on: reading comprehension (Belebele,
 \texttt{plt\_Latn}), both as plain-text 0-shot completion (one protocol for every candidate) and in the
 model's chat format; translation in both directions with English (FLORES+ devtest, chrF++); tokens per
-Malagasy word; a short QLoRA smoke run on a T4 (seconds per step); and a blind greeting gate, in which
+Malagasy word; a short QLoRA smoke run on a T4 (wall time per step); and a blind greeting gate, in which
 the judge of Section~\ref{sec:metrics} scored \fyGreetAnswers{} everyday greeting answers per model with
 model names hidden. A licence rule comes first: fy-m1 ships under a simple open licence, so the base must
 have one. Section~\ref{sec:res-selection} gives the measured values and the choice.
@@ -389,8 +389,9 @@ the template's empty thinking block.}
 
 \paragraph{Optimisation.} Training uses an 8-bit AdamW optimiser, a learning rate of \fyLearningRate{}
 with a \fyLrScheduler{} schedule and \fyWarmupSteps{} linear warmup steps, sequence length
-\fyMaxSeqLen{}, effective batch size \fyEffectiveBatch{}, and \fyTrainEpochs{} epochs; these values are
-read back from the run's own log (\path{results/train_log.json}). A small held-out share of the
+\fyMaxSeqLen{}, effective batch size \fyEffectiveBatch{}, and a plan of \fyTrainEpochs{} epochs
+(\fyTrainPlannedSteps{} steps); these values are read back from the run's own log
+(\path{results/train_log.json}). A small held-out share of the
 conversations gives an evaluation loss at every checkpoint; training stops early when that loss rises at
 two evaluations in a row, and the checkpoint with the best evaluation loss is kept. Notebook sessions can
 disconnect, so checkpoints go to a private repository and a new session resumes from the latest one; a
@@ -487,7 +488,7 @@ closest to writing Malagasy. On the greeting gate it ties Gemma~4 12B (judge mea
 versus \fyGreetGemmaFourMean{} on \fyGreetAnswers{} answers each; Malagasy replies \fyGreetQwenMalagasy{}
 versus \fyGreetGemmaFourMalagasy{}), and chat-format Belebele is equal within noise
 (\fySelQwenBelebeleChat{} versus \fySelGemmaFourBelebeleChat{}). Its T4 smoke run took
-\fySelQwenSecStep{} seconds per step in 16-bit (Gemma~3: \fySelGemmaThreeSecStep{}; Gemma~4:
+\fySelQwenSecStep{} seconds of wall time per step in 16-bit (Gemma~3: \fySelGemmaThreeSecStep{}; Gemma~4:
 \fySelGemmaFourSecStep{}). The speeds are not a like-for-like comparison: on a T4, Unsloth runs some
 models in 32-bit, which is slower. I did not wait for Gemma~4's FLORES+ and smoke runs; it stays a
 comparison row, so the choice rests on a partial comparison.
@@ -518,8 +519,12 @@ Each greeting mean is over \fyGreetAnswers{} answers, so small differences are n
 \end{table}
 
 \subsection{Training}
-From \path{results/train_log.json}: \fyTrainSteps{} steps, \fyTrainTime{} of training on \fyTrainGpu{}.
-Final training loss was \fyTrainLoss{}; best held-out loss was \fyEvalLoss{}. Figure~\ref{fig:train}
+From \path{results/train_log.json}: the run was planned for \fyTrainEpochs{} epochs
+(\fyTrainPlannedSteps{} steps) and stopped early at step \fyTrainSteps{} of \fyTrainPlannedSteps{} (about
+\fyTrainEpochsDone{} epochs), after \fyTrainTime{} on \fyTrainGpu{} (\fyTrainSecStep{} seconds of wall time
+per step, model loading and evaluations included). Final training loss was \fyTrainLoss{}; best held-out
+loss was \fyEvalLoss{}, at step \fyTrainBestStep{}. The shipped adapter is that step-\fyTrainBestStep{}
+checkpoint, not the last one. Figure~\ref{fig:train}
 shows the learning-rate schedule and the loss curves.
 
 \begin{figure}[t]
@@ -552,7 +557,9 @@ shows the learning-rate schedule and the loss curves.
 \pendingplot{5.6cm}{loss curves: written from\\results/train\_log.json\\when the training run ends}
 \fi
 \caption{Left: learning rate, linear warmup over $S_w$ steps to the peak $\eta$, then a half cosine to
-zero at the planned last step $S$ (the cosine decay of \citealp{loshchilov2017sgdr}); recomputed from the run's settings in
+zero at the planned last step $S$ (the cosine decay of \citealp{loshchilov2017sgdr}). The planned
+schedule runs to step $S=\fyTrainPlannedSteps{}$; the run stopped early at step \fyTrainSteps{}, so the
+rest was never used. Recomputed from the run's settings in
 \texttt{results/train\_log.json} once it exists (schematic until then). Right: training loss per logged
 step and held-out loss per evaluation, from the same log.}
 \label{fig:train}

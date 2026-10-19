@@ -24,7 +24,8 @@ Expected files (keys are dotted paths below):
                          candidates[{model, license, belebele_acc, belebele_chat_acc, chrf_plt_eng,
                          chrf_eng_plt, tokens_per_word, sec_per_step, greeting_gate.judge_mean}]
   greeting_gate.json     judge, models.<model key>.{judge_mean, is_malagasy_rate, n}
-  train_log.json         gpu, steps, epochs, wall_time_s, final_train_loss, best_eval_loss,
+  train_log.json         gpu, steps, epochs, wall_time_s, final_train_loss, best_eval_loss, best_step,
+                         sec_per_step, checkpoint.{max_steps, epoch},
                          config.{lora_r, lora_alpha, lr, lr_scheduler, max_seq_len, effective_batch}
   eval/scores.json       n_prompts, {base,fym1}.{drift_rate, leak_rate, perplexity,
                          belebele_acc, chrf_plt_eng, chrf_eng_plt}
@@ -263,6 +264,10 @@ NUMBERS: list[Number] = [
     Number("warmup-steps", "train_log.json", "config.warmup_steps", count),
     Number("max-seq-len", "train_log.json", "config.max_seq_len", count),
     Number("effective-batch", "train_log.json", "config.effective_batch", count),
+    Number("train-planned-steps", "train_log.json", "checkpoint.max_steps", count),
+    Number("train-epochs-done", "train_log.json", "checkpoint.epoch", fixed(2)),
+    Number("train-best-step", "train_log.json", "best_step", count),
+    Number("train-sec-step", "train_log.json", "sec_per_step", fixed(1)),
     # automatic eval
     Number("eval-prompts", "eval/scores.json", "n_prompts", count),
     Number("drift-base", "eval/scores.json", "base.drift_rate", percent),
