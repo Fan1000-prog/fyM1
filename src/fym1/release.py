@@ -180,11 +180,13 @@ INNER_NAME_ALLOWED: dict[tuple[str, str], str] = {
     ("src/fym1/data/review_sheet.py", "random"): REASON_RANDOM,
     ("src/fym1/data/synth.py", "random"): REASON_RANDOM,
     ("src/fym1/eval/arena.py", "random"): REASON_RANDOM,
+    ("src/fym1/eval/perplexity.py", "random"): REASON_RANDOM,
     ("src/fym1/eval/scoring.py", "random"): REASON_RANDOM,
     ("tests/data/test_anonymize_dates.py", "random"): REASON_RANDOM,
     ("tests/data/test_anonymize_marks.py", "random"): REASON_RANDOM,
     ("tests/data/test_formal.py", "random"): REASON_RANDOM,
     ("tests/eval/test_arena.py", "random"): REASON_RANDOM,
+    ("tests/eval/test_perplexity.py", "random"): REASON_RANDOM,
     ("tests/spaces/test_votes.py", "random"): REASON_RANDOM,
 }
 PRIVATE_HF_ID = "Fan1000-Prog/" + "fyM1-"  # split so test_public_name does not see a Hub id
