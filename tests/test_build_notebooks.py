@@ -91,7 +91,7 @@ def test_eval_notebook_scores_the_a100_run_from_its_train_log():
     assert 'MODEL_ID, DATA_REVISION = TRAIN_LOG["model"], TRAIN_LOG["config"]["data_revision"]' in code
     assert "use_exact_model_name=True" in code and "load_in_4bit=True" in code
     assert 'allow_patterns=[f"{RUN_ID}/final/*"]' in code
-    assert "SEED, TEMPERATURE, TOP_P, MAX_NEW_TOKENS = 42, 0.7, 0.9, 256" in code
+    assert "SEED, MAX_NEW_TOKENS = 42, 256" in code
 
 
 def test_eval_notebook_answer_files_are_the_ones_the_laptop_scripts_read():
