@@ -367,8 +367,9 @@ def train_cells() -> list:
     return [
 md("""# fy-m1 01 — QLoRA training (A100 or T4)
 Set `MODEL_ID` (the lead's pick) and `RUN_ID`, then **Runtime → Run all**. Trains a LoRA adapter on the private
-`Fan1000-Prog/fyM1-chats` data (every `*.jsonl`, rows `{"id", "messages"}`, plus `system_prompt.txt`) at a pinned
-dataset revision. Everything of a run lives under `fyM1-ckpt/<RUN_ID>/`: each `checkpoint-<step>/` carries
+`Fan1000-Prog/fyM1-chats` data (the `*.jsonl` under `DATA_DIR`, rows `{"id", "messages"}` and an optional
+`"repeat"` that upweights a train row, plus `system_prompt.txt`) at a pinned dataset revision. r2 trains on the
+`mix-r2/` mix (`scripts/build_mix.py --upload`). Everything of a run lives under `fyM1-ckpt/<RUN_ID>/`: each `checkpoint-<step>/` carries
 `run_config.json` (refused on resume if the notebook's config differs), `session_progress.json` (wall time and
 session count so far) and `data_stats.json`. Rerunning after a disconnect resumes the same run; a new lr or data
 means a new `RUN_ID`. Training stops when eval loss rises 2 evals in a row (or is NaN) and writes
@@ -378,8 +379,9 @@ Runs on Colab A100 (8 rows x 1 step, bf16) or a Colab/Kaggle T4 (2 rows x 4 step
 on both. Needs the `HF_TOKEN` secret (Colab: Secrets pane with notebook access; Kaggle: Add-ons → Secrets) and code synced from clean origin/main (`scripts/sync_code_to_hub.py`)."""),
 code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
 !pip install -q -U unsloth unsloth_zoo"""),
-code("""MODEL_ID = None  # set by the lead's model pick, e.g. "org/model"
-RUN_ID = None    # e.g. "r1-lr2e-4"; one folder per run in fyM1-ckpt
+code("""MODEL_ID = "McGill-NLP/AfriqueQwen3.5-9B-50Langs-Instruct-v1"  # the lead's model pick
+RUN_ID = "fym1-9b-a100-r2"  # one folder per run in fyM1-ckpt; r1 = fym1-9b-a100-r1 (DATA_DIR "")
+DATA_DIR = "mix-r2/"  # train on the *.jsonl under this folder of fyM1-chats ("" = every *.jsonl, as r1 did)
 LR, LR_SCHEDULER, WARMUP, EPOCHS, MAX_LEN = 2e-4, "cosine", 10, 2, 2048
 SAVE_EVERY = 100  # BATCH x GRAD_ACCUM is picked by GPU below (effective batch 8 everywhere)
 LORA_R, LORA_ALPHA = 16, 16
@@ -401,6 +403,7 @@ from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text, turn_mar
 from fym1.train.supervise import best_eval, eval_losses, should_stop
 from fym1.train.run_state import check_hub_id, config_mismatch, session_progress
 from fym1.train.hardware import batch_shape, precision_flags
+from fym1.train.data_mix import data_files, split_rows
 from fym1.runtime import output_dir, scratch_dir
 import torch
 
@@ -423,8 +426,8 @@ DATA_REVISION = saved_config["data_revision"] if saved_config else api.dataset_i
 RUN_CONFIG = {"run_id": RUN_ID, "model": MODEL_ID, "lr": LR, "lr_scheduler": LR_SCHEDULER, "warmup_steps": WARMUP,
               "epochs": EPOCHS, "max_seq_len": MAX_LEN, "batch": BATCH, "grad_accum": GRAD_ACCUM,
               "save_every": SAVE_EVERY, "lora_r": LORA_R, "lora_alpha": LORA_ALPHA, "eval_share": EVAL_SHARE,
-              "seed": SEED, "data_revision": DATA_REVISION, "chat_template_kwargs": CHAT_TEMPLATE_KWARGS,
-              "code_sha": CODE_SHA, "hardware": HARDWARE}  # resume on other code is refused: no code sync during a run
+              "seed": SEED, "data_revision": DATA_REVISION, "data_dir": DATA_DIR,
+              "chat_template_kwargs": CHAT_TEMPLATE_KWARGS, "code_sha": CODE_SHA, "hardware": HARDWARE}  # resume on other code is refused: no code sync during a run
 if saved_config:
     mismatch = config_mismatch(saved_config, RUN_CONFIG)
     assert not mismatch, f"{resume} belongs to a different run config: {mismatch}; use a new RUN_ID"
@@ -459,20 +462,21 @@ code("""if not STOPPED:
         return tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=add_generation_prompt,
                                        **CHAT_TEMPLATE_KWARGS)
 
-    files = [f for f in list_repo_files(DATA_REPO, repo_type="dataset", revision=DATA_REVISION) if f.endswith(".jsonl")]
+    files = data_files(list_repo_files(DATA_REPO, repo_type="dataset", revision=DATA_REVISION), DATA_DIR)
     system_prompt = open(hf_hub_download(DATA_REPO, "system_prompt.txt", repo_type="dataset",
                                          revision=DATA_REVISION)).read().strip()
     rows = []
     for f in files:
         path = hf_hub_download(DATA_REPO, f, repo_type="dataset", revision=DATA_REVISION)
         rows += [json.loads(l) for l in open(path) if l.strip()]
-    random.Random(SEED).shuffle(rows)
-    texts = [training_text(render, [{"role": "system", "content": system_prompt}] + r["messages"]) for r in rows]
-    n_eval = max(1, round(len(texts) * EVAL_SHARE))
-    train_ds, eval_ds = Dataset.from_dict({"text": texts[n_eval:]}), Dataset.from_dict({"text": texts[:n_eval]})
-    lengths = [len(tok(t, add_special_tokens=False)["input_ids"]) for t in texts]
-    DATA_STATS = {"files": files, "revision": DATA_REVISION, "examples": len(texts), "train": len(train_ds),
-                  "eval": n_eval, "tokens": sum(lengths), "over_max_len": sum(l > MAX_LEN for l in lengths)}
+    train_rows, eval_rows = split_rows(rows, EVAL_SHARE, SEED)  # a row's "repeat" applies to train rows only
+    text_of = lambda r: training_text(render, [{"role": "system", "content": system_prompt}] + r["messages"])
+    train_texts, eval_texts = [text_of(r) for r in train_rows], [text_of(r) for r in eval_rows]
+    train_ds, eval_ds = Dataset.from_dict({"text": train_texts}), Dataset.from_dict({"text": eval_texts})
+    lengths = [len(tok(t, add_special_tokens=False)["input_ids"]) for t in train_texts + eval_texts]
+    DATA_STATS = {"files": files, "data_dir": DATA_DIR, "revision": DATA_REVISION, "examples": len(rows),
+                  "train": len(train_ds), "eval": len(eval_ds), "tokens": sum(lengths),
+                  "over_max_len": sum(l > MAX_LEN for l in lengths)}
     print(DATA_STATS)"""),
 code("""if not STOPPED:
     from trl import SFTTrainer, SFTConfig
@@ -562,7 +566,7 @@ log = {
                "warmup_steps": WARMUP, "max_seq_len": MAX_LEN, "batch": BATCH, "grad_accum": GRAD_ACCUM,
                "effective_batch": BATCH * GRAD_ACCUM,
                "hardware": (saved_config if STOPPED else RUN_CONFIG).get("hardware"),
-               "data_revision": DATA_REVISION, "chat_template_kwargs": CHAT_TEMPLATE_KWARGS},
+               "data_revision": DATA_REVISION, "data_dir": DATA_DIR, "chat_template_kwargs": CHAT_TEMPLATE_KWARGS},
     "loss_curve": [{"step": h["step"], "loss": h["loss"]} for h in history if "loss" in h],
     "eval_curve": [{"step": s, "eval_loss": l} for s, l in eval_losses(history)],
 }
@@ -787,8 +791,8 @@ Scores one finished training run. Set `RUN_ID`, pick an **A100** runtime (Runtim
 **Runtime → Run all**. Reads `fyM1-ckpt/<RUN_ID>/train_log.json` for the base model and the data revision, loads the
 base model in 4-bit with the LoRA adapter from `<RUN_ID>/final/`, and measures, in this order:
 1. answers to every `eval/prompts.jsonl` prompt from the base model (adapter off) and from fy-m1, plus both models'
-   answers to the extra identity prompts (`eval/identity_check.jsonl`, set "identity"): data `system_prompt.txt`, temp 0.7,
-   top_p 0.9, max 256 new tokens, seed 42;
+   answers to the extra identity prompts (`eval/identity_check.jsonl`, set "identity"): data `system_prompt.txt`, sampled
+   with the shared defaults `fym1.generation.GEN_KWARGS`, max 256 new tokens, seed 42;
 2. Belebele `plt_Latn` for fy-m1 (both 00_baseline protocols: plain-text completion is `belebele_acc`);
 3. FLORES+ `plt_Latn`↔`eng_Latn` devtest first 200, chrF++, for fy-m1 (00_baseline protocol);
 4. held-out-chat perplexity on 01_train's 2% eval split (reply tokens only, as eval loss), base and fy-m1.
@@ -808,7 +812,7 @@ code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
 code("""RUN_ID = "fym1-9b-a100-r1"  # the training run to score (fyM1-ckpt/<RUN_ID>/)
 CKPT_REPO, DATA_REPO = "Fan1000-Prog/fyM1-ckpt", "Fan1000-Prog/fyM1-chats"
 OUT_PREFIX = "results/eval"  # in the private fyM1-ckpt; answer files never go to git
-SEED, TEMPERATURE, TOP_P, MAX_NEW_TOKENS = 42, 0.7, 0.9, 256
+SEED, MAX_NEW_TOKENS = 42, 256  # answer sampling: fym1.generation.GEN_KWARGS (FLORES+ stays greedy)
 EVAL_SHARE, SPLIT_SEED = 0.02, 42  # 01_train's eval split (checked against train_log.json counts)
 GEN_BATCH, BELEBELE_BATCH, PPL_BATCH, FLORES_N = 16, 8, 2, 200
 FORCE = False  # True: redo every section; else sections saved for this RUN_ID and code are skipped"""),
@@ -828,7 +832,9 @@ from fym1.eval import baseline as bl
 from fym1.eval.batching import StillOutOfMemory, run_batched
 from fym1.eval.identity_check import check_specs, export_prompts
 from fym1.eval.perplexity import held_out_rows, perplexity, response_spans, token_mask
+from fym1.train.data_mix import data_files
 from fym1.eval.scoring import NOTEBOOK_METRICS
+from fym1.generation import GEN_KWARGS
 from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text, turn_markers
 from fym1.train.run_state import check_hub_id
 from fym1.runtime import output_dir, scratch_dir
@@ -933,7 +939,8 @@ def batched(items, batch_size, run):
 
 @torch.inference_mode()
 def generate(prompts, max_new_tokens, sample, system=None):
-    kw = dict(do_sample=True, temperature=TEMPERATURE, top_p=TOP_P) if sample else dict(do_sample=False)
+    \"\"\"sample: the shared GEN_KWARGS (answer files); else greedy, as 00_baseline scored FLORES+.\"\"\"
+    kw = GEN_KWARGS if sample else dict(do_sample=False)
 
     def run(batch):
         enc = encode([chat(p, system) for p in batch])
@@ -949,7 +956,7 @@ def last_logits(enc):
         return model(**enc, logits_to_keep=1).logits[:, -1]
     except TypeError:  # forward without logits_to_keep
         return model(**enc).logits[:, -1]"""),
-code("""SAMPLING = (f"system prompt: data system_prompt.txt @ {DATA_REVISION[:9]}, temp {TEMPERATURE}, top_p {TOP_P}, "
+code("""SAMPLING = (f"system prompt: data system_prompt.txt @ {DATA_REVISION[:9]}, {GEN_KWARGS}, "
             f"max {MAX_NEW_TOKENS} new tokens, torch seed {SEED} per file, batch {GEN_BATCH}")
 ANSWER_FILES = {  # score.py reads answers_<model>.jsonl; identity_check.py runs per model on each pair
     "answers_base": (PROMPTS, False),
@@ -1046,7 +1053,8 @@ def reply_nll(texts, spans):
 
 if section("perplexity"):
     t0 = time.time()
-    files = [f for f in list_repo_files(DATA_REPO, repo_type="dataset", revision=DATA_REVISION) if f.endswith(".jsonl")]
+    files = data_files(list_repo_files(DATA_REPO, repo_type="dataset", revision=DATA_REVISION),
+                       TRAIN_LOG["config"].get("data_dir", ""))  # r1 logs have no data_dir: every *.jsonl
     rows = []
     for f in files:  # same files and order as 01_train; private chat text stays in memory, never printed
         rows += jsonl(hf_hub_download(DATA_REPO, f, repo_type="dataset", revision=DATA_REVISION))
@@ -1119,13 +1127,14 @@ md("""# fy-m1 05 — try fy-m1 (chat)
 Chat with a trained fy-m1 adapter. **Runtime → Run all**, then type in the box under the last cell.
 An empty line or `quit` ends the chat. Loads the base model in 4-bit plus the LoRA adapter `<RUN_ID>/final/`
 from the private `Fan1000-Prog/fyM1-ckpt`, with the training system prompt (private `fyM1-chats`, at the
-run's data revision). A 4-bit 9B fits any Colab GPU (T4, L4, A100). Needs the `HF_TOKEN` secret (Colab: Secrets
-pane with notebook access) and code synced to `fyM1-ckpt` `code/`. Nothing typed here is saved anywhere."""),
+run's data revision). Sampling and history length are the shared defaults in `fym1.generation`: the system
+prompt plus the last `HISTORY_EXCHANGES` exchanges. A 4-bit 9B fits any Colab GPU (T4, L4, A100). Needs the
+`HF_TOKEN` secret (Colab: Secrets pane with notebook access) and code synced to `fyM1-ckpt` `code/`. Nothing typed here is saved anywhere."""),
 code("""!nvidia-smi --query-gpu=name,memory.total --format=csv
 !pip install -q -U unsloth unsloth_zoo"""),
 code("""RUN_ID = "fym1-9b-a100-r1"  # the run whose final/ adapter to load
 CKPT_REPO, DATA_REPO = "Fan1000-Prog/fyM1-ckpt", "Fan1000-Prog/fyM1-chats"
-TEMPERATURE, TOP_P, MAX_NEW_TOKENS, HISTORY_TURNS = 0.7, 0.9, 256, 6"""),
+MAX_NEW_TOKENS = 256  # sampling and history length: fym1.generation (GEN_KWARGS, HISTORY_EXCHANGES)"""),
 bootstrap_cell(),
 code("""import sys, json
 from huggingface_hub import hf_hub_download, snapshot_download
@@ -1133,7 +1142,8 @@ from huggingface_hub import hf_hub_download, snapshot_download
 os.environ["HF_TOKEN"] = hf_token()  # never print it
 code_dir = snapshot_download(CKPT_REPO, allow_patterns=["code/**"], local_dir=CODE_DIR)
 sys.path.insert(0, f"{code_dir}/code/src")
-from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS
+from fym1.generation import GEN_KWARGS, HISTORY_EXCHANGES, trim_history
+from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text
 from fym1.train.run_state import check_hub_id
 from fym1.runtime import scratch_dir
 
@@ -1155,16 +1165,23 @@ model = PeftModel.from_pretrained(model, ADAPTER)
 FastModel.for_inference(model)
 tok = getattr(processor, "tokenizer", processor)
 print("READY on", torch.cuda.get_device_name(0), "| vram GB", round(torch.cuda.memory_allocated() / 2**30, 2))"""),
+code("""def render(messages, add_generation_prompt=False):
+    return tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=add_generation_prompt,
+                                   **CHAT_TEMPLATE_KWARGS)
+
+
+def chat_prompt(messages):
+    \"\"\"Past turns exactly as training rendered them (training_text), then the generation prompt.\"\"\"
+    return training_text(render, messages) + render(messages, True)[len(render(messages)):]"""),
 code("""from transformers import TextStreamer
 
 
 @torch.inference_mode()
 def reply(history):
-    messages = [{"role": "system", "content": system_prompt}] + history[-2 * HISTORY_TURNS + 1:]
-    text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **CHAT_TEMPLATE_KWARGS)
+    messages = trim_history(system_prompt, history, HISTORY_EXCHANGES)  # trimmed first, then rendered
+    text = chat_prompt(messages)
     enc = tok(text, return_tensors="pt", add_special_tokens=False).to("cuda")
-    ids = model.generate(**enc, max_new_tokens=MAX_NEW_TOKENS, do_sample=True, temperature=TEMPERATURE,
-                         top_p=TOP_P, pad_token_id=tok.pad_token_id,
+    ids = model.generate(**enc, **GEN_KWARGS, max_new_tokens=MAX_NEW_TOKENS, pad_token_id=tok.pad_token_id,
                          streamer=TextStreamer(tok, skip_prompt=True, skip_special_tokens=True))
     return tok.decode(ids[0, enc["input_ids"].shape[1]:], skip_special_tokens=True).strip()
 

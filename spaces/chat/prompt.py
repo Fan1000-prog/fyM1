@@ -2,6 +2,8 @@
 
 from collections.abc import Callable
 
+from generation import HISTORY_EXCHANGES, trim_history
+
 # Rough cost of the chat template's role markers around each message, in tokens.
 TOKENS_PER_MESSAGE_OVERHEAD = 8
 
@@ -23,8 +25,9 @@ def build_messages(
     message: str,
     count_tokens: Callable[[str], int],
     token_budget: int,
+    max_exchanges: int = HISTORY_EXCHANGES,
 ) -> list[dict]:
-    """System prompt, as much recent history as fits `token_budget`, then `message`.
+    """System prompt, the last `max_exchanges` exchanges (as many as fit `token_budget`), then `message`.
 
     Oldest turns are dropped first, and the kept history starts on a user turn, as chat templates require.
     """
@@ -35,13 +38,14 @@ def build_messages(
     remaining = token_budget - cost(system_prompt) - cost(message)
     if remaining < 0:
         raise MessageTooLong(f"system prompt + message need {token_budget - remaining} tokens; budget is {token_budget}")
+    turns = [{"role": t["role"], "content": text_of(t["content"])} for t in history]
+    recent = trim_history(system_prompt, [*turns, {"role": "user", "content": message}], max_exchanges)[1:-1]
     kept = []
-    for turn in reversed(history):
-        turn_text = text_of(turn["content"])
-        remaining -= cost(turn_text)
+    for turn in reversed(recent):
+        remaining -= cost(turn["content"])
         if remaining < 0:
             break
-        kept.append({"role": turn["role"], "content": turn_text})
+        kept.append(turn)
     kept.reverse()
     while kept and kept[0]["role"] != "user":
         kept.pop(0)

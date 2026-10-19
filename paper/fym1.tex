@@ -671,6 +671,10 @@ For v0.2:
   \item Each model's answer to each test prompt.
   \item The layer-pruning experiment.
   \item Longer training, more than one seed, and more everyday data.
+  \item A second run (r2) on a new data mix that stops the role-play: synthetic chats cut before any reply
+        that plays a person, identity chats repeated, real pairs kept only when the reply answers, and
+        human-written Malagasy prompt and answer pairs from the Aya Dataset \citep{singh2024aya}, capped at
+        20\% of the mix.
 \end{itemize}
 After that, two larger steps, in this order:
 \begin{enumerate}
@@ -701,7 +705,8 @@ CC-BY-SA 4.0; derived word lists keep that licence and attribution), word case c
 Wikipedia \citep{wikipedia-dump} (CC-BY-SA 4.0), HPLT 2.0 cleaned Malagasy web text \citep{hplt2}
 (CC0-1.0 on its dataset card; I keep only a word list, never the text), and the INSEE first-name file
 \citep{insee-prenoms} (Licence Ouverte / Etalab 2.0). The formal slice uses Malagasy Wikipedia.
-Evaluation uses Belebele \citep{bandarkar-etal-2024-belebele} and FLORES+ \citep{floresplus}, both
+The r2 mix uses the original (human-written) Malagasy annotations of the Aya Dataset \citep{singh2024aya}
+(Apache-2.0). Evaluation uses Belebele \citep{bandarkar-etal-2024-belebele} and FLORES+ \citep{floresplus}, both
 CC-BY-SA 4.0 on their dataset cards.
 
 \paragraph{Tools.} Language ID uses GlotLID \citep{kargaran-etal-2023-glotlid}, under the licence terms on

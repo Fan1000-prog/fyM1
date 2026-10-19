@@ -91,7 +91,7 @@ def test_eval_notebook_scores_the_a100_run_from_its_train_log():
     assert 'MODEL_ID, DATA_REVISION = TRAIN_LOG["model"], TRAIN_LOG["config"]["data_revision"]' in code
     assert "use_exact_model_name=True" in code and "load_in_4bit=True" in code
     assert 'allow_patterns=[f"{RUN_ID}/final/*"]' in code
-    assert "SEED, TEMPERATURE, TOP_P, MAX_NEW_TOKENS = 42, 0.7, 0.9, 256" in code
+    assert "SEED, MAX_NEW_TOKENS = 42, 256" in code
 
 
 def test_eval_notebook_answer_files_are_the_ones_the_laptop_scripts_read():
@@ -144,3 +144,38 @@ def test_try_notebook_chat_ends_on_empty_line_or_quit_and_saves_nothing():
     code = try_code()
     assert 'if not user or user.lower() == "quit":' in code
     assert "upload" not in code and "open(" not in code.replace("open(hf_hub_download", "")
+
+
+def test_try_notebook_multi_turn_prompt_is_the_training_render_plus_generation_prompt():
+    """Past assistant turns keep the thinking-stub header training gave them (Qwen3 template, thinking off)."""
+    import json
+
+    from jinja2.ext import loopcontrols
+    from jinja2.sandbox import ImmutableSandboxedEnvironment
+
+    from fym1.train.chat_format import CHAT_TEMPLATE_KWARGS, training_text
+
+    source = (ROOT / "tests" / "train" / "fixtures" / "qwen3_chat_template.jinja").read_text()
+    template = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True,
+                                             extensions=[loopcontrols]).from_string(source)
+
+    class StandInTokenizer:
+        def apply_chat_template(self, messages, tokenize, add_generation_prompt, **kwargs):
+            assert tokenize is False
+            return template.render(messages=messages, add_generation_prompt=add_generation_prompt, **kwargs)
+
+    nb = json.loads((ROOT / "notebooks" / "05_try.ipynb").read_text())
+    cell = next("".join(c["source"]) for c in nb["cells"]
+                if c["cell_type"] == "code" and "def chat_prompt" in "".join(c["source"]))
+    ns = {"tok": StandInTokenizer(), "CHAT_TEMPLATE_KWARGS": CHAT_TEMPLATE_KWARGS, "training_text": training_text}
+    exec(cell, ns)
+
+    messages = [{"role": "system", "content": "SYS"}, {"role": "user", "content": "U1"},
+                {"role": "assistant", "content": "A1"}, {"role": "user", "content": "U2"}]
+    stub = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    prompt = ns["chat_prompt"](messages)
+    assert prompt == training_text(ns["render"], messages) + stub
+    assert prompt == ("<|im_start|>system\nSYS<|im_end|>\n<|im_start|>user\nU1<|im_end|>\n"
+                      f"{stub}A1<|im_end|>\n<|im_start|>user\nU2<|im_end|>\n{stub}")
+    # the plain render drops the stub from the past assistant turn, so the fix is doing work
+    assert "<|im_start|>assistant\nA1" in ns["render"](messages, True)

@@ -7,16 +7,15 @@ response header up to the next user header, so `perplexity(fym1) ~ exp(best eval
 """
 
 import math
-import random
+
+from fym1.train.data_mix import eval_split
 
 
 def held_out_rows(rows: list, share: float, seed: int) -> list:
     """The eval split of 01_train: the first max(1, round(n * share)) rows of a seeded shuffle (input untouched)."""
     if not rows:
         raise ValueError("no rows to split")
-    shuffled = list(rows)
-    random.Random(seed).shuffle(shuffled)
-    return shuffled[:max(1, round(len(shuffled) * share))]
+    return eval_split(rows, share, seed)[0]
 
 
 def response_spans(text: str, instruction_part: str, response_part: str) -> list[tuple[int, int]]:
