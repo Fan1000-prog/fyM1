@@ -9,7 +9,7 @@ This file says where the project stands and how to pick it up; the spec and plan
 
 1. Read this file, then `AGENTS.md`, then spec §7–§8 and the plan's "Changes from the plan".
 2. Read the private operator handoff on the owner's laptop (not in this repo; it names accounts and machines):
-   the lead handoff (§16 "new run" holds; §17–§18 are the latest state and override older parts), the trainer
+   the lead handoff (§16 "new run" holds; §24 is the latest state and overrides older parts), the trainer
    handoff, and the log of decisions the lead made for the owner.
 3. Set up the team: a **lead** (owns calls, merges, run order; talks to the owner through the main session) and,
    as needed, a **trainer** (the only agent that drives Kaggle/Colab), **data** (cleaner + export), **eval**
@@ -32,7 +32,8 @@ This file says where the project stands and how to pick it up; the spec and plan
 ### 0.1 Where things stand (owner takes over here)
 
 In one line: r1 is trained and measured, it speaks good everyday Malagasy but plays a family member instead of
-answering; r2 (a new data mix to fix that) finished training and is not measured yet.
+answering; r2 (a new data mix to fix that) finished training and is not measured yet. The owner decided to ship
+r2 as fy-m1 v1 (§0.2); §0.3 is the plan.
 
 **r1** (`RUN_ID fym1-9b-a100-r1`, adapter `checkpoint-500`: `final_adapter` in `results/eval/eval_run.json`,
 `best_step` in `results/train_log.json`).
@@ -85,30 +86,34 @@ the r2 eval PR copies them in with `scripts/fetch_train_log.py`):
 - The Colab runtime is already disconnected and deleted.
 - Not measured yet (no answers, judge or gates).
 
-### 0.2 What to do when r2 ends
+### 0.2 Owner verdict on r2 and the ship decision
 
-1. Nothing to close: the r2 Colab runtime is already deleted.
-2. Re-run `02_eval_export` for r2. Also re-run base and r1 at the new decoding defaults, so all three are
-   compared at the same settings.
-3. Score as in the r1 results PR #73: `score.py`, `identity_check`, the leak gate. Numbers go to `results/` by PR.
-4. Share the try link (`05_try` with `RUN_ID fym1-9b-a100-r2`) only if r2 answers more often than r1 **and** is
-   not worse than base.
-5. Watch: real pairs are only about 5% of r2, and r1's naturalness gain came mostly from real chats. If r2's
-   naturalness drops a lot while its answer rate goes up, the next knob is the real-pair share.
-6. If r2 still does not answer: for r3, add a generated casual assistant-style Q&A set (`04_synth`).
+- Owner's hands-on impression after trying r2 (not a measured number): "r2 is a lot better, but it still doesn't give
+  a full assistant answer in an everyday style."
+- OWNER DECISION: ship fy-m1 v1 = r2 (`fym1-9b-a100-r2`, checkpoint-300) as is, with a clean system prompt that
+  tells it to be a helpful assistant (everyday Malagasy, says it is fy-m1). No r3 before shipping. r3 (a dedicated
+  casual Q&A set from `04_synth`, tuning the real-pair share) moves to Future work.
 
-### 0.3 What is left after that
+### 0.3 Plan for the next session, in order
 
-- `03_trim`, merge the adapter, 4-bit + GGUF.
-- Spaces `fy-m1-chat` and `fy-m1-arena`.
-- `paper/make_numbers.py --strict`.
-- Paper results: write up r1 as a documented failure mode (persona leakage from group-chat data). Disclose that 2
-  identity training turns contain a short identity-check prompt. One line on the repetition-penalty difference
-  between the notebook and the Space (transformers applies it to the whole sequence, llama.cpp to the last 64
-  tokens; see `generation.py`).
-- README: the "whole path" diagram and the funnel still say "formal" chats; r2 leaves them out and adds Aya.
-  Update them once the release run is picked.
-- Release snapshot and its checks; public repo `Fan1000-prog/fy-m1`.
+1. **System prompt.** Write the clean helpful-assistant system prompt in one place, shared by `05_try`,
+   `02_eval_export` and the Spaces. It differs from the training system prompt (`system_prompt.txt` in fyM1-chats);
+   say so honestly in the paper.
+2. **Measure r2** against base and r1 at the same decoding settings (`src/fym1/generation.py`) with the new system
+   prompt: answer rate, naturalness, identity, leak gate, Belebele, FLORES. Score as in PR #73 (`score.py`,
+   `identity_check`, the leak gate). Put r2's train log in `results/` (`scripts/fetch_train_log.py`). Watch
+   naturalness: real pairs are only about 5% of r2, and r1's naturalness gain came mostly from real chats.
+3. **Docs from numbers.** Final README, model card and paper from `paper/make_numbers.py --strict`. r1 is the
+   documented failure mode (persona leakage from group-chat data). Disclose that 2 identity training turns contain
+   a short identity-check prompt, and one line on the repetition-penalty difference between the notebook and the
+   Space (transformers applies it to the whole sequence, llama.cpp to the last 64 tokens; see `generation.py`). The
+   README "whole path" diagram and funnel still say "formal" chats; r2 leaves them out and adds Aya.
+4. **Ship the model.** `03_trim`, merge the adapter, 4-bit + GGUF, Spaces `fy-m1-chat` and `fy-m1-arena` with the new
+   system prompt, and a Playwright smoke test of both Spaces.
+5. **Public repo.** Release snapshot checks (the decision 35 rewrite of private ids and links; a fresh agent re-checks
+   sender names and secrets), then `Fan1000-prog/fy-m1` as one fresh commit.
+
+Future work (not before v1): r3 with a generated casual assistant-style Q&A set and a tuned real-pair share.
 
 ### 0.4 Known limits and open issues
 
