@@ -1,8 +1,9 @@
 # fyM1 project update
 
-Snapshot: 2026-10-18, `main` at 1399e1c. Check `gh pr list` for anything newer. Read with the spec
+Snapshot: 2026-10-19 (UTC), `main` at 4d86fc2. Check `gh pr list` for anything newer. Read with the spec
 (`docs/superpowers/specs/2026-10-17-resaka-design.md`) and the plan (`docs/superpowers/plans/2026-10-17-fym1-v0.1.md`).
 This file says where the project stands and how to pick it up; the spec and plan say what it is and how it is built.
+§0 is the latest state. §1–§6 are older snapshots; where they disagree with §0, §0 wins.
 
 ## 0. Start here (new session or new team)
 
@@ -27,6 +28,109 @@ This file says where the project stands and how to pick it up; the spec and plan
    automatic gates run by fresh agents; list what they auto-decided for the owner. Any agent near 25% context
    writes a handoff and is replaced by a fresh one (the first lead handed over to lead-2 this way). Public name is
    `fy-m1` (spec §8.6).
+
+### 0.1 Where things stand (owner takes over here)
+
+In one line: r1 is trained and measured, it speaks good everyday Malagasy but plays a family member instead of
+answering; r2 (a new data mix to fix that) finished training and is not measured yet.
+
+**r1** (`RUN_ID fym1-9b-a100-r1`, adapter `checkpoint-500`: `final_adapter` in `results/eval/eval_run.json`,
+`best_step` in `results/train_log.json`).
+
+- What went wrong: it answers like one of the family in the group chat, not like an assistant.
+- Why: `build_chats --all-senders` put each family member in the assistant seat in turn. The synthetic chats
+  copied that shape. Names from the fake-name pool sat in assistant turns (fake names, so not a privacy leak).
+- r1 vs base, same 150 prompts (r1 sampling was the old temp 0.7 / top_p 0.9, `sampling` in `eval_run.json`):
+
+| | r1 | base | file |
+|---|---|---|---|
+| Answer rate (judge) | 0.753 | 0.867 | `results/eval/judge.json` `answer_rate` |
+| Naturalness, 1–5 | 4.09 | 2.96 | `results/eval/judge.json` |
+| Correctness, 1–5 | 3.06 | 3.35 | `results/eval/judge.json` |
+| Identity check passed | 24/34 | 19/34 | `results/eval/identity_check.json`, `identity_check_base.json` |
+| Drift rate | 0.000 | 0.027 | `results/eval/scores.json` |
+| Leak gate (8-word matches) | 0 matches: pass | — | `results/eval/leak_review.json` |
+
+- The identity gate fails for both: under the 90% bar (`threshold`), and both make foreign self-claims
+  (`foreign_identity`: r1 2, base 5).
+
+**r2 data mix** (`results/mix_r2.json`, PR #72). 1,345 training rows (`mix.training_rows`):
+
+- synthetic chats with the persona cut: 933 (`synth.kept_chats`)
+- identity chats: 16 × 5 = 80 (`identity.chats`, `identity.repeat`)
+- real reply pairs: 63, capped at 10% (`real.cap`, `real.max_share`); real share is 0.0468, so about 5%
+- Aya: 269, capped at 20% (`aya.cap`, `aya.max_share`). Source `CohereLabs/aya_dataset`, Apache-2.0, Malagasy
+  original human annotations only: 11,672 rows, 10,856 pass the gates (`aya.original_annotations`,
+  `aya.rows_passed`); 8 dropped because they match eval prompts (`dropped_rows_by_reason.eval_prompt`).
+- Left out: the formal Wikipedia set.
+- On the Hub: private `fyM1-chats`, `DATA_REVISION 4e5dde2fa8034e055937cf05a05acdb54c5d2454`, `DATA_DIR mix-r2/`
+  (from the upload, not a `results/` file).
+- At train time one identity chat fell into the eval split: 75 identity rows train, 1,315 train / 26 eval (from
+  the r2 run log, not in `results/` yet). Why 1,315 + 26 = 1,341, not 1,345: the split is over 1,281 unique rows
+  (933 + 16 + 63 + 269); eval takes 26 of them (1 identity chat, counted once), the 15 identity chats left in
+  train are repeated x5, so train = 1,255 + 60 = 1,315.
+
+**Decoding defaults** (PR #71, `src/fym1/generation.py`): temp 0.6, repetition_penalty 1.1, top_p 0.9, top_k 50,
+3-exchange chat history. Used by `05_try`, `02_eval_export` and the chat Space.
+
+**r2 run: finished** (run facts from private `fyM1-ckpt` `fym1-9b-a100-r2/train_log.json`, not in `results/` yet;
+the r2 eval PR copies them in with `scripts/fetch_train_log.py`):
+
+- `RUN_ID fym1-9b-a100-r2`, Colab Pro A100-SXM4-40GB, code b3d2b35, started about 02:36 UTC 2026-10-19.
+- All 330 steps ran, no early stop. Wall time 1,377 s. Final train loss 1.291.
+- Eval loss: 1.6454 (step 100), 1.6361 (200), 1.6317 (300), 1.6326 (330). Best is step 300, so the final adapter is
+  `checkpoint-300`, saved at `fyM1-ckpt` `fym1-9b-a100-r2/final/`.
+- r2's eval loss can't be compared with r1's 1.356 (`best_eval_loss` in `results/train_log.json`): the eval split
+  and the mix are different.
+- The Colab runtime is already disconnected and deleted.
+- Not measured yet (no answers, judge or gates).
+
+### 0.2 What to do when r2 ends
+
+1. Nothing to close: the r2 Colab runtime is already deleted.
+2. Re-run `02_eval_export` for r2. Also re-run base and r1 at the new decoding defaults, so all three are
+   compared at the same settings.
+3. Score as in the r1 results PR #73: `score.py`, `identity_check`, the leak gate. Numbers go to `results/` by PR.
+4. Share the try link (`05_try` with `RUN_ID fym1-9b-a100-r2`) only if r2 answers more often than r1 **and** is
+   not worse than base.
+5. Watch: real pairs are only about 5% of r2, and r1's naturalness gain came mostly from real chats. If r2's
+   naturalness drops a lot while its answer rate goes up, the next knob is the real-pair share.
+6. If r2 still does not answer: for r3, add a generated casual assistant-style Q&A set (`04_synth`).
+
+### 0.3 What is left after that
+
+- `03_trim`, merge the adapter, 4-bit + GGUF.
+- Spaces `fy-m1-chat` and `fy-m1-arena`.
+- `paper/make_numbers.py --strict`.
+- Paper results: write up r1 as a documented failure mode (persona leakage from group-chat data). Disclose that 2
+  identity training turns contain a short identity-check prompt. One line on the repetition-penalty difference
+  between the notebook and the Space (transformers applies it to the whole sequence, llama.cpp to the last 64
+  tokens; see `generation.py`).
+- README: the "whole path" diagram and the funnel still say "formal" chats; r2 leaves them out and adds Aya.
+  Update them once the release run is picked.
+- Release snapshot and its checks; public repo `Fan1000-prog/fy-m1`.
+
+### 0.4 Known limits and open issues
+
+- The identity gate fails for both models so far.
+- The persona filter misses names outside the fake pool, and "I'm X" / "Je suis X" lines.
+- The Aya licence is a constant in code, not read from the dataset card.
+- Eval imports the train split helper (a layering smell).
+- `generation.py` says `tests/spaces/test_generation_copy.py` checks the Space copy; that file does not exist.
+- The first r2 step took about 14 min (Unsloth 2026.10.6 + torch 2.11 compile failed and fell back).
+- `01_train` overwrote the root `final/` in `fyM1-ckpt` with r2's `checkpoint-300`. r1 is still at
+  `fym1-9b-a100-r1/final/`. Anything that reads the root `final/` now gets r2.
+- The eval split can take identity chats (it did in r2).
+- Issue #61 (three quadratic regex paths in the anonymiser) is still open.
+
+### 0.5 Things that could be deleted (owner decides; nothing was deleted)
+
+- Local branch `pr8-review-r2` (31 h old).
+- Detached worktree `~/fyM1-sync`.
+- Private copy `~/malagasy-data/private/train-0c7ca5d/`: keep while the leak gates need it.
+- Old r1-era files in `fyM1-chats` (`chats.jsonl`, `formal.jsonl`, `synth/*`): r2 does not use them; keep them so
+  r1 can be rebuilt.
+- Note: `~/fyM1-persona-mix` and local branch `data/persona-mix` were deleted by main with the owner's OK.
 
 ## 1. Where we are
 
