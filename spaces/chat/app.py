@@ -7,14 +7,15 @@ HF_TOKEN (Space secret) is only needed while the model repo is private.
 import os
 
 import gradio as gr
+from generation import LLAMA_CPP_KWARGS
 from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 from prompt import MessageTooLong, build_messages
 
 GITHUB_URL = "https://github.com/Fan1000-prog/fy-m1"
 FOOTER = f"[Code]({GITHUB_URL}) · [Paper]({GITHUB_URL}/tree/main/paper) · [Arena](https://huggingface.co/spaces/Fan1000-Prog/fy-m1-arena)"
-# Same sampling as the eval run, so the demo shows the model that was measured.
-SAMPLING = {"temperature": 0.7, "top_p": 0.9, "max_tokens": 256}
+# Shared decoding defaults (generation.py, a copy of src/fym1/generation.py), as in the eval answers and 05_try.
+SAMPLING = {**LLAMA_CPP_KWARGS, "max_tokens": 256}
 CONTEXT_TOKENS = 4096
 # Room for the prompt: the window minus the reply, minus slack for template tokens the estimate misses.
 PROMPT_TOKEN_BUDGET = CONTEXT_TOKENS - SAMPLING["max_tokens"] - 64
