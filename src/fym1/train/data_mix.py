@@ -25,13 +25,19 @@ def repeat_of(row: dict) -> int:
     return repeat
 
 
+def eval_split(rows: list, eval_share: float, seed: int) -> tuple[list, list]:
+    """(eval rows, the other rows): the first max(1, round(n * eval_share)) rows of a seeded shuffle, the r1 split.
+    The one shuffle 01_train (`split_rows`) and 02_eval_export (`fym1.eval.perplexity.held_out_rows`) share."""
+    shuffled = list(rows)
+    random.Random(seed).shuffle(shuffled)
+    n_eval = max(1, round(len(shuffled) * eval_share))
+    return shuffled[:n_eval], shuffled[n_eval:]
+
+
 def split_rows(rows: list[dict], eval_share: float, seed: int) -> tuple[list[dict], list[dict]]:
     """(train rows with each row repeated `repeat` times, eval rows once each); the input list is not changed."""
     for row in rows:  # a bad repeat is refused wherever the row lands
         repeat_of(row)
-    shuffled = list(rows)
-    random.Random(seed).shuffle(shuffled)
-    n_eval = max(1, round(len(shuffled) * eval_share))
-    eval_rows, train_once = shuffled[:n_eval], shuffled[n_eval:]
+    eval_rows, train_once = eval_split(rows, eval_share, seed)
     train = [row for row in train_once for _ in range(repeat_of(row))]
     return train, eval_rows
