@@ -148,8 +148,8 @@ I take the opposite view for Malagasy--French and define drift only as a full sw
 \paragraph{Parameter-efficient fine-tuning.} LoRA \citep{hu2022lora} learns a low-rank update next to a
 frozen weight matrix; QLoRA \citep{dettmers2023qlora} stores the frozen model in 4-bit NormalFloat (NF4),
 so a model of about ten billion parameters trains on one 16\,GB GPU. I use Unsloth \citep{unsloth}, an
-implementation of the same method with lower memory use, and a cosine learning-rate schedule with linear
-warmup \citep{loshchilov2017sgdr}.
+implementation of the same method with lower memory use, and a cosine learning-rate decay
+\citep{loshchilov2017sgdr} after a short linear warmup.
 
 \paragraph{Synthetic data.} Prompting a model to write its own training data is an established way to
 bootstrap instruction data \citep{wang-etal-2023-self}. Training a model repeatedly on its own outputs
@@ -350,14 +350,17 @@ $d=\fyBudgetD{}$, $k=\fyBudgetK{}$, so $dk=\fyBudgetFull{}$ weights; a rank-\fyB
 
 \paragraph{Objective.} Each training example is one conversation rendered in the base model's own chat
 template, with thinking turned off and a fixed Malagasy system prompt that names the model. Let
-$y_1,\dots,y_T$ be its tokens and $m_t \in \{0,1\}$ a mask that is $1$ exactly on the tokens of assistant
+$y=(y_1,\dots,y_{T_y})$ be its tokens and $m^{y}_t \in \{0,1\}$ a mask that is $1$ exactly on the tokens of assistant
 replies (each reply's end-of-turn token included; system prompt, user turns and assistant headers
-excluded). Training minimises the next-token cross-entropy on the masked tokens,
+excluded). For a batch $\mathcal{B}$ of conversations (all micro-batches of one optimiser step under
+gradient accumulation), training minimises the next-token cross-entropy summed over every assistant token
+in the batch and divided by the number of those tokens,
 \begin{equation}
-  \mathcal{L}(A, B) = -\frac{1}{\sum_t m_t} \sum_{t=1}^{T} m_t \log p_{W_0, A, B}\left(y_t \mid y_{<t}\right),
+  \mathcal{L}(A, B) = -\frac{1}{\sum_{y \in \mathcal{B}} \sum_{t} m^{y}_t}
+  \sum_{y \in \mathcal{B}} \sum_{t=1}^{T_y} m^{y}_t \log p_{W_0, A, B}\left(y_t \mid y_{<t}\right),
   \label{eq:loss}
 \end{equation}
-averaged over the tokens of a batch (Figure~\ref{fig:mask}). The template's generation prompt puts an
+so each assistant token weighs the same, whatever conversation it sits in (Figure~\ref{fig:mask}). The template's generation prompt puts an
 empty thinking block after the assistant header; every assistant turn in training carries the same block,
 so the model learns the turn format it sees when it answers.
 
@@ -374,12 +377,12 @@ so the model learns the turn format it sees when it answers.
   \node[tok, right=0pt of u2] (h2) {assistant\\header};
   \node[tok, fill=traincol, right=0pt of h2] (a2) {assistant\\reply};
   \node[tok, fill=traincol, right=0pt of a2] (e2) {end of\\turn};
-  \node[font=\footnotesize, below=6pt of lab] {$m_t$};
+  \node[font=\footnotesize, below=6pt of lab] {$m^{y}_t$};
   \foreach \n/\m in {s/0,u1/0,h1/0,a1/1,e1/1,u2/0,h2/0,a2/1,e2/1}
     \node[font=\footnotesize, below=4pt of \n] {$\m$};
 \end{tikzpicture}
 \caption{Assistant-only loss over the chat template (schematic, no real text). Green tokens have
-$m_t=1$ and count in Equation~\ref{eq:loss}; the rest are context only. Each assistant header includes
+$m^{y}_t=1$ and count in Equation~\ref{eq:loss}; the rest are context only. Each assistant header includes
 the template's empty thinking block.}
 \label{fig:mask}
 \end{figure}
@@ -549,7 +552,7 @@ shows the learning-rate schedule and the loss curves.
 \pendingplot{5.6cm}{loss curves: written from\\results/train\_log.json\\when the training run ends}
 \fi
 \caption{Left: learning rate, linear warmup over $S_w$ steps to the peak $\eta$, then a half cosine to
-zero at the planned last step $S$ \citep{loshchilov2017sgdr}; recomputed from the run's settings in
+zero at the planned last step $S$ (the cosine decay of \citealp{loshchilov2017sgdr}); recomputed from the run's settings in
 \texttt{results/train\_log.json} once it exists (schematic until then). Right: training loss per logged
 step and held-out loss per evaluation, from the same log.}
 \label{fig:train}
