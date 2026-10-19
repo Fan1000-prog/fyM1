@@ -3,7 +3,8 @@
 Colab notebooks import `fym1` from there, so they run merged code only. Run from a clean checkout of
 origin/main, e.g. `git worktree add --detach ../fyM1-sync origin/main`. Refuses otherwise.
 Uploads the package (`src/**/*.py` plus the data files it reads: `src/**/*.txt`, `src/**/*.md`),
-`eval/prompts.jsonl` and `code/SHA` (the commit) in one Hub commit; never deletes. Caches (`__pycache__`) never match.
+`eval/prompts.jsonl`, `eval/identity_check.jsonl` (02_eval_export answers its extra prompts)
+and `code/SHA` (the commit) in one Hub commit; never deletes. Caches (`__pycache__`) never match.
 """
 
 import subprocess
@@ -13,7 +14,7 @@ from pathlib import Path
 from huggingface_hub import CommitOperationAdd, HfApi
 
 REPO = "Fan1000-Prog/fyM1-ckpt"
-PATTERNS = ["src/**/*.py", "src/**/*.txt", "src/**/*.md", "eval/prompts.jsonl"]
+PATTERNS = ["src/**/*.py", "src/**/*.txt", "src/**/*.md", "eval/prompts.jsonl", "eval/identity_check.jsonl"]
 
 
 def commit_operations(root: Path, sha: str) -> list[CommitOperationAdd]:

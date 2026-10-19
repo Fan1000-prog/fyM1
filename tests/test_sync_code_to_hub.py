@@ -30,8 +30,9 @@ def test_commit_operations_include_code_and_sha_in_one_list(tmp_path):
     (tmp_path / ".env").write_text("HF_TOKEN=fake\n")
     (tmp_path / "eval").mkdir()
     (tmp_path / "eval" / "prompts.jsonl").write_text("{}\n")
+    (tmp_path / "eval" / "identity_check.jsonl").write_text("{}\n")
     ops = sync.commit_operations(tmp_path, "abc1234")
-    assert [op.path_in_repo for op in ops] == ["code/eval/prompts.jsonl", "code/src/pkg/a.py", "code/src/pkg/words.txt",
+    assert [op.path_in_repo for op in ops] == ["code/eval/identity_check.jsonl", "code/eval/prompts.jsonl", "code/src/pkg/a.py", "code/src/pkg/words.txt",
                                                 "code/SHA"]
     assert ops[-1].path_or_fileobj == b"abc1234"
 
