@@ -1,0 +1,90 @@
+{
+  "aya": {
+    "annotation": "original-annotations",
+    "cap": 269,
+    "dropped_rows_by_reason": {
+      "drift": 151,
+      "duplicate": 279,
+      "fake_name": 177,
+      "identity": 9,
+      "length": 66,
+      "name_claim": 2,
+      "personal_logistics": 31,
+      "real_name": 67,
+      "style": 26
+    },
+    "language_code": "plt",
+    "licence": "apache-2.0",
+    "malagasy_rows": 14597,
+    "max_share": 0.2,
+    "original_annotations": 11672,
+    "re_annotations_left_out": 2925,
+    "repo": "CohereLabs/aya_dataset",
+    "revision": "f9ea04583f02a8f86404ff6c58bf75fe637df8a2",
+    "rows_passed": 10864
+  },
+  "code_sha": "7ae8d06e4599b503bfa9c484b96c005391cee349",
+  "identity": {
+    "chats": 16,
+    "repeat": 5,
+    "rows": 16
+  },
+  "inputs": {
+    "dataset": "Fan1000-Prog/fyM1-chats",
+    "revision": "0c7ca5d5e8d8631457d437dea7675dd91e29a909",
+    "sha256": {
+      "chats.jsonl": "ab507af8b51f43e1fbcaabc77a0eac3bca26b4c0b8a2d2df6aceaea1a3606c07",
+      "identity.jsonl": "9288e4b92b381168701f56c1a328ccb22947fdcfa027a275d75a966d62ffe5a3",
+      "synth/synth_chats.jsonl": "9ea0bc08ce90668ac4c95960e846678c4ce7d650d5fee3a545f2b1d810c9770c"
+    }
+  },
+  "mix": {
+    "files_rows": {
+      "aya": 269,
+      "identity": 16,
+      "real": 63,
+      "synth": 933
+    },
+    "rows": {
+      "aya": 269,
+      "identity": 80,
+      "real": 63,
+      "synth": 933
+    },
+    "shares": {
+      "aya": 0.2,
+      "identity": 0.0595,
+      "real": 0.0468,
+      "synth": 0.6937
+    },
+    "training_rows": 1345
+  },
+  "mix_dir": "mix-r2",
+  "real": {
+    "cap": 63,
+    "dropped_pairs_by_reason": {
+      "drift": 24,
+      "duplicate": 0,
+      "fake_name": 65,
+      "identity": 0,
+      "name_claim": 0,
+      "not_a_reply": 66,
+      "personal_logistics": 0,
+      "real_name": 0
+    },
+    "input_chats": 192,
+    "max_share": 0.1,
+    "pairs_passed": 63
+  },
+  "seed": 20261019,
+  "synth": {
+    "cut": 250,
+    "dropped": 351,
+    "input_chats": 1284,
+    "kept_chats": 933,
+    "reason_fake_name": 200,
+    "reason_name_claim": 2,
+    "reason_personal_logistics": 399,
+    "whole": 683
+  }
+}
