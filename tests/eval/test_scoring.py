@@ -233,3 +233,9 @@ def test_leak_gate_passes_only_with_no_matches_or_all_generic(review, passes):
 def test_leak_gate_rejects_inconsistent_review(review):
     with pytest.raises(ValueError):
         leak_gate_passes(review)
+
+
+def test_judge_means_without_answers_flag_leaves_answer_rate_out():
+    key = {"j1": {"model": "base", "prompt_id": "p1"}}
+    means = judge_means([{"id": "j1", "naturalness": 4, "correctness": 3}], key, answers_flag=False)
+    assert means == {"base": {"naturalness": 4.0, "correctness": 3.0, "n": 1}}

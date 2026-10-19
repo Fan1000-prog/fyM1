@@ -61,7 +61,7 @@ def _check_notes(judgements: list[dict]) -> None:
 
 def _criteria_means(judgements: list[dict], key: dict[str, dict]) -> dict[str, dict]:
     """`judge_means` plus `judge_mean`, the mean of the criteria (every reply has both)."""
-    means = judge_means(judgements, key)
+    means = judge_means(judgements, key, answers_flag=False)  # the gate's rubric has no answers flag
     for model_means in means.values():
         model_means["judge_mean"] = float(mean(model_means[c] for c in JUDGE_CRITERIA))
     return means

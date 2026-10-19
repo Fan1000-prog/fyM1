@@ -85,11 +85,12 @@ def _check_answers_flag(judgement: dict) -> int:
     return flag
 
 
-def judge_means(judgements: list[dict], key: dict[str, dict]) -> dict[str, dict]:
+def judge_means(judgements: list[dict], key: dict[str, dict], answers_flag: bool = True) -> dict[str, dict]:
     """Mean judge score per model and criterion, unblinded with the key from `blind_batch`.
 
     Also the share of replies the judge flagged as answering the prompt (`answer_rate`) and how
-    many replies that share is over (`answer_n`).
+    many replies that share is over (`answer_n`). `answers_flag=False` is for judge files without
+    that flag (the greeting gate's), and leaves both keys out.
     """
     scores: dict[str, dict[str, list[int]]] = defaultdict(lambda: defaultdict(list))
     seen = set()
@@ -103,17 +104,16 @@ def judge_means(judgements: list[dict], key: dict[str, dict]) -> dict[str, dict]
         model = key[blind_id]["model"]
         for criterion in JUDGE_CRITERIA:
             scores[model][criterion].append(_check_score(judgement, criterion))
-        scores[model][ANSWERS_FLAG].append(_check_answers_flag(judgement))
+        if answers_flag:
+            scores[model][ANSWERS_FLAG].append(_check_answers_flag(judgement))
     missing = len(key) - len(seen)
     if missing:
         raise ValueError(f"judge output is partial: {missing} of {len(key)} blind ids not judged")
     return {
         model: {c: float(mean(by_criterion[c])) for c in JUDGE_CRITERIA}
         | {"n": len(by_criterion[JUDGE_CRITERIA[0]])}
-        | {
-            "answer_rate": float(mean(by_criterion[ANSWERS_FLAG])),
-            "answer_n": len(by_criterion[ANSWERS_FLAG]),
-        }
+        | ({"answer_rate": float(mean(by_criterion[ANSWERS_FLAG])), "answer_n": len(by_criterion[ANSWERS_FLAG])}
+           if answers_flag else {})
         for model, by_criterion in sorted(scores.items())
     }
 
