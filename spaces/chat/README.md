@@ -26,5 +26,7 @@ Space settings:
 | `SYSTEM_PROMPT` | variable | owner-approved Malagasy system prompt |
 | `HF_TOKEN` | secret | read token; only while the model repo is private |
 
-The app refuses to start if a variable is missing. Sampling matches the eval run (temperature 0.7, top_p 0.9,
-256 new tokens). Code: https://github.com/Fan1000-prog/fy-m1
+The app refuses to start if a variable is missing. Sampling and history length come from
+`generation.py`, a byte-identical copy of `src/fym1/generation.py` (temperature 0.6, top_p 0.9, top_k 50,
+repeat_penalty 1.1, 256 new tokens; system prompt plus the last 3 exchanges). Edit the original, then copy it here.
+Code: https://github.com/Fan1000-prog/fy-m1

@@ -52,3 +52,19 @@ def test_one_long_old_message_is_dropped_not_sent():
 def test_new_message_too_long_for_the_budget_is_refused():
     with pytest.raises(MessageTooLong):
         build([], "w " * 500, budget=100)
+
+
+def test_history_is_capped_at_the_shared_exchange_count_even_when_tokens_fit():
+    from generation import HISTORY_EXCHANGES
+
+    history = [turn("user" if i % 2 == 0 else "assistant", f"t{i}") for i in range(20)]
+    out = build(history, "new", budget=10_000)
+    assert [m["content"] for m in out[1:-1]] == [f"t{i}" for i in range(20 - 2 * HISTORY_EXCHANGES, 20)]
+    assert out[-1] == {"role": "user", "content": "new"}
+
+
+def test_system_prompt_appears_once():
+    history = [{"role": "system", "content": "sys"}, turn("user", "a"), turn("assistant", "b")]
+    out = build(history, "new")
+    assert [m["role"] for m in out].count("system") == 1
+    assert [m["content"] for m in out] == ["sys", "a", "b", "new"]
