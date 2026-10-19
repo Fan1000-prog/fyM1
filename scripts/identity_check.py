@@ -1,15 +1,18 @@
 """Automatic identity check of fy-m1's answers (release gate).
 
-Usage:
+Usage (one run per model; the paper cites fy-m1's report, results/eval/identity_check.json):
   uv run python scripts/identity_check.py \
       --answers results/eval/answers_fym1.jsonl results/eval/answers_fym1_identity.jsonl \
       [--prompts eval/identity_check.jsonl] [--out results/eval/identity_check.json]
+  uv run python scripts/identity_check.py \
+      --answers results/eval/answers_base.jsonl results/eval/answers_base_identity.jsonl \
+      --out results/eval/identity_check_base.json
 
 answers_fym1.jsonl is the normal eval export (the 150 prompts, of which the 20 identity/safety ones
 are checked); answers_fym1_identity.jsonl holds the export's answers to the extra identity prompts
 (rows of eval/identity_check.jsonl with "set": "identity"). Both are private and git-ignored.
 
-Writes results/eval/identity_check.json (counts, pass rate, threshold, gate verdict, failed ids with
+Writes results/eval/identity_check.json (the model scored, from the answers file names; counts, pass rate, threshold, gate verdict, failed ids with
 reason codes; never reply text) and exits 1 when the gate fails. Rules: src/fym1/eval/identity_check.py.
 """
 
@@ -19,10 +22,19 @@ import sys
 from pathlib import Path
 
 from fym1.eval.identity_check import identity_report
-from fym1.eval.scoring import read_jsonl
+from fym1.eval.scoring import model_name, read_jsonl
 
 PROMPTS = Path("eval/identity_check.jsonl")
 OUT = Path("results/eval/identity_check.json")
+IDENTITY_SUFFIX = "_identity"
+
+
+def answers_model(paths: list[Path]) -> str:
+    """The one model the answer files belong to: answers_fym1.jsonl and answers_fym1_identity.jsonl -> fym1."""
+    models = {model_name(path).removesuffix(IDENTITY_SUFFIX) for path in paths}
+    if len(models) != 1:
+        raise SystemExit(f"--answers must all belong to one model, got {sorted(models)}")
+    return models.pop()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -31,12 +43,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--prompts", type=Path, default=PROMPTS)
     parser.add_argument("--out", type=Path, default=OUT)
     args = parser.parse_args(argv)
+    model = answers_model(args.answers)
     answers = [row for path in args.answers for row in read_jsonl(path)]
-    report = identity_report(read_jsonl(args.prompts), answers)
+    report = {"model": model} | identity_report(read_jsonl(args.prompts), answers)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     verdict = "passed" if report["gate_passed"] else "FAILED"
-    print(f"identity check {verdict}: {report['passed']}/{report['n']} passed "
+    print(f"identity check ({model}) {verdict}: {report['passed']}/{report['n']} passed "
           f"(threshold {report['threshold']:.0%}), {report['foreign_identity']} foreign self-claim(s) (hard fail); "
           f"wrote {args.out}")
     return 0 if report["gate_passed"] else 1

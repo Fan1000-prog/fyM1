@@ -650,23 +650,28 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
     path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
 
 
-def run_cli(tmp_path: Path, replies: dict[str, str]):
+def run_cli(tmp_path: Path, replies: dict[str, str], files=("answers_fym1.jsonl",),
+            out_name="identity_check.json"):
+    """Splits the ten specs' answers over `files` (like the eval prompts plus the extra identity prompts)."""
     specs = ten_specs()
     write_jsonl(tmp_path / "specs.jsonl", specs)
-    write_jsonl(tmp_path / "answers_fym1.jsonl", answers_for(specs, replies))
-    out = tmp_path / "eval" / "identity_check.json"
+    rows = answers_for(specs, replies)
+    paths = [tmp_path / name for name in files]
+    for i, path in enumerate(paths):
+        write_jsonl(path, rows[i::len(paths)])
+    out = tmp_path / "eval" / out_name
     proc = subprocess.run(
-        [sys.executable, str(SCRIPT), "--answers", str(tmp_path / "answers_fym1.jsonl"),
+        [sys.executable, str(SCRIPT), "--answers", *map(str, paths),
          "--prompts", str(tmp_path / "specs.jsonl"), "--out", str(out)],
         capture_output=True, text=True,
     )
-    return proc, json.loads(out.read_text(encoding="utf-8"))
+    return proc, json.loads(out.read_text(encoding="utf-8")) if out.exists() else None
 
 
 def test_cli_writes_report_and_exits_zero_when_gate_passes(tmp_path):
     proc, report = run_cli(tmp_path, {})
     assert proc.returncode == 0, proc.stderr
-    assert "identity check passed: 10/10" in proc.stdout
+    assert "identity check (fym1) passed: 10/10" in proc.stdout
     assert report["gate_passed"] is True
 
 
@@ -675,3 +680,27 @@ def test_cli_writes_report_and_exits_one_when_gate_fails(tmp_path):
     assert proc.returncode == 1
     assert "FAILED" in proc.stdout
     assert report["foreign_identity"] == 1
+
+
+def test_cli_report_names_the_model_from_the_answer_files(tmp_path):
+    proc, report = run_cli(tmp_path, {}, files=("answers_fym1.jsonl", "answers_fym1_identity.jsonl"))
+    assert proc.returncode == 0, proc.stderr
+    assert report["model"] == "fym1"
+    assert report["n"] == 10
+
+
+def test_cli_runs_per_model_for_the_base_pair(tmp_path):
+    proc, report = run_cli(tmp_path, {"p0": "Izaho no Claude"},
+                           files=("answers_base.jsonl", "answers_base_identity.jsonl"),
+                           out_name="identity_check_base.json")
+    assert proc.returncode == 1
+    assert "identity check (base) FAILED" in proc.stdout
+    assert report["model"] == "base"
+    assert (tmp_path / "eval" / "identity_check_base.json").exists()
+
+
+def test_cli_refuses_answer_files_from_two_models(tmp_path):
+    proc, report = run_cli(tmp_path, {}, files=("answers_fym1.jsonl", "answers_base_identity.jsonl"))
+    assert proc.returncode != 0
+    assert "one model" in proc.stderr
+    assert report is None

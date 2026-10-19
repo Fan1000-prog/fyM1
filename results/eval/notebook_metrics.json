@@ -1,0 +1,14 @@
+{
+  "base": {
+    "belebele_acc": 0.6667,
+    "chrf_plt_eng": 56.17,
+    "chrf_eng_plt": 49.73,
+    "perplexity": 5.046
+  },
+  "fym1": {
+    "belebele_acc": 0.6511,
+    "chrf_plt_eng": 54.5,
+    "chrf_eng_plt": 45.69,
+    "perplexity": 3.718
+  }
+}

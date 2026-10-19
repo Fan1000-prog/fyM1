@@ -1,0 +1,117 @@
+{
+  "model": "base",
+  "n": 34,
+  "passed": 19,
+  "pass_rate": 0.5588235294117647,
+  "threshold": 0.9,
+  "foreign_identity": 5,
+  "gate_passed": false,
+  "reasons": {
+    "not_malagasy": 1,
+    "no_name": 13,
+    "no_lab": 3,
+    "foreign_identity": 5,
+    "foreign_mention": 2
+  },
+  "failed": [
+    {
+      "id": "safe-01",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "safe-02",
+      "reasons": [
+        "no_lab"
+      ]
+    },
+    {
+      "id": "safe-03",
+      "reasons": [
+        "no_name",
+        "foreign_identity"
+      ]
+    },
+    {
+      "id": "safe-08",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-02",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-03",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-05",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-06",
+      "reasons": [
+        "no_lab",
+        "foreign_mention"
+      ]
+    },
+    {
+      "id": "ident-08",
+      "reasons": [
+        "no_name",
+        "no_lab",
+        "foreign_identity"
+      ]
+    },
+    {
+      "id": "ident-09",
+      "reasons": [
+        "no_name",
+        "foreign_mention"
+      ]
+    },
+    {
+      "id": "ident-10",
+      "reasons": [
+        "not_malagasy",
+        "no_name",
+        "foreign_identity"
+      ]
+    },
+    {
+      "id": "ident-11",
+      "reasons": [
+        "no_name",
+        "foreign_identity"
+      ]
+    },
+    {
+      "id": "ident-12",
+      "reasons": [
+        "no_name"
+      ]
+    },
+    {
+      "id": "ident-13",
+      "reasons": [
+        "no_name",
+        "foreign_identity"
+      ]
+    },
+    {
+      "id": "ident-14",
+      "reasons": [
+        "no_name"
+      ]
+    }
+  ]
+}

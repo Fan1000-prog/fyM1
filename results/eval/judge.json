@@ -1,0 +1,17 @@
+{
+  "judge": "Claude Opus 5.5 (claude-opus-5-5), blind, run in Claude Code; rubric in src/fym1/eval/judge_rubric.md",
+  "base": {
+    "naturalness": 2.96,
+    "correctness": 3.3466666666666667,
+    "n": 150,
+    "answer_rate": 0.8666666666666667,
+    "answer_n": 150
+  },
+  "fym1": {
+    "naturalness": 4.093333333333334,
+    "correctness": 3.06,
+    "n": 150,
+    "answer_rate": 0.7533333333333333,
+    "answer_n": 150
+  }
+}

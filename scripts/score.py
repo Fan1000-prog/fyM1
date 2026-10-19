@@ -14,8 +14,9 @@ Step 1, before judging:
 Judge agents read ONLY results/eval/judge_batch/ (plus src/fym1/eval/judge_rubric.md): never
 the answer files or the key, which would unblind them. `blind` refuses to put the key
 anywhere inside the batch dir. Judges write a JSON list of
-{"id", "naturalness", "correctness", "note"} to results/eval/judge_raw.json; every blind id
-must be judged.
+{"id", "naturalness", "correctness", "answers", "note"} to results/eval/judge_raw.json; every
+blind id must be judged. naturalness and correctness are integers 1-5; answers is 0 or 1 (1 = the
+reply responds to the prompt as asked).
 
 Step 2, unblind the judge scores:
   uv run python scripts/score.py judge \
@@ -25,7 +26,8 @@ rubric in src/fym1/eval/judge_rubric.md" \
       --out results/eval/judge.json
 
   --label is the methods disclosure the paper cites for who judged; the value above is the one
-  used for v0.1.
+  used for v0.1. judge.json holds per model the naturalness and correctness means, n, and
+  answer_rate (share of replies judged answers == 1) with answer_n (replies judged).
 
 Step 3, automatic scores:
   uv run python scripts/score.py scores \

@@ -790,15 +790,16 @@ md("""# fy-m1 02 — eval export (A100)
 Scores one finished training run. Set `RUN_ID`, pick an **A100** runtime (Runtime → Change runtime type), then
 **Runtime → Run all**. Reads `fyM1-ckpt/<RUN_ID>/train_log.json` for the base model and the data revision, loads the
 base model in 4-bit with the LoRA adapter from `<RUN_ID>/final/`, and measures, in this order:
-1. answers to every `eval/prompts.jsonl` prompt from the base model (adapter off) and from fy-m1, plus fy-m1's answers
-   to the extra identity prompts (`eval/identity_check.jsonl`, set "identity"): data `system_prompt.txt`, sampled with
-   the shared defaults `fym1.generation.GEN_KWARGS`, max 256 new tokens, seed 42;
+1. answers to every `eval/prompts.jsonl` prompt from the base model (adapter off) and from fy-m1, plus both models'
+   answers to the extra identity prompts (`eval/identity_check.jsonl`, set "identity"): data `system_prompt.txt`, sampled
+   with the shared defaults `fym1.generation.GEN_KWARGS`, max 256 new tokens, seed 42;
 2. Belebele `plt_Latn` for fy-m1 (both 00_baseline protocols: plain-text completion is `belebele_acc`);
 3. FLORES+ `plt_Latn`↔`eng_Latn` devtest first 200, chrF++, for fy-m1 (00_baseline protocol);
 4. held-out-chat perplexity on 01_train's 2% eval split (reply tokens only, as eval loss), base and fy-m1.
 
 Everything goes to the **private** `fyM1-ckpt` under `results/eval/`: `answers_base.jsonl`, `answers_fym1.jsonl`,
-`answers_fym1_identity.jsonl` (private, never in git), `notebook_metrics.json` (for `scripts/score.py scores`) and
+`answers_fym1_identity.jsonl`, `answers_base_identity.jsonl` (private, never in git), `notebook_metrics.json` (for
+`scripts/score.py scores`) and
 `eval_run.json` (protocols, counts, timings). The base model's Belebele and chrF++ come from its 00_baseline file
 (`results/baseline/<slug>.json`, same protocols), so they are not rerun here. `leak_rate` is measured on the owner's
 laptop (`scripts/score.py leaks`). Nothing here prints answer or chat text. A rerun skips sections already saved for the
@@ -957,10 +958,11 @@ def last_logits(enc):
         return model(**enc).logits[:, -1]"""),
 code("""SAMPLING = (f"system prompt: data system_prompt.txt @ {DATA_REVISION[:9]}, {GEN_KWARGS}, "
             f"max {MAX_NEW_TOKENS} new tokens, torch seed {SEED} per file, batch {GEN_BATCH}")
-ANSWER_FILES = {  # score.py reads answers_<model>.jsonl; identity_check.py reads the fym1 pair
+ANSWER_FILES = {  # score.py reads answers_<model>.jsonl; identity_check.py runs per model on each pair
     "answers_base": (PROMPTS, False),
     "answers_fym1": (PROMPTS, True),
     "answers_fym1_identity": (IDENTITY, True),
+    "answers_base_identity": (IDENTITY, False),
 }
 for name, (items, lora_on) in ANSWER_FILES.items():
     if not section(name):
